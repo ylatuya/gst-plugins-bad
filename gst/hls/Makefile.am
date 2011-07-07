@@ -4,6 +4,7 @@ plugin_LTLIBRARIES = libgstfragmented.la
 libgstfragmented_la_SOURCES =			\
 	m3u8.c					\
 	gsthlsdemux.c				\
+	gstfragment.c				\
 	gstfragmentedplugin.c
 
 libgstfragmented_la_CFLAGS = $(GST_CFLAGS) $(GST_BASE_CFLAGS) $(SOUP_CFLAGS)
@@ -16,6 +17,7 @@ endif
 # headers we need but don't want installed
 noinst_HEADERS = 			\
 	gstfragmented.h		\
+	gstfragment.h				\
 	gsthlsdemux.h			\
 	m3u8.h
 
