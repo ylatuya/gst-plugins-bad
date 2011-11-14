@@ -4,10 +4,11 @@ plugin_LTLIBRARIES = libgstfragmented.la
 libgstfragmented_la_SOURCES =			\
 	m3u8.c					\
 	gsthlsdemux.c				\
+	gstkeyunitsscheduler.c			\
 	gstfragmentedplugin.c
 
-libgstfragmented_la_CFLAGS = $(GST_CFLAGS) $(GST_BASE_CFLAGS) $(SOUP_CFLAGS)
-libgstfragmented_la_LIBADD = $(GST_LIBS) $(GST_BASE_LIBS) $(SOUP_LIBS)
+libgstfragmented_la_CFLAGS = $(GST_CFLAGS) $(GST_BASE_CFLAGS) $(GST_PLUGINS_BASE_CFLAGS) $(GIO_CFLAGS)
+libgstfragmented_la_LIBADD = $(GST_LIBS) $(GST_BASE_LIBS) $(GST_PLUGINS_BASE_LIBS) -lgstvideo-0.10 $(GIO_LIBS)
 libgstfragmented_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS) -no-undefined
 libgstfragmented_la_LIBTOOLFLAGS = --tag=disable-static
 
@@ -15,6 +16,7 @@ libgstfragmented_la_LIBTOOLFLAGS = --tag=disable-static
 noinst_HEADERS = 			\
 	gstfragmented.h		\
 	gsthlsdemux.h			\
+	gstkeyunitsscheduler.h			\
 	m3u8.h
 
 Android.mk: Makefile.am $(BUILT_SOURCES)
