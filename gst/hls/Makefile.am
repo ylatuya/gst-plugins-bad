@@ -1,11 +1,25 @@
 
 plugin_LTLIBRARIES = libgstfragmented.la
 
+glib_gen_prefix = __gst_fragmented
+glib_gen_basename = gstfragmented
+
+include $(top_srcdir)/common/gst-glib-gen.mak
+
+built_sources = gstfragmented-marshal.c
+built_headers = gstfragmented-marshal.h
+
+BUILT_SOURCES = $(built_sources) $(built_headers)
+
 libgstfragmented_la_SOURCES =			\
 	m3u8.c					\
 	gsthlsdemux.c				\
 	gstkeyunitsscheduler.c			\
-	gstfragmentedplugin.c
+	gstfragment.c 				\
+	gstm3u8playlist.c			\
+	gsthlssink.c				\
+	gstfragmentedplugin.c                   \
+        $(built_sources)
 
 libgstfragmented_la_CFLAGS = $(GST_CFLAGS) $(GST_BASE_CFLAGS) $(GST_PLUGINS_BASE_CFLAGS) $(GIO_CFLAGS)
 libgstfragmented_la_LIBADD = $(GST_LIBS) $(GST_BASE_LIBS) $(GST_PLUGINS_BASE_LIBS) -lgstvideo-0.10 $(GIO_LIBS)
@@ -17,7 +31,11 @@ noinst_HEADERS = 			\
 	gstfragmented.h		\
 	gsthlsdemux.h			\
 	gstkeyunitsscheduler.h			\
-	m3u8.h
+	gstfragment.h 				\
+	gstm3u8playlist.h			\
+	gsthlssink.h				\
+	m3u8.h					\
+	$(built_headers)
 
 Android.mk: Makefile.am $(BUILT_SOURCES)
 	androgenizer \
