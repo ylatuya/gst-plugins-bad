@@ -138,7 +138,7 @@ static void
 gst_fragment_init (GstFragment * fragment)
 {
   GstFragmentPrivate *priv;
-
+  GTimeVal tv;
   fragment->priv = priv = GST_FRAGMENT_GET_PRIVATE (fragment);
   fragment->priv->buffer_list = gst_buffer_list_new ();
   fragment->priv->buffer_iterator =
@@ -146,7 +146,8 @@ gst_fragment_init (GstFragment * fragment)
   gst_buffer_list_iterator_add_group (fragment->priv->buffer_iterator);
   fragment->priv->can_set_headers = TRUE;
   fragment->priv->has_headers = FALSE;
-  fragment->download_start_time = g_get_real_time ();
+  g_get_current_time (&tv);
+  fragment->download_start_time = tv.tv_sec * G_USEC_PER_SEC + tv.tv_usec;
   fragment->start_ts = 0;
   fragment->stop_ts = 0;
   fragment->index = 0;
