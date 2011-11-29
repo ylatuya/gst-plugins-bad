@@ -1900,6 +1900,7 @@ gst/camerabin2/Makefile
 gst/cdxaparse/Makefile
 gst/colorspace/Makefile
 gst/coloreffects/Makefile
+gst/dash/Makefile
 gst/dataurisrc/Makefile
 gst/dccp/Makefile
 gst/debugutils/Makefile
@@ -1924,6 +1925,7 @@ gst/ivfparse/Makefile
 gst/jp2kdecimator/Makefile
 gst/jpegformat/Makefile
 gst/legacyresample/Makefile
+gst/kuscheduler/Makefile
 gst/librfb/Makefile
 gst/liveadder/Makefile
 gst/mpegdemux/Makefile
@@ -2073,8 +2075,6 @@ pkgconfig/gstreamer-codecparsers.pc
 pkgconfig/gstreamer-codecparsers-uninstalled.pc
 pkgconfig/gstreamer-basevideo.pc
 pkgconfig/gstreamer-basevideo-uninstalled.pc
-tools/Makefile
-m4/Makefile
 win32/common/config.h
 )
 AC_OUTPUT
