@@ -76,6 +76,8 @@ struct _GstH264Parse
 
   GstClockTime last_report;
   gboolean push_codec;
+  gboolean have_sps;
+  gboolean have_pps;
 
   /* collected SPS and PPS NALUs */
   GstBuffer *sps_nals[GST_H264_MAX_SPS_COUNT];
