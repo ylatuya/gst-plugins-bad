@@ -36,80 +36,80 @@
 #define MIMETYPE_MPEGTS "MP2T"
 #define MIMETYPE_MPEGTS_INFO "m2t"
 
-#define MDP_XML_INDENT 4
+#define MPD_XML_INDENT 4
 
-#define ACTIVE_PERIOD(mdp) (g_list_last(mdp->periods) != NULL ?\
-    (GstPeriod*)g_list_last(mdp->periods)->data : NULL)
+#define ACTIVE_PERIOD(mpd) (g_list_last(mpd->periods) != NULL ?\
+    (GstPeriod*)g_list_last(mpd->periods)->data : NULL)
 
 GstMediaPresentation *
 gst_media_presentation_new (MediaPresentationType type)
 {
-  GstMediaPresentation *mdp;
+  GstMediaPresentation *mpd;
 
-  mdp = g_new0 (GstMediaPresentation, 1);
-  mdp->availabilityStartTime = GST_CLOCK_TIME_NONE;
-  mdp->availabilityEndTime = GST_CLOCK_TIME_NONE;
-  mdp->mediaPresentationDuration = GST_CLOCK_TIME_NONE;
-  mdp->minimumUpdatePeriodMDP = GST_CLOCK_TIME_NONE;
-  mdp->minBufferTime = GST_CLOCK_TIME_NONE;
-  mdp->type = type;
+  mpd = g_new0 (GstMediaPresentation, 1);
+  mpd->availabilityStartTime = GST_CLOCK_TIME_NONE;
+  mpd->availabilityEndTime = GST_CLOCK_TIME_NONE;
+  mpd->mediaPresentationDuration = GST_CLOCK_TIME_NONE;
+  mpd->minimumUpdatePeriodMPD = GST_CLOCK_TIME_NONE;
+  mpd->minBufferTime = GST_CLOCK_TIME_NONE;
+  mpd->type = type;
   /* FIXME: Pass profiles as an argument to the constructor */
-  mdp->profiles = NULL;
-  mdp->profiles = g_list_append (mdp->profiles, g_strdup (ON_DEMAND_PROFILE));
-  mdp->periods = NULL;
-  mdp->baseUrls = NULL;
+  mpd->profiles = NULL;
+  mpd->profiles = g_list_append (mpd->profiles, g_strdup (ON_DEMAND_PROFILE));
+  mpd->periods = NULL;
+  mpd->baseUrls = NULL;
 
-  return mdp;
+  return mpd;
 }
 
 void
-gst_media_presentation_free (GstMediaPresentation * mdp)
+gst_media_presentation_free (GstMediaPresentation * mpd)
 {
-  g_return_if_fail (mdp != NULL);
+  g_return_if_fail (mpd != NULL);
 
-  if (mdp->profiles != NULL)
-    g_list_free (mdp->profiles);
+  if (mpd->profiles != NULL)
+    g_list_free (mpd->profiles);
 
-  if (mdp->periods != NULL) {
-    g_list_foreach (mdp->periods, (GFunc) gst_period_free, NULL);
-    g_list_free (mdp->periods);
+  if (mpd->periods != NULL) {
+    g_list_foreach (mpd->periods, (GFunc) gst_period_free, NULL);
+    g_list_free (mpd->periods);
   }
 
-  if (mdp->baseUrls != NULL) {
-    g_list_foreach (mdp->baseUrls, (GFunc) g_free, NULL);
-    g_list_free (mdp->baseUrls);
+  if (mpd->baseUrls != NULL) {
+    g_list_foreach (mpd->baseUrls, (GFunc) g_free, NULL);
+    g_list_free (mpd->baseUrls);
   }
 
-  g_free (mdp);
+  g_free (mpd);
 }
 
 void
-gst_media_presentation_clear (GstMediaPresentation * mdp)
+gst_media_presentation_clear (GstMediaPresentation * mpd)
 {
-  g_return_if_fail (mdp != NULL);
+  g_return_if_fail (mpd != NULL);
 
-  if (mdp->periods != NULL)
-    g_list_foreach (mdp->periods, (GFunc) gst_period_free, NULL);
+  if (mpd->periods != NULL)
+    g_list_foreach (mpd->periods, (GFunc) gst_period_free, NULL);
 }
 
 static gchar *
-gst_media_presentation_format_mime_type (GstMediaPresentation * mdp,
+gst_media_presentation_format_mime_type (GstMediaPresentation * mpd,
     StreamType type, const gchar * mimeType)
 {
-  const gchar *mdp_mime_type;
+  const gchar *mpd_mime_type;
 
   if (!g_strcmp0 (mimeType, "video/quicktime"))
-    mdp_mime_type = MIMETYPE_MP4;
+    mpd_mime_type = MIMETYPE_MP4;
   else if (!g_strcmp0 (mimeType, "video/mpegts"))
-    mdp_mime_type = MIMETYPE_MPEGTS;
+    mpd_mime_type = MIMETYPE_MPEGTS;
   else
     return NULL;
 
   switch (type) {
     case STREAM_TYPE_AUDIO:
-      return g_strdup_printf ("%s/%s", "audio", mdp_mime_type);
+      return g_strdup_printf ("%s/%s", "audio", mpd_mime_type);
     case STREAM_TYPE_VIDEO:
-      return g_strdup_printf ("%s/%s", "video", mdp_mime_type);
+      return g_strdup_printf ("%s/%s", "video", mpd_mime_type);
     default:
       g_assert_not_reached ();
       return NULL;
@@ -117,38 +117,38 @@ gst_media_presentation_format_mime_type (GstMediaPresentation * mdp,
 }
 
 gboolean
-gst_media_presentation_add_stream (GstMediaPresentation * mdp, StreamType type,
+gst_media_presentation_add_stream (GstMediaPresentation * mpd, StreamType type,
     gchar * id, const gchar * mimeType, guint32 width, guint32 height,
     guint32 parx, guint32 pary, gdouble frameRate, gchar * channels,
     guint32 samplingRate, guint32 bitrate)
 {
   GstPeriod *active_period;
   GstRepresentation *rep;
-  gchar *mdp_mime_type;
+  gchar *mpd_mime_type;
 
-  g_return_val_if_fail (mdp != NULL, FALSE);
+  g_return_val_if_fail (mpd != NULL, FALSE);
 
-  mdp_mime_type = gst_media_presentation_format_mime_type (mdp, type, mimeType);
-  if (mdp_mime_type == NULL)
+  mpd_mime_type = gst_media_presentation_format_mime_type (mpd, type, mimeType);
+  if (mpd_mime_type == NULL)
     return FALSE;
 
   /* Get the current period or create a new one if it doesn't exists */
-  active_period = ACTIVE_PERIOD (mdp);
+  active_period = ACTIVE_PERIOD (mpd);
   if (G_UNLIKELY (active_period == NULL)) {
     active_period = gst_period_new (GST_CLOCK_TIME_NONE);
-    mdp->periods = g_list_append (mdp->periods, active_period);
+    mpd->periods = g_list_append (mpd->periods, active_period);
     GST_DEBUG ("Creating new period for the media presentation");
   }
 
   /* Add a new presentation to the active period */
   rep =
-      gst_representation_new (id, (gchar *) mdp_mime_type, width, height, parx,
+      gst_representation_new (id, (gchar *) mpd_mime_type, width, height, parx,
       pary, frameRate, channels, samplingRate, bitrate);
   return gst_period_add_representation (active_period, id, rep);
 }
 
 gboolean
-gst_media_presentation_remove_stream (GstMediaPresentation * mdp, gchar * id)
+gst_media_presentation_remove_stream (GstMediaPresentation * mpd, gchar * id)
 {
   /* FIXME: At this moment, we only support one period. In a future, we should
    * support adding/removing new streams dynamically by closing the current
@@ -158,14 +158,14 @@ gst_media_presentation_remove_stream (GstMediaPresentation * mdp, gchar * id)
 }
 
 static guint64
-gst_media_presentation_get_duration (GstMediaPresentation * mdp)
+gst_media_presentation_get_duration (GstMediaPresentation * mpd)
 {
   GList *tmp;
   guint64 duration = 0;
 
   /* Iterate over all periods */
-  if (mdp->periods != NULL) {
-    tmp = g_list_first (mdp->periods);
+  if (mpd->periods != NULL) {
+    tmp = g_list_first (mpd->periods);
 
     /* Get the maximum duration from all the segment inside this period */
     while (tmp != NULL) {
@@ -178,7 +178,7 @@ gst_media_presentation_get_duration (GstMediaPresentation * mdp)
 }
 
 gboolean
-gst_media_presentation_add_media_segment (GstMediaPresentation * mdp,
+gst_media_presentation_add_media_segment (GstMediaPresentation * mpd,
     gchar * id, gchar * url, guint index, guint64 start_ts, guint64 duration,
     guint64 offset, guint64 length)
 {
@@ -186,9 +186,9 @@ gst_media_presentation_add_media_segment (GstMediaPresentation * mdp,
   GstMediaSegment *segment;
   gboolean ret;
 
-  g_return_val_if_fail (mdp != NULL, FALSE);
+  g_return_val_if_fail (mpd != NULL, FALSE);
 
-  active_period = ACTIVE_PERIOD (mdp);
+  active_period = ACTIVE_PERIOD (mpd);
   if (active_period == NULL) {
     GST_WARNING
         ("At least one stream must be added before adding media segments.");
@@ -199,21 +199,21 @@ gst_media_presentation_add_media_segment (GstMediaPresentation * mdp,
       gst_media_segment_new (url, index, start_ts, duration, offset, length);
   ret = gst_period_add_media_segment (active_period, id, segment);
 
-  mdp->mediaPresentationDuration = gst_media_presentation_get_duration (mdp);
+  mpd->mediaPresentationDuration = gst_media_presentation_get_duration (mpd);
 
   return ret;
 }
 
 gboolean
-gst_media_presentation_set_init_segment (GstMediaPresentation * mdp, gchar * id,
+gst_media_presentation_set_init_segment (GstMediaPresentation * mpd, gchar * id,
     gchar * url, guint64 offset, guint64 length)
 {
   GstPeriod *active_period;
   GstMediaSegment *segment_info;
 
-  g_return_val_if_fail (mdp != NULL, FALSE);
+  g_return_val_if_fail (mpd != NULL, FALSE);
 
-  active_period = ACTIVE_PERIOD (mdp);
+  active_period = ACTIVE_PERIOD (mpd);
   if (active_period == NULL) {
     GST_WARNING
         ("At least one stream must be added before adding media segments.");
@@ -224,20 +224,20 @@ gst_media_presentation_set_init_segment (GstMediaPresentation * mdp, gchar * id,
 }
 
 void
-gst_media_presentation_set_base_urls (GstMediaPresentation * mdp,
+gst_media_presentation_set_base_urls (GstMediaPresentation * mpd,
     GList * base_urls)
 {
-  if (mdp->baseUrls != NULL) {
-    g_list_foreach (mdp->baseUrls, (GFunc) g_free, NULL);
-    g_list_free (mdp->baseUrls);
+  if (mpd->baseUrls != NULL) {
+    g_list_foreach (mpd->baseUrls, (GFunc) g_free, NULL);
+    g_list_free (mpd->baseUrls);
   }
-  mdp->baseUrls = base_urls;
+  mpd->baseUrls = base_urls;
 }
 
 static const gchar *
-gst_media_presentation_render_type (GstMediaPresentation * mdp)
+gst_media_presentation_render_type (GstMediaPresentation * mpd)
 {
-  switch (mdp->type) {
+  switch (mpd->type) {
     case MEDIA_PRESENTATION_TYPE_ONDEMAND:
       return TYPE_ONDEMAND;
     default:
@@ -246,17 +246,17 @@ gst_media_presentation_render_type (GstMediaPresentation * mdp)
 }
 
 gchar *
-gst_media_presentation_render (GstMediaPresentation * mdp)
+gst_media_presentation_render (GstMediaPresentation * mpd)
 {
   xmlTextWriterPtr writer = NULL;
   xmlBufferPtr buf = NULL;
-  gchar *mdp_str = NULL;
+  gchar *mpd_str = NULL;
 
   /* Create a new XML buffer, to which the XML document will be
    * written */
   buf = xmlBufferCreate ();
   if (buf == NULL) {
-    GST_WARNING_OBJECT (mdp, "Error creating the xml buffer");
+    GST_WARNING_OBJECT (mpd, "Error creating the xml buffer");
     goto error;
   }
 
@@ -264,24 +264,24 @@ gst_media_presentation_render (GstMediaPresentation * mdp)
    * Remark: there is no compression for this kind of xmlTextWriter */
   writer = xmlNewTextWriterMemory (buf, 0);
   if (writer == NULL) {
-    GST_WARNING_OBJECT (mdp, "Error creating the xml writter");
+    GST_WARNING_OBJECT (mpd, "Error creating the xml writter");
     goto error;
   }
 
   /* Start the document */
   if (xmlTextWriterStartDocument (writer, NULL, "UTF-8", NULL) < 0) {
-    GST_WARNING_OBJECT (mdp, "Error at xmlTextWriterStartDocument");
+    GST_WARNING_OBJECT (mpd, "Error at xmlTextWriterStartDocument");
     goto error;
   }
 
   /* Set xml indentation */
-  xmlTextWriterSetIndent (writer, MDP_XML_INDENT);
+  xmlTextWriterSetIndent (writer, MPD_XML_INDENT);
 
   /* Start root element named "MPD" */
-  if (!gst_media_presentation_start_element (writer, "MDP"))
+  if (!gst_media_presentation_start_element (writer, "MPD"))
     goto error;
 
-  /* Write MDP attributes */
+  /* Write MPD attributes */
   if (!gst_media_presentation_write_string_attribute (writer, "xmlns:xsi",
           SCHEMA_URL))
     goto error;
@@ -295,42 +295,42 @@ gst_media_presentation_render (GstMediaPresentation * mdp)
     goto error;
 
   if (!gst_media_presentation_write_string_list_attribute (writer, "profiles",
-          mdp->profiles))
+          mpd->profiles))
     goto error;
 
   if (!gst_media_presentation_write_string_attribute (writer, "type",
-          gst_media_presentation_render_type (mdp)))
+          gst_media_presentation_render_type (mpd)))
     goto error;
 
   if (!gst_media_presentation_write_time_attribute (writer,
-          "mediaPresentationDuration", mdp->mediaPresentationDuration))
+          "mediaPresentationDuration", mpd->mediaPresentationDuration))
     goto error;
 
   if (!gst_media_presentation_write_time_seconds_attribute (writer,
-          "minBufferTime", mdp->minBufferTime))
+          "minBufferTime", mpd->minBufferTime))
     goto error;
 
   if (!gst_media_presentation_write_time_seconds_attribute (writer,
-          "minimumUpdatePeriodMDP", mdp->minimumUpdatePeriodMDP))
+          "minimumUpdatePeriodMPD", mpd->minimumUpdatePeriodMPD))
     goto error;
 
   /* FIXME: To be implemented
      if (!gst_media_presentation_write_date_attribute (writer,
-     "availabilityStartTime", mdp->availabilityStartTime))
+     "availabilityStartTime", mpd->availabilityStartTime))
      goto error;
 
      if (!gst_media_presentation_write_date_attribute (writer,
-     "availabilityEndTime", mdp->availabilityEndTime))
+     "availabilityEndTime", mpd->availabilityEndTime))
      goto error;
    */
 
   /* BaseUrl */
-  if (!gst_media_presentation_write_base_urls (writer, mdp->baseUrls))
+  if (!gst_media_presentation_write_base_urls (writer, mpd->baseUrls))
     return FALSE;
 
   /* Period */
-  if (mdp->periods != NULL) {
-    GList *tmp = g_list_first (mdp->periods);
+  if (mpd->periods != NULL) {
+    GList *tmp = g_list_first (mpd->periods);
 
     while (tmp != NULL) {
       if (!gst_period_render ((GstPeriod *) tmp->data, writer))
@@ -345,16 +345,16 @@ gst_media_presentation_render (GstMediaPresentation * mdp)
 
   /* End document */
   if (xmlTextWriterEndDocument (writer) < 0) {
-    GST_WARNING_OBJECT (mdp, "Error at xmlTextWriterEndDocument");
+    GST_WARNING_OBJECT (mpd, "Error at xmlTextWriterEndDocument");
     goto error;
   }
 
-  mdp_str = g_strdup ((gchar *) buf->content);
+  mpd_str = g_strdup ((gchar *) buf->content);
   goto exit;
 
 error:
   {
-    GST_ERROR_OBJECT (mdp, "Error rendering media presentation");
+    GST_ERROR_OBJECT (mpd, "Error rendering media presentation");
   }
 
 exit:
@@ -363,6 +363,6 @@ exit:
       xmlFreeTextWriter (writer);
     if (buf != NULL)
       xmlBufferFree (buf);
-    return mdp_str;
+    return mpd_str;
   }
 }

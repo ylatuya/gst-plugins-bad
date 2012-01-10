@@ -61,7 +61,7 @@ struct _GstMediaPresentation
   guint64 availabilityStartTime;
   guint64 availabilityEndTime;
   guint64 mediaPresentationDuration;
-  guint64 minimumUpdatePeriodMDP;
+  guint64 minimumUpdatePeriodMPD;
   guint64 minBufferTime;
   MediaPresentationType type;           /* Media presentation type */
   GList *profiles;                      /* List of MediaPresentationProfile */
@@ -70,19 +70,19 @@ struct _GstMediaPresentation
 };
 
 GstMediaPresentation * gst_media_presentation_new(MediaPresentationType type);
-void gst_media_presentation_free(GstMediaPresentation *mdp);
-GstPeriod * gst_media_presentation_current_period (GstMediaPresentation *mdp);
-void gst_media_presentation_clear (GstMediaPresentation *mdp);
-gboolean gst_media_presentation_add_stream (GstMediaPresentation *mdp, StreamType type, gchar *id,
+void gst_media_presentation_free(GstMediaPresentation *mpd);
+GstPeriod * gst_media_presentation_current_period (GstMediaPresentation *mpd);
+void gst_media_presentation_clear (GstMediaPresentation *mpd);
+gboolean gst_media_presentation_add_stream (GstMediaPresentation *mpd, StreamType type, gchar *id,
     const gchar *mimeType, guint32 width, guint32 height, guint32 parx, guint32 pary,
     gdouble frameRate, gchar* channels, guint32 samplingRate, guint32 bitrate);
-gboolean gst_media_presentation_remove_stream (GstMediaPresentation *mdp, gchar *id);
-gboolean gst_media_presentation_add_media_segment (GstMediaPresentation *mdp, gchar *id,
+gboolean gst_media_presentation_remove_stream (GstMediaPresentation *mpd, gchar *id);
+gboolean gst_media_presentation_add_media_segment (GstMediaPresentation *mpd, gchar *id,
     gchar * url, guint index, guint64 start_ts, guint64 duration, guint64 offset,
     guint64 length);
-gboolean gst_media_presentation_set_init_segment (GstMediaPresentation *mdp, gchar *id,
+gboolean gst_media_presentation_set_init_segment (GstMediaPresentation *mpd, gchar *id,
     gchar * url, guint64 offset, guint64 length);
-void gst_media_presentation_set_base_urls (GstMediaPresentation *mdp, GList *base_urls);
-gchar * gst_media_presentation_render (GstMediaPresentation *mdp);
+void gst_media_presentation_set_base_urls (GstMediaPresentation *mpd, GList *base_urls);
+gchar * gst_media_presentation_render (GstMediaPresentation *mpd);
 
 #endif
