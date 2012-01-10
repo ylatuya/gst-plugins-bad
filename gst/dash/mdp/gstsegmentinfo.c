@@ -158,7 +158,7 @@ gst_segment_info_render (GstSegmentInfo * info, xmlTextWriterPtr writer)
 
 GstMediaSegment *
 gst_media_segment_new (gchar * url, guint index,
-    guint64 start_ts, guint64 duration, guint64 offset, guint64 length)
+    guint64 start_ts, guint64 duration, guint64 offset, guint64 size)
 {
   GstMediaSegment *segment;
 
@@ -168,7 +168,7 @@ gst_media_segment_new (gchar * url, guint index,
   segment->start_ts = start_ts;
   segment->duration = duration;
   segment->offset = offset;
-  segment->length = length;
+  segment->size = size;
   return segment;
 }
 

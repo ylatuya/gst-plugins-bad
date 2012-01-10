@@ -42,7 +42,7 @@ struct _GstMediaSegment
   guint64 start_ts;
   guint64 duration;
   guint64 offset;
-  guint64 length;
+  guint64 size;
 };
 
 /**
@@ -68,7 +68,7 @@ void gst_segment_info_add_base_url (GstSegmentInfo * segment_info,
 gboolean gst_segment_info_render (GstSegmentInfo * segment_info,
                                   xmlTextWriterPtr writer);
 GstMediaSegment * gst_media_segment_new (gchar * url, guint index,
-    guint64 start_ts, guint64 duration, guint64 offset, guint64 length);
+    guint64 start_ts, guint64 duration, guint64 offset, guint64 size);
 void gst_media_segment_free (GstMediaSegment * segment);
 
 #endif
