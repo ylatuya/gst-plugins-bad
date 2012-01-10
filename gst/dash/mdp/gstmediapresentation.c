@@ -36,6 +36,8 @@
 #define MIMETYPE_MPEGTS "MP2T"
 #define MIMETYPE_MPEGTS_INFO "m2t"
 
+#define MDP_XML_INDENT 4
+
 #define ACTIVE_PERIOD(mdp) (g_list_last(mdp->periods) != NULL ?\
     (GstPeriod*)g_list_last(mdp->periods)->data : NULL)
 
@@ -224,6 +226,9 @@ gst_media_presentation_render (GstMediaPresentation * mdp)
     GST_WARNING_OBJECT (mdp, "Error at xmlTextWriterStartDocument");
     goto error;
   }
+
+  /* Set xml indentation */
+  xmlTextWriterSetIndent (writer, MDP_XML_INDENT);
 
   /* Start root element named "MPD" */
   if (!gst_media_presentation_start_element (writer, "MDP"))
