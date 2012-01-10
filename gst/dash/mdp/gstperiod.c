@@ -124,7 +124,6 @@ gst_period_set_init_segment (GstPeriod * period, gchar * id,
   g_return_val_if_fail (id != NULL, FALSE);
   g_return_val_if_fail (init_segment != NULL, FALSE);
 
-  return TRUE;
   group = g_hash_table_lookup (period->id_to_group, id);
 
   if (group == NULL) {
