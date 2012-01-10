@@ -125,6 +125,25 @@ gst_group_set_init_segment (GstGroup * group, gchar * id,
   return TRUE;
 }
 
+guint64
+gst_group_get_duration (GstGroup * group)
+{
+  GHashTableIter iter;
+  GstRepresentation *rep;
+  gchar *id;
+  guint64 duration = 0;
+
+  g_return_val_if_fail (group != NULL, 0);
+
+  /* Iterate over all groups and return the biggest duration */
+  g_hash_table_iter_init (&iter, group->representations);
+  while (g_hash_table_iter_next (&iter, (void *) &id, (void *) &rep)) {
+    duration = MAX (duration, gst_representation_get_duration (rep));
+  }
+
+  return duration;
+}
+
 gboolean
 gst_group_render (GstGroup * group, xmlTextWriterPtr writer)
 {

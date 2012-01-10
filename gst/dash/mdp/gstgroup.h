@@ -61,6 +61,7 @@ gboolean gst_group_add_media_segment (GstGroup *group, gchar *id,
     GstMediaSegment *media_segment);
 gboolean gst_group_set_init_segment (GstGroup *group, gchar *id,
     GstMediaSegment *init_segment);
+guint64 gst_group_get_duration (GstGroup *group);
 gboolean gst_group_render (GstGroup *group, xmlTextWriterPtr writer);
 
 #endif

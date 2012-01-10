@@ -157,6 +157,26 @@ gst_media_presentation_remove_stream (GstMediaPresentation * mdp, gchar * id)
   return FALSE;
 }
 
+static guint64
+gst_media_presentation_get_duration (GstMediaPresentation * mdp)
+{
+  GList *tmp;
+  guint64 duration = 0;
+
+  /* Iterate over all periods */
+  if (mdp->periods != NULL) {
+    tmp = g_list_first (mdp->periods);
+
+    /* Get the maximum duration from all the segment inside this period */
+    while (tmp != NULL) {
+      duration += gst_period_get_duration ((GstPeriod *) tmp->data);
+      tmp = g_list_next (tmp);
+    }
+  }
+
+  return duration;
+}
+
 gboolean
 gst_media_presentation_add_media_segment (GstMediaPresentation * mdp,
     gchar * id, gchar * url, guint index, guint64 start_ts, guint64 duration,
@@ -164,6 +184,7 @@ gst_media_presentation_add_media_segment (GstMediaPresentation * mdp,
 {
   GstPeriod *active_period;
   GstMediaSegment *segment;
+  gboolean ret;
 
   g_return_val_if_fail (mdp != NULL, FALSE);
 
@@ -176,7 +197,11 @@ gst_media_presentation_add_media_segment (GstMediaPresentation * mdp,
   /* Create a new media segment and add it to the current period */
   segment =
       gst_media_segment_new (url, index, start_ts, duration, offset, length);
-  return gst_period_add_media_segment (active_period, id, segment);
+  ret = gst_period_add_media_segment (active_period, id, segment);
+
+  mdp->mediaPresentationDuration = gst_media_presentation_get_duration (mdp);
+
+  return ret;
 }
 
 gboolean

@@ -94,6 +94,14 @@ gst_representation_add_base_url (GstRepresentation * rep, gchar * url)
   gst_segment_info_add_base_url (rep->segment_info, url);
 }
 
+guint64
+gst_representation_get_duration (GstRepresentation * rep)
+{
+  g_return_val_if_fail (rep != NULL, 0);
+
+  return rep->segment_info->duration;
+}
+
 gboolean
 gst_representation_render (GstRepresentation * rep, xmlTextWriterPtr writer)
 {

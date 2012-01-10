@@ -51,6 +51,7 @@ void gst_representation_add_media_segment (GstRepresentation *rep,
 void gst_representation_set_init_segment (GstRepresentation * rep,
     GstMediaSegment *segment);
 void gst_representation_add_base_url (GstRepresentation * rep, gchar *url);
+guint64 gst_representation_get_duration (GstRepresentation *mdp);
 gboolean gst_representation_render (GstRepresentation *rep, xmlTextWriterPtr writer);
 
 #endif

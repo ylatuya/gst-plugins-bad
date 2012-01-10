@@ -135,6 +135,23 @@ gst_period_set_init_segment (GstPeriod * period, gchar * id,
   return gst_group_set_init_segment (group, id, init_segment);
 }
 
+guint64
+gst_period_get_duration (GstPeriod * period)
+{
+  GHashTableIter iter;
+  GstGroup *group;
+  gchar *id;
+  guint64 duration = 0;
+
+  /* Iterate over all groups and return the biggest duration */
+  g_hash_table_iter_init (&iter, period->groups);
+  while (g_hash_table_iter_next (&iter, (void *) &id, (void *) &group)) {
+    duration = MAX (duration, gst_group_get_duration (group));
+  }
+
+  return duration;
+}
+
 gboolean
 gst_period_render (GstPeriod * period, xmlTextWriterPtr writer)
 {
