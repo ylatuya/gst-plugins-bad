@@ -149,7 +149,7 @@ gst_segment_info_render (GstSegmentInfo * info, xmlTextWriterPtr writer)
 
   /* Write initialization segment */
   if (info->init_segment != NULL) {
-    if (!gst_media_presentation_write_url (writer, "InitializationSegmentURL",
+    if (!gst_media_presentation_write_url (writer, "InitialisationSegmentURL",
             (const gchar *) info->init_segment->url))
       return FALSE;
   }

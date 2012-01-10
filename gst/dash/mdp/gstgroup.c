@@ -187,7 +187,7 @@ gst_group_render (GstGroup * group, xmlTextWriterPtr writer)
           "subsegmentAlignment", group->subsegmentAlignment))
     return FALSE;
   if (!gst_media_presentation_write_bool_attribute (writer,
-          "bitStreamAlignmentFlag", group->bitStreamSwitchingFlag))
+          "bitStreamSwitchingFlag", group->bitStreamSwitchingFlag))
     return FALSE;
 
   /* Write representations */
