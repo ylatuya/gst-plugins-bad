@@ -23,10 +23,19 @@
 
 #include "gstxmlhelper.h"
 
-#define MDP_TIME_FORMAT "u.%03u"
+#define MDP_SECONDS_FORMAT "PT%u.%03uS"
+#define MDP_SECONDS_ARGS(t) \
+        (guint) (t / GST_SECOND), \
+        (guint) ((t / GST_MSECOND) % 1000)
+
+#define MDP_TIME_FORMAT "PT%uH%02uM%02u.%03uS"
 #define MDP_TIME_ARGS(t) \
-        (guint) (((GstClockTime)(t)) / GST_SECOND), \
-        (guint) ((((GstClockTime)(t)) / GST_MSECOND) % 1000)
+        (guint) (t / (GST_SECOND * 60 * 60)), \
+        (guint) ((t / (GST_SECOND * 60)) % 60), \
+        (guint) ((t / GST_SECOND) % 60), \
+        (guint) (t % GST_SECOND)
+
+
 
 
 gboolean
@@ -196,8 +205,23 @@ gst_media_presentation_write_time_attribute (xmlTextWriterPtr writer,
   if (!GST_CLOCK_TIME_IS_VALID (value))
     return TRUE;
 
-  value_str =
-      g_strdup_printf ("PT%" MDP_TIME_FORMAT "S", MDP_TIME_ARGS (value));
+  value_str = g_strdup_printf (MDP_TIME_FORMAT, MDP_TIME_ARGS (value));
+  ret = gst_media_presentation_write_attribute (writer, name, value_str);
+  g_free (value_str);
+  return ret;
+}
+
+gboolean
+gst_media_presentation_write_time_seconds_attribute (xmlTextWriterPtr writer,
+    const gchar * name, guint64 value)
+{
+  gchar *value_str;
+  gboolean ret;
+
+  if (!GST_CLOCK_TIME_IS_VALID (value))
+    return TRUE;
+
+  value_str = g_strdup_printf (MDP_SECONDS_FORMAT, MDP_SECONDS_ARGS (value));
   ret = gst_media_presentation_write_attribute (writer, name, value_str);
   g_free (value_str);
   return ret;

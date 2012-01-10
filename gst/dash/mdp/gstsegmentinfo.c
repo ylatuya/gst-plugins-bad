@@ -121,7 +121,7 @@ gst_segment_info_render (GstSegmentInfo * info, xmlTextWriterPtr writer)
   /* Start SegmentInfo */
   if (!gst_media_presentation_start_element (writer, "SegmentInfo"))
     return FALSE;
-  if (!gst_media_presentation_write_time_attribute (writer, "duration",
+  if (!gst_media_presentation_write_time_seconds_attribute (writer, "duration",
           duration))
     return FALSE;
   if (!gst_media_presentation_write_uint32_attribute (writer, "start_index",

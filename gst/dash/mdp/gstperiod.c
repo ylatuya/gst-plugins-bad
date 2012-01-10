@@ -164,14 +164,14 @@ gst_period_render (GstPeriod * period, xmlTextWriterPtr writer)
     return FALSE;
 
   /* Write Period attributes */
-  if (!gst_media_presentation_write_time_attribute (writer, "start",
+  if (!gst_media_presentation_write_time_seconds_attribute (writer, "start",
           period->start))
     return FALSE;
-  if (!gst_media_presentation_write_time_attribute (writer, "duration",
+  if (!gst_media_presentation_write_time_seconds_attribute (writer, "duration",
           period->duration))
     return FALSE;
-  if (!gst_media_presentation_write_time_attribute (writer, "minBufferTime",
-          period->minBufferTime))
+  if (!gst_media_presentation_write_time_seconds_attribute (writer,
+          "minBufferTime", period->minBufferTime))
     return FALSE;
   if (!gst_media_presentation_write_bool_attribute (writer,
           "segmentAlignmentFlag", period->segmentAlignmentFlag))

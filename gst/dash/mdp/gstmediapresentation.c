@@ -295,11 +295,11 @@ gst_media_presentation_render (GstMediaPresentation * mdp)
           "mediaPresentationDuration", mdp->mediaPresentationDuration))
     goto error;
 
-  if (!gst_media_presentation_write_time_attribute (writer,
+  if (!gst_media_presentation_write_time_seconds_attribute (writer,
           "minBufferTime", mdp->minBufferTime))
     goto error;
 
-  if (!gst_media_presentation_write_time_attribute (writer,
+  if (!gst_media_presentation_write_time_seconds_attribute (writer,
           "minimumUpdatePeriodMDP", mdp->minimumUpdatePeriodMDP))
     goto error;
 

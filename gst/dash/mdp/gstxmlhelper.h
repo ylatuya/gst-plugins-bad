@@ -40,6 +40,7 @@ gboolean gst_media_presentation_write_element (xmlTextWriterPtr writer, const gc
 gboolean gst_media_presentation_write_string_attribute (xmlTextWriterPtr writer, const gchar * name, const gchar * value);
 gboolean gst_media_presentation_write_string_list_attribute (xmlTextWriterPtr writer, const gchar * name, GList *strings);
 gboolean gst_media_presentation_write_uint32_attribute (xmlTextWriterPtr writer, const gchar * name, guint32 value);
+gboolean gst_media_presentation_write_time_seconds_attribute (xmlTextWriterPtr writer, const gchar * name, guint64 value);
 gboolean gst_media_presentation_write_time_attribute (xmlTextWriterPtr writer, const gchar * name, guint64 value);
 gboolean gst_media_presentation_write_double_attribute (xmlTextWriterPtr writer, const gchar * name, gdouble value);
 gboolean gst_media_presentation_write_bool_attribute (xmlTextWriterPtr writer, const gchar * name, gboolean value);
