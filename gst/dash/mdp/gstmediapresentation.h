@@ -82,6 +82,7 @@ gboolean gst_media_presentation_add_media_segment (GstMediaPresentation *mdp, gc
     guint64 length);
 gboolean gst_media_presentation_set_init_segment (GstMediaPresentation *mdp, gchar *id,
     gchar * url, guint64 offset, guint64 length);
+void gst_media_presentation_set_base_urls (GstMediaPresentation *mdp, GList *base_urls);
 gchar * gst_media_presentation_render (GstMediaPresentation *mdp);
 
 #endif

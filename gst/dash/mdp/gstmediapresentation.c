@@ -223,6 +223,17 @@ gst_media_presentation_set_init_segment (GstMediaPresentation * mdp, gchar * id,
   return gst_period_set_init_segment (active_period, id, segment_info);
 }
 
+void
+gst_media_presentation_set_base_urls (GstMediaPresentation * mdp,
+    GList * base_urls)
+{
+  if (mdp->baseUrls != NULL) {
+    g_list_foreach (mdp->baseUrls, (GFunc) g_free, NULL);
+    g_list_free (mdp->baseUrls);
+  }
+  mdp->baseUrls = base_urls;
+}
+
 static const gchar *
 gst_media_presentation_render_type (GstMediaPresentation * mdp)
 {
@@ -313,6 +324,11 @@ gst_media_presentation_render (GstMediaPresentation * mdp)
      goto error;
    */
 
+  /* BaseUrl */
+  if (!gst_media_presentation_write_base_urls (writer, mdp->baseUrls))
+    return FALSE;
+
+  /* Period */
   if (mdp->periods != NULL) {
     GList *tmp = g_list_first (mdp->periods);
 

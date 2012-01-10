@@ -208,8 +208,13 @@ gst_media_manager_render (GstBaseMediaManager * b_manager, GstPad * pad)
 {
   GstMediaManager *manager;
   GstMediaManagerFile *file;
+  GList *base_urls = NULL;
 
   manager = GST_MEDIA_MANAGER (b_manager);
+
+  /* Update base url */
+  base_urls = g_list_append (base_urls, g_strdup (b_manager->base_url));
+  gst_media_presentation_set_base_urls (manager->mdp, base_urls);
 
   file = g_new0 (GstMediaManagerFile, 1);
   file->content = gst_media_presentation_render (manager->mdp);
