@@ -1,0 +1,63 @@
+/*
+ * GStreamer
+ * Copyright (C) 2011 Flumotion S.L.
+ * Copyright (C) 2011 Andoni Morales Alastruey
+ *
+ * gstperiod.h:
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Library General Public
+ * License as published by the Free Software Foundation; either
+ * version 2 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Library General Public License for more details.
+ *
+ * You should have received a copy of the GNU Library General Public
+ * License along with this library; if not, write to the
+ * Free Software Foundation, Inc., 59 Temple Place - Suite 330,
+ * Boston, MA 02111-1307, USA.
+ */
+
+#ifndef __GST_PERIOD_H__
+#define __GST_PERIOD_H__
+
+#include <glib.h>
+#include <libxml/xmlwriter.h>
+
+#include "gstgroup.h"
+#include "gstrepresentation.h"
+
+typedef struct _GstPeriod GstPeriod;
+
+/**
+ * GstPeriod:
+ */
+struct _GstPeriod
+{
+  guint64 start;
+  guint64 duration;
+  guint64 minBufferTime;
+  gboolean segmentAlignmentFlag;
+  gboolean bitstreamSwitchingFlag;
+  GHashTable *groups;                /* mimeType->Group hash table */
+  /* GList *representation; */
+
+  /* <private> */
+  GHashTable *id_to_group;
+};
+
+
+GstPeriod * gst_period_new(guint64 start);
+void gst_period_free(GstPeriod *period);
+gboolean gst_period_add_representation (GstPeriod *period, gchar *id,
+    GstRepresentation *rep);
+gboolean gst_period_add_media_segment (GstPeriod *period, gchar* id,
+    GstMediaSegment *segment);
+gboolean gst_period_set_init_segment (GstPeriod * period, gchar* id,
+    GstMediaSegment *segment_info);
+gboolean gst_period_render (GstPeriod *period, xmlTextWriterPtr writer);
+
+#endif
