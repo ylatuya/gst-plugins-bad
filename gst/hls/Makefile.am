@@ -1,21 +1,19 @@
+plugin_LTLIBRARIES = libgsthls.la
 
-plugin_LTLIBRARIES = libgstfragmented.la
-
-libgstfragmented_la_SOURCES =			\
-	m3u8.c					\
-	gsthlsdemux.c				\
-	gstfragmentedplugin.c
-
-libgstfragmented_la_CFLAGS = $(GST_CFLAGS) $(GST_BASE_CFLAGS) $(SOUP_CFLAGS)
-libgstfragmented_la_LIBADD = $(GST_LIBS) $(GST_BASE_LIBS) $(SOUP_LIBS)
-libgstfragmented_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS) -no-undefined
-libgstfragmented_la_LIBTOOLFLAGS = --tag=disable-static
+# sources used to compile this plug-in
+libgsthls_la_SOURCES = \
+	gstkeyunitsscheduler.c
 
 # headers we need but don't want installed
-noinst_HEADERS = 			\
-	gstfragmented.h		\
-	gsthlsdemux.h			\
-	m3u8.h
+noinst_HEADERS = \
+	gstkeyunitsscheduler.h
+
+# flags used to compile this plugin
+# add other _CFLAGS and _LIBS as needed
+libgsthls_la_CFLAGS = $(GST_CFLAGS) $(GST_BASE_CFLAGS) $(GST_PLUGINS_BASE_CFLAGS)
+libgsthls_la_LIBADD = $(GST_LIBS) $(GST_BASE_LIBS) $(GST_PLUGINS_BASE_LIBS)
+libgsthls_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
+libgsthls_la_LIBTOOLFLAGS = --tag=disable-static
 
 Android.mk: Makefile.am $(BUILT_SOURCES)
 	androgenizer \
