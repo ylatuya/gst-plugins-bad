@@ -106,6 +106,21 @@ gst_media_presentation_write_url (xmlTextWriterPtr writer, const gchar * name,
   return TRUE;
 }
 
+gint32
+gst_segment_info_get_average_bitrate (GstSegmentInfo * info)
+{
+  GList *tmp;
+  guint64 size = 0;
+
+  tmp = g_list_first (info->segments);
+  while (tmp != NULL) {
+    size += ((GstMediaSegment *) tmp->data)->size;
+    tmp = g_list_next (tmp);
+  }
+
+  return GST_ROUND_UP_64 (size / (info->duration / GST_SECOND));
+}
+
 gboolean
 gst_segment_info_render (GstSegmentInfo * info, xmlTextWriterPtr writer)
 {

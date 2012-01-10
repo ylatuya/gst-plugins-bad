@@ -75,7 +75,7 @@ GstPeriod * gst_media_presentation_current_period (GstMediaPresentation *mdp);
 void gst_media_presentation_clear (GstMediaPresentation *mdp);
 gboolean gst_media_presentation_add_stream (GstMediaPresentation *mdp, StreamType type, gchar *id,
     const gchar *mimeType, guint32 width, guint32 height, guint32 parx, guint32 pary,
-    gdouble frameRate, gchar* channels, guint32 samplingRate);
+    gdouble frameRate, gchar* channels, guint32 samplingRate, guint32 bitrate);
 gboolean gst_media_presentation_remove_stream (GstMediaPresentation *mdp, gchar *id);
 gboolean gst_media_presentation_add_media_segment (GstMediaPresentation *mdp, gchar *id,
     gchar * url, guint index, guint64 start_ts, guint64 duration, guint64 offset,

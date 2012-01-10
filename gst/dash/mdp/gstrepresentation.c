@@ -28,7 +28,7 @@
 GstRepresentation *
 gst_representation_new (gchar * id, gchar * mimeType, guint32 width,
     guint32 height, guint32 parx, guint32 pary, gdouble frameRate,
-    gchar * channels, guint32 samplingRate)
+    gchar * channels, guint32 samplingRate, guint32 bitrate)
 {
   GstRepresentation *rep;
 
@@ -49,7 +49,7 @@ gst_representation_new (gchar * id, gchar * mimeType, guint32 width,
           samplingRate));
 
   rep->id = g_strdup (id);
-  rep->bandwidth = 0;
+  rep->bandwidth = bitrate;
   rep->startWithRAP = TRUE;
   rep->segment_info = gst_segment_info_new ();
 
@@ -73,6 +73,8 @@ gst_representation_add_media_segment (GstRepresentation * rep,
   g_return_if_fail (segment != NULL);
 
   gst_segment_info_add_media_segment (rep->segment_info, segment);
+  if (rep->bandwidth == 0)
+    rep->bandwidth = gst_segment_info_get_average_bitrate (rep->segment_info);
 }
 
 void
@@ -108,6 +110,7 @@ gst_representation_render (GstRepresentation * rep, xmlTextWriterPtr writer)
   /* Start Representation */
   if (!gst_media_presentation_start_element (writer, "Representation"))
     return FALSE;
+
   if (!gst_media_presentation_write_uint32_attribute (writer, "bandwidth",
           rep->bandwidth))
     return FALSE;

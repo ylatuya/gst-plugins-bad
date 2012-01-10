@@ -120,7 +120,7 @@ gboolean
 gst_media_presentation_add_stream (GstMediaPresentation * mdp, StreamType type,
     gchar * id, const gchar * mimeType, guint32 width, guint32 height,
     guint32 parx, guint32 pary, gdouble frameRate, gchar * channels,
-    guint32 samplingRate)
+    guint32 samplingRate, guint32 bitrate)
 {
   GstPeriod *active_period;
   GstRepresentation *rep;
@@ -143,7 +143,7 @@ gst_media_presentation_add_stream (GstMediaPresentation * mdp, StreamType type,
   /* Add a new presentation to the active period */
   rep =
       gst_representation_new (id, (gchar *) mdp_mime_type, width, height, parx,
-      pary, frameRate, channels, samplingRate);
+      pary, frameRate, channels, samplingRate, bitrate);
   return gst_period_add_representation (active_period, id, rep);
 }
 

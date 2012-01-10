@@ -44,7 +44,7 @@ struct _GstRepresentation
 
 GstRepresentation * gst_representation_new(gchar *id, gchar *mimeType, guint32 width,
 	guint32 height, guint32 parx, guint32 pary, gdouble frameRate, gchar* channels,
-	guint32 samplingRate);
+	guint32 samplingRate, guint32 bitrate);
 void gst_representation_free(GstRepresentation *rep);
 void gst_representation_add_media_segment (GstRepresentation *rep,
     GstMediaSegment *segment);

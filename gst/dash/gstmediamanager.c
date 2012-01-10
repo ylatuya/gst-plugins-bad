@@ -96,6 +96,7 @@ gst_media_manager_add_stream (GstBaseMediaManager * b_manager, GstPad * pad,
   gint par_n = 0;
   gint par_d = 0;
   gint samplerate = 0;
+  gint bitrate = 0;
   gdouble framerate = 0;
 
 
@@ -115,14 +116,20 @@ gst_media_manager_add_stream (GstBaseMediaManager * b_manager, GstPad * pad,
   s = gst_caps_get_structure (caps, 0);
   mime = gst_structure_get_name (s);
 
+  /* Video metadata */
   gst_structure_get_int (s, "height", &height);
   gst_structure_get_int (s, "width", &width);
   gst_structure_get_fraction (s, "pixel-aspect-ratio", &par_n, &par_d);
   if (gst_structure_get_fraction (s, "framerate", &fps_n, &fps_d))
     framerate = ((gdouble) fps_n) / fps_d;
 
+  /* Audio metadata */
   gst_structure_get_int (s, "samplerate", &samplerate);
 
+  /* Stream bitrate */
+  gst_structure_get_int (s, "bitrate", &bitrate);
+
+  /* Stream type */
   if (g_str_has_prefix (mime, "audio"))
     type = STREAM_TYPE_AUDIO;
   else if (g_str_has_prefix (mime, "video"))
@@ -135,7 +142,7 @@ gst_media_manager_add_stream (GstBaseMediaManager * b_manager, GstPad * pad,
   /* FIXME: Add audio channels */
   return gst_media_presentation_add_stream (manager->mdp, type,
       gst_pad_get_name (pad), pad_mime, width,
-      height, par_n, par_d, framerate, NULL, samplerate);
+      height, par_n, par_d, framerate, NULL, samplerate, bitrate);
 }
 
 static gboolean
