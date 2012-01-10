@@ -223,6 +223,17 @@ gst_media_presentation_set_init_segment (GstMediaPresentation * mdp, gchar * id,
   return gst_period_set_init_segment (active_period, id, segment_info);
 }
 
+static const gchar *
+gst_media_presentation_render_type (GstMediaPresentation * mdp)
+{
+  switch (mdp->type) {
+    case MEDIA_PRESENTATION_TYPE_ONDEMAND:
+      return TYPE_ONDEMAND;
+    default:
+      return NULL;
+  }
+}
+
 gchar *
 gst_media_presentation_render (GstMediaPresentation * mdp)
 {
@@ -276,9 +287,8 @@ gst_media_presentation_render (GstMediaPresentation * mdp)
           mdp->profiles))
     goto error;
 
-  /* FIXME: Only ondemand is supported for now */
   if (!gst_media_presentation_write_string_attribute (writer, "type",
-          TYPE_ONDEMAND))
+          gst_media_presentation_render_type (mdp)))
     goto error;
 
   if (!gst_media_presentation_write_time_attribute (writer,
