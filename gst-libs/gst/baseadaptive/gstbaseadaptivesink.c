@@ -320,6 +320,9 @@ gst_base_adaptive_sink_init (GstBaseAdaptiveSink * sink,
     sink->media_manager = gst_base_media_manager_new ();
   sink->discover_lock = g_mutex_new ();
   sink->discover_cond = g_cond_new ();
+
+  GST_OBJECT_FLAG_SET (sink, GST_ELEMENT_IS_SINK);
+
 }
 
 static void
@@ -770,6 +773,8 @@ gst_base_adaptive_sink_event (GstPad * pad, GstEvent * event)
   }
 
   else if (GST_EVENT_TYPE (event) == GST_EVENT_EOS) {
+    GstMessage *message;
+
     GST_OBJECT_LOCK (sink);
     /* FIXME: */
     /*gst_base_playlist_finish(sink->playlist); */
@@ -780,7 +785,11 @@ gst_base_adaptive_sink_event (GstPad * pad, GstEvent * event)
           GST_CLOCK_TIME_NONE);
     }
     g_signal_emit (sink, gst_base_adaptive_sink_signals[SIGNAL_EOS], 0);
-    return gst_pad_event_default (pad, event);
+    /* ok, now we can post the message */
+    GST_DEBUG_OBJECT (sink, "Posting EOS");
+
+    message = gst_message_new_eos (GST_OBJECT_CAST (sink));
+    gst_element_post_message (GST_ELEMENT_CAST (sink), message);
   }
 
   return TRUE;
