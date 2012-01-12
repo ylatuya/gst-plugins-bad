@@ -52,8 +52,7 @@ struct _GstPeriod
 
 GstPeriod * gst_period_new(guint64 start);
 void gst_period_free(GstPeriod *period);
-gboolean gst_period_add_representation (GstPeriod *period, gchar *id,
-    GstRepresentation *rep);
+gboolean gst_period_add_representation (GstPeriod *period, GstRepresentation *rep);
 gboolean gst_period_add_media_segment (GstPeriod *period, gchar* id,
     GstMediaSegment *segment);
 gboolean gst_period_set_init_segment (GstPeriod * period, gchar* id,

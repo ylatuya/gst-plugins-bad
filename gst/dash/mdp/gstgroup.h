@@ -54,7 +54,7 @@ struct _GstGroup
 
 GstGroup * gst_group_new(gchar *mimeType);
 void gst_group_free (GstGroup *group);
-gboolean gst_group_add_representation (GstGroup *group, gchar *id, GstRepresentation *rep);
+gboolean gst_group_add_representation (GstGroup *group, GstRepresentation *rep);
 gboolean gst_group_remove_representation (GstGroup *group, gchar *id);
 GstRepresentation * gst_group_get_representation (GstGroup  *group, gchar *id);
 gboolean gst_group_add_media_segment (GstGroup *group, gchar *id,

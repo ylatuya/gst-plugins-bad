@@ -26,6 +26,7 @@
 #define ISOFF_FRAGMENT_EXTENSION ".m4s"
 #define MDP_EXTENSION ".mdp"
 
+static void gst_media_manager_finalize (GObject * gobject);
 
 static gboolean gst_media_manager_add_stream (GstBaseMediaManager * manager,
     GstPad * pad, GList * substreams_caps);
@@ -43,6 +44,7 @@ G_DEFINE_TYPE (GstMediaManager, gst_media_manager, GST_TYPE_BASE_MEDIA_MANAGER);
 static void
 gst_media_manager_class_init (GstMediaManagerClass * klass)
 {
+  GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
   GstBaseMediaManagerClass *manager_class =
       GST_BASE_MEDIA_MANAGER_CLASS (klass);
 
@@ -51,6 +53,8 @@ gst_media_manager_class_init (GstMediaManagerClass * klass)
   manager_class->add_fragment = gst_media_manager_add_fragment;
   manager_class->add_headers = gst_media_manager_add_headers;
   manager_class->render = gst_media_manager_render;
+
+  gobject_class->finalize = gst_media_manager_finalize;
 }
 
 static void
@@ -59,15 +63,29 @@ gst_media_manager_init (GstMediaManager * manager)
   GstBaseMediaManager *base_manager;
 
   base_manager = GST_BASE_MEDIA_MANAGER (manager);
-  base_manager->base_url = g_strdup ("./");
-  base_manager->title = g_strdup ("dash");
-  base_manager->fragment_prefix = g_strdup ("segment");
+  gst_base_media_manager_set_base_url (base_manager, g_strdup ("./"));
+  gst_base_media_manager_set_title (base_manager, g_strdup ("dash"));
+  gst_base_media_manager_set_fragment_prefix (base_manager, g_strdup
+      ("segment"));
   base_manager->chunked = TRUE;
   base_manager->is_live = FALSE;
   base_manager->finished = FALSE;
   base_manager->window_size = GST_CLOCK_TIME_NONE;
 
   manager->mdp = gst_media_presentation_new (MEDIA_PRESENTATION_TYPE_ONDEMAND);
+}
+
+static void
+gst_media_manager_finalize (GObject * gobject)
+{
+  GstMediaManager *manager = GST_MEDIA_MANAGER (gobject);
+
+  if (manager->mdp != NULL) {
+    gst_media_presentation_free (manager->mdp);
+    manager->mdp = NULL;
+  }
+
+  G_OBJECT_CLASS (gst_media_manager_parent_class)->finalize (gobject);
 }
 
 GstMediaManager *
@@ -91,13 +109,11 @@ gst_media_manager_add_stream (GstBaseMediaManager * b_manager, GstPad * pad,
   const gchar *mime;
   StreamType type;
   gint fps_n, fps_d;
-  gint width = 0;
-  gint height = 0;
-  gint par_n = 0;
-  gint par_d = 0;
-  gint samplerate = 0;
+  gint width = 0, height = 0, par_n = 0, par_d = 0, samplerate = 0;
   gint bitrate = 0;
   gdouble framerate = 0;
+  gchar *pad_name;
+  gboolean ret;
 
 
   manager = GST_MEDIA_MANAGER (b_manager);
@@ -108,7 +124,7 @@ gst_media_manager_add_stream (GstBaseMediaManager * b_manager, GstPad * pad,
     return FALSE;
   }
 
-  s = gst_caps_get_structure (gst_pad_get_caps (pad), 0);
+  s = gst_caps_get_structure (GST_PAD_CAPS (pad), 0);
   pad_mime = gst_structure_get_name (s);
 
   /* Extract substream metadata from the caps */
@@ -140,9 +156,12 @@ gst_media_manager_add_stream (GstBaseMediaManager * b_manager, GstPad * pad,
   }
 
   /* FIXME: Add audio channels */
-  return gst_media_presentation_add_stream (manager->mdp, type,
-      gst_pad_get_name (pad), pad_mime, width,
-      height, par_n, par_d, framerate, NULL, samplerate, bitrate);
+  pad_name = gst_pad_get_name (pad);
+  ret = gst_media_presentation_add_stream (manager->mdp, type,
+      pad_name, pad_mime, width, height, par_n, par_d, framerate,
+      NULL, samplerate, bitrate);
+  g_free (pad_name);
+  return ret;
 }
 
 static gboolean
@@ -155,17 +174,23 @@ static void
 gst_media_manager_update_fragment_name (GstBaseMediaManager * manager,
     gchar * pad_name, GstFragment * fragment)
 {
-  fragment->name = g_strdup_printf ("%s_%s_%s_%d%s", manager->title,
+  gchar *name;
+
+  name = g_strdup_printf ("%s_%s_%s_%d%s", manager->title,
       pad_name, manager->fragment_prefix, fragment->index,
       ISOFF_FRAGMENT_EXTENSION);
+  gst_fragment_set_name (fragment, name);
 }
 
 static void
 gst_media_manager_update_headers_name (GstBaseMediaManager * manager,
     gchar * pad_name, GstFragment * fragment)
 {
-  fragment->name = g_strdup_printf ("%s_%s%s", manager->title,
+  gchar *name;
+
+  name = g_strdup_printf ("%s_%s%s", manager->title,
       pad_name, ISOFF_HEADERS_EXTENSION);
+  gst_fragment_set_name (fragment, name);
 }
 
 static gboolean
@@ -174,14 +199,18 @@ gst_media_manager_add_headers (GstBaseMediaManager * b_manager,
 {
   GstMediaManager *manager;
   gchar *pad_name;
+  gboolean ret;
 
   manager = GST_MEDIA_MANAGER (b_manager);
 
   pad_name = gst_pad_get_name (pad);
   gst_media_manager_update_headers_name (b_manager, pad_name, fragment);
 
-  return gst_media_presentation_set_init_segment (manager->mdp, pad_name,
+  ret = gst_media_presentation_set_init_segment (manager->mdp, pad_name,
       fragment->name, fragment->offset, fragment->size);
+  g_free (pad_name);
+
+  return ret;
 }
 
 static gboolean
@@ -190,6 +219,7 @@ gst_media_manager_add_fragment (GstBaseMediaManager * b_manager,
 {
   GstMediaManager *manager;
   gchar *pad_name;
+  gboolean ret;
 
   manager = GST_MEDIA_MANAGER (b_manager);
   pad_name = gst_pad_get_name (pad);
@@ -198,9 +228,12 @@ gst_media_manager_add_fragment (GstBaseMediaManager * b_manager,
   /* FIXME: handled rotating windows */
   *removed_fragments = NULL;
 
-  return gst_media_presentation_add_media_segment (manager->mdp,
+  ret = gst_media_presentation_add_media_segment (manager->mdp,
       pad_name, fragment->name, fragment->index, fragment->start_ts,
       fragment->stop_ts - fragment->start_ts, fragment->offset, fragment->size);
+  g_free (pad_name);
+
+  return ret;
 }
 
 static GstMediaManagerFile *

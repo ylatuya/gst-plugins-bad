@@ -62,7 +62,9 @@ gst_representation_free (GstRepresentation * rep)
   g_return_if_fail (rep != NULL);
 
   g_free (rep->id);
+  gst_media_common_free (&(rep->common));
   gst_segment_info_free (rep->segment_info);
+  g_free (rep);
 }
 
 void

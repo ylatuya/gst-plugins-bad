@@ -46,7 +46,8 @@ gst_segment_info_free (GstSegmentInfo * info)
   g_list_foreach (info->base_urls, (GFunc) g_free, NULL);
   g_list_free (info->base_urls);
 
-  gst_media_segment_free (info->init_segment);
+  if (info->init_segment != NULL)
+    gst_media_segment_free (info->init_segment);
 
   g_list_foreach (info->segments, (GFunc) gst_media_segment_free, NULL);
   g_list_free (info->segments);

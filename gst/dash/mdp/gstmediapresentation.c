@@ -67,8 +67,10 @@ gst_media_presentation_free (GstMediaPresentation * mpd)
 {
   g_return_if_fail (mpd != NULL);
 
-  if (mpd->profiles != NULL)
+  if (mpd->profiles != NULL) {
+    g_list_foreach (mpd->profiles, (GFunc) g_free, NULL);
     g_list_free (mpd->profiles);
+  }
 
   if (mpd->periods != NULL) {
     g_list_foreach (mpd->periods, (GFunc) gst_period_free, NULL);
@@ -144,7 +146,9 @@ gst_media_presentation_add_stream (GstMediaPresentation * mpd, StreamType type,
   rep =
       gst_representation_new (id, (gchar *) mpd_mime_type, width, height, parx,
       pary, frameRate, channels, samplingRate, bitrate);
-  return gst_period_add_representation (active_period, id, rep);
+  g_free (mpd_mime_type);
+
+  return gst_period_add_representation (active_period, rep);
 }
 
 gboolean

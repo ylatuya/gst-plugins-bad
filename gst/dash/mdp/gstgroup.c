@@ -58,22 +58,20 @@ gst_group_free (GstGroup * group)
   g_return_if_fail (group != NULL);
 
   gst_media_common_free (&(group->common));
-
-  g_hash_table_remove_all (group->representations);
+  g_hash_table_destroy (group->representations);
+  g_free (group);
 }
 
 gboolean
-gst_group_add_representation (GstGroup * group, gchar * id,
-    GstRepresentation * rep)
+gst_group_add_representation (GstGroup * group, GstRepresentation * rep)
 {
   g_return_val_if_fail (group != NULL, FALSE);
-  g_return_val_if_fail (id != NULL, FALSE);
   g_return_val_if_fail (rep != NULL, FALSE);
 
-  if (g_hash_table_lookup (group->representations, id) != NULL)
+  if (g_hash_table_lookup (group->representations, rep->id) != NULL)
     return FALSE;
 
-  g_hash_table_insert (group->representations, id, rep);
+  g_hash_table_insert (group->representations, rep->id, rep);
   return TRUE;
 }
 

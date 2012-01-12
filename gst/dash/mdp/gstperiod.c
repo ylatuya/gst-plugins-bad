@@ -37,8 +37,8 @@ gst_period_new (guint64 start)
   period->minBufferTime = GST_CLOCK_TIME_NONE;
   period->segmentAlignmentFlag = TRUE;
   period->bitstreamSwitchingFlag = TRUE;
-  period->groups = g_hash_table_new_full (g_str_hash, g_str_equal, NULL,
-      (GDestroyNotify) gst_representation_free);
+  period->groups = g_hash_table_new_full (g_str_hash, g_str_equal,
+      (GDestroyNotify) g_free, (GDestroyNotify) gst_group_free);
   period->id_to_group = g_hash_table_new (g_str_hash, g_str_equal);
   /* period->representation = NULL; */
 
@@ -69,8 +69,7 @@ gst_period_free (GstPeriod * period)
 }
 
 gboolean
-gst_period_add_representation (GstPeriod * period, gchar * id,
-    GstRepresentation * rep)
+gst_period_add_representation (GstPeriod * period, GstRepresentation * rep)
 {
   /* Groups define a set of alternate representations of the same media.
    * A media representation can consist of several media type (mpegts, isoff, webmf, etc...)
@@ -79,19 +78,19 @@ gst_period_add_representation (GstPeriod * period, gchar * id,
   GstGroup *group;
 
   g_return_val_if_fail (period != NULL, FALSE);
-  g_return_val_if_fail (id != NULL, FALSE);
   g_return_val_if_fail (rep != NULL, FALSE);
 
   /* Get the group for the representation's mime type or create a new one */
   group =
       (GstGroup *) g_hash_table_lookup (period->groups, rep->common.mimeType);
   if (group == NULL) {
-    group = gst_group_new (g_strdup (rep->common.mimeType));
-    g_hash_table_insert (period->groups, id, group);
+    group = gst_group_new (rep->common.mimeType);
+    g_hash_table_insert (period->groups, g_strdup (rep->common.mimeType),
+        group);
   }
 
-  g_hash_table_insert (period->id_to_group, id, group);
-  return gst_group_add_representation (group, id, rep);
+  g_hash_table_insert (period->id_to_group, rep->id, group);
+  return gst_group_add_representation (group, rep);
 }
 
 gboolean
