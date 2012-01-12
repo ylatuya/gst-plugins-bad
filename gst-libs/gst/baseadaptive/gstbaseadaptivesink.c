@@ -837,7 +837,6 @@ gst_base_adaptive_sink_write_playlist (GstBaseAdaptiveSink * sink,
 
   g_output_stream_write ((GOutputStream *) stream, playlist_str,
       g_utf8_strlen (playlist_str, -1), NULL, &error);
-  g_free (playlist_str);
   return error;
 }
 
