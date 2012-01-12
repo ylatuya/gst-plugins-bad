@@ -70,8 +70,6 @@ struct _GstBaseAdaptiveSink
   /*< private >*/
   GstBaseMediaManager *media_manager;
   GHashTable * pad_datas;
-  GMutex *discover_lock;
-  GCond *discover_cond;
 };
 
 struct _GstBaseAdaptiveSinkClass

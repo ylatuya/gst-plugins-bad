@@ -80,6 +80,8 @@ typedef struct
   GstFragment *last_fragment;
   GCancellable *cancellable;
 
+  GMutex *discover_lock;
+  GCond *discover_cond;
 
   int n_streamheaders;
   GstBuffer **streamheaders;
@@ -318,8 +320,6 @@ gst_base_adaptive_sink_init (GstBaseAdaptiveSink * sink,
     sink->media_manager = g_class->create_media_manager (sink);
   else
     sink->media_manager = gst_base_media_manager_new ();
-  sink->discover_lock = g_mutex_new ();
-  sink->discover_cond = g_cond_new ();
 
   GST_OBJECT_FLAG_SET (sink, GST_ELEMENT_IS_SINK);
 
@@ -338,16 +338,6 @@ gst_base_adaptive_sink_finalize (GObject * object)
   if (sink->base_url != NULL) {
     g_free (sink->base_url);
     sink->base_url = NULL;
-  }
-
-  if (sink->discover_lock != NULL) {
-    g_mutex_free (sink->discover_lock);
-    sink->discover_lock = NULL;
-  }
-
-  if (sink->discover_cond != NULL) {
-    g_cond_free (sink->discover_cond);
-    sink->discover_cond = NULL;
   }
 
   if (sink->pad_datas != NULL) {
@@ -1054,6 +1044,8 @@ gst_base_adaptive_sink_pad_data_new (GstPad * pad)
   pad_data->cancellable = NULL;
   pad_data->n_streamheaders = 0;
   pad_data->streamheaders = NULL;
+  pad_data->discover_lock = g_mutex_new ();
+  pad_data->discover_cond = g_cond_new ();
 
   return pad_data;
 }
@@ -1094,6 +1086,16 @@ gst_base_adaptive_sink_pad_data_free (GstBaseAdaptivePadData * pad_data)
     pad_data->pad = NULL;
   }
 
+  if (pad_data->discover_lock != NULL) {
+    g_mutex_free (pad_data->discover_lock);
+    pad_data->discover_lock = NULL;
+  }
+
+  if (pad_data->discover_cond != NULL) {
+    g_cond_free (pad_data->discover_cond);
+    pad_data->discover_cond = NULL;
+  }
+
   g_free (pad_data);
 }
 
@@ -1111,9 +1113,9 @@ on_new_decoded_pad_cb (GstElement * bin, GstPad * pad, gboolean is_last,
 }
 
 static void
-on_drained_cb (GstElement * bin, GstBaseAdaptiveSink * sink)
+on_drained_cb (GstElement * bin, GstBaseAdaptivePadData * pad_data)
 {
-  g_cond_signal (sink->discover_cond);
+  g_cond_signal (pad_data->discover_cond);
 }
 
 static void
@@ -1132,7 +1134,7 @@ gst_base_adaptive_sink_parse_stream (GstBaseAdaptiveSink * sink,
   gst_bin_add_many (GST_BIN (pipeline), appsrc, decodebin, NULL);
   gst_element_link (appsrc, decodebin);
 
-  g_signal_connect (decodebin, "drained", G_CALLBACK (on_drained_cb), sink);
+  g_signal_connect (decodebin, "drained", G_CALLBACK (on_drained_cb), pad_data);
   g_signal_connect (decodebin, "new-decoded-pad",
       G_CALLBACK (on_new_decoded_pad_cb), pad_data);
 
@@ -1144,14 +1146,15 @@ gst_base_adaptive_sink_parse_stream (GstBaseAdaptiveSink * sink,
   g_time_val_add (&timeout, 5 * 1000 * 1000);
 
   /* Push buffer and wait for the "drained" signal */
-  g_mutex_lock (sink->discover_lock);
+  g_mutex_lock (pad_data->discover_lock);
   gst_element_set_state (pipeline, GST_STATE_PLAYING);
   gst_buffer_ref (buf);
   gst_app_src_push_buffer (GST_APP_SRC (appsrc), buf);
-  if (!g_cond_timed_wait (sink->discover_cond, sink->discover_lock, &timeout)) {
+  if (!g_cond_timed_wait (pad_data->discover_cond, pad_data->discover_lock,
+          &timeout)) {
     GST_WARNING ("Timed out decoding the fragment");
   }
-  g_mutex_unlock (sink->discover_lock);
+  g_mutex_unlock (pad_data->discover_lock);
 
   /* Dispose the pipeline */
   gst_element_set_state (pipeline, GST_STATE_NULL);
