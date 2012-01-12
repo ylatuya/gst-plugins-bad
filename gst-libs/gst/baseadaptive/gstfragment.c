@@ -276,3 +276,14 @@ gst_fragment_add_buffer (GstFragment * fragment, GstBuffer * buffer)
   fragment->size += GST_BUFFER_SIZE (buffer);
   return TRUE;
 }
+
+void
+gst_fragment_set_name (GstFragment * fragment, gchar * name)
+{
+  g_return_if_fail (fragment != NULL);
+
+  if (fragment->name != NULL)
+    g_free (fragment->name);
+
+  fragment->name = name;
+}

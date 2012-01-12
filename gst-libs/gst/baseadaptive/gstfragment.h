@@ -66,6 +66,7 @@ GstBufferList * gst_fragment_get_buffer_list (GstFragment *fragment);
 GstBuffer * gst_fragment_get_buffer (GstFragment *fragment);
 gboolean gst_fragment_set_headers (GstFragment *fragment, GstBuffer **buffer, guint count);
 gboolean gst_fragment_add_buffer (GstFragment *fragment, GstBuffer *buffer);
+void gst_fragment_set_name (GstFragment *fragment, gchar *name);
 GstFragment * gst_fragment_new (void);
 
 G_END_DECLS
