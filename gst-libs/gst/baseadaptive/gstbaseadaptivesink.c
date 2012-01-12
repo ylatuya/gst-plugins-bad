@@ -270,8 +270,8 @@ gst_base_adaptive_sink_class_init (GstBaseAdaptiveSinkClass * klass)
   gst_base_adaptive_sink_signals[SIGNAL_NEW_PLAYLIST] =
       g_signal_new ("new-playlist", G_TYPE_FROM_CLASS (klass),
       G_SIGNAL_RUN_LAST, G_STRUCT_OFFSET (GstBaseAdaptiveSinkClass,
-          new_playlist), NULL, NULL, __gst_adaptive_marshal_STRING__VOID,
-      G_TYPE_STRING, 0, G_TYPE_NONE);
+          new_playlist), NULL, NULL, __gst_adaptive_marshal_VOID__STRING_STRING,
+      G_TYPE_NONE, 2, G_TYPE_STRING, G_TYPE_STRING);
 
   /**
    * GstAppSink::new-fragment:
@@ -288,8 +288,8 @@ gst_base_adaptive_sink_class_init (GstBaseAdaptiveSinkClass * klass)
   gst_base_adaptive_sink_signals[SIGNAL_NEW_FRAGMENT] =
       g_signal_new ("new-fragment", G_TYPE_FROM_CLASS (klass),
       G_SIGNAL_RUN_LAST, G_STRUCT_OFFSET (GstBaseAdaptiveSinkClass,
-          new_fragment), NULL, NULL, __gst_adaptive_marshal_OBJECT__VOID,
-      GST_TYPE_FRAGMENT, 0, G_TYPE_NONE);
+          new_fragment), NULL, NULL, __gst_adaptive_marshal_VOID__OBJECT,
+      G_TYPE_NONE, 1, GST_TYPE_FRAGMENT);
 
 
   gobject_class->dispose = gst_base_adaptive_sink_dispose;
@@ -778,11 +778,6 @@ gst_base_adaptive_sink_event (GstPad * pad, GstEvent * event)
     if (pad_data->fragment != NULL) {
       gst_base_adaptive_sink_close_fragment (sink, pad_data,
           GST_CLOCK_TIME_NONE);
-      /*g_signal_emit (sink, gst_base_adaptive_sink_signals[SIGNAL_NEW_PLAYLIST],
-         0);
-         g_signal_emit (sink, gst_base_adaptive_sink_signals[SIGNAL_NEW_FRAGMENT],
-         0);
-       */
     }
     g_signal_emit (sink, gst_base_adaptive_sink_signals[SIGNAL_EOS], 0);
     return gst_pad_event_default (pad, event);
@@ -993,11 +988,14 @@ gst_base_adaptive_sink_close_fragment (GstBaseAdaptiveSink * sink,
           filename, mg_file->content);
 
       g_free (filename);
-      gst_base_media_manager_file_free (mg_file);
-
-      if (ret != GST_FLOW_OK)
+      if (ret != GST_FLOW_OK) {
+        gst_base_media_manager_file_free (mg_file);
         goto done;
-      //g_signal_emit (sink, gst_base_adaptive_sink_signals[SIGNAL_NEW_PLAYLIST], 0);
+      }
+
+      g_signal_emit (sink, gst_base_adaptive_sink_signals[SIGNAL_NEW_PLAYLIST],
+          0, mg_file->filename, mg_file->content);
+      gst_base_media_manager_file_free (mg_file);
     }
   }
 
