@@ -509,15 +509,19 @@ gst_base_adaptive_sink_stop (GstBaseAdaptiveSink * sink)
   GstPad *pad;
   GstBaseAdaptivePadData *pad_data;
 
-  gst_base_media_manager_clear (sink->media_manager);
-
   /* Clear all pad data */
   g_hash_table_iter_init (&iter, sink->pad_datas);
   while (g_hash_table_iter_next (&iter, (void *) &pad, (void *) &pad_data)) {
     GST_PAD_DATA_LOCK (pad_data);
+    if (pad_data->fragment != NULL) {
+      gst_base_adaptive_sink_close_fragment (sink, pad_data,
+          GST_CLOCK_TIME_NONE);
+    }
     g_hash_table_remove (sink->pad_datas, pad_data);
     GST_PAD_DATA_UNLOCK (pad_data);
   }
+
+  gst_base_media_manager_clear (sink->media_manager);
 }
 
 static GstPad *
@@ -781,18 +785,6 @@ gst_base_adaptive_sink_event (GstPad * pad, GstEvent * event)
 
   else if (GST_EVENT_TYPE (event) == GST_EVENT_EOS) {
     GstMessage *message;
-
-    GST_OBJECT_LOCK (sink);
-    /* FIXME: */
-    /*gst_base_playlist_finish(sink->playlist); */
-    GST_OBJECT_UNLOCK (sink);
-
-    GST_PAD_DATA_LOCK (pad_data);
-    if (pad_data->fragment != NULL) {
-      gst_base_adaptive_sink_close_fragment (sink, pad_data,
-          GST_CLOCK_TIME_NONE);
-    }
-    GST_PAD_DATA_UNLOCK (pad_data);
 
     g_signal_emit (sink, gst_base_adaptive_sink_signals[SIGNAL_EOS], 0);
     /* ok, now we can post the message */
