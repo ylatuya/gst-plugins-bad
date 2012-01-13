@@ -21,15 +21,16 @@
  */
 /**
  * SECTION:element-sink
+ * @short_description: Base class for adaptive streaming sink elements
  * @see_also: #GstBaseSink
  *
- * Fragments incoming data delimited by GstForceKeyUnit events or time intervals
- * into fragments, streamable using the HTTP Live Streaming draft, and creates a
- * playlist that compiles with the draft to serve them.
+ * #GstBaseAdaptiveSink is the base class for sink elements in GStreamer that
+ * needs to fragment incoming streams and provide a media representation in the
+ * form of manifest or playlist for adaptive streaming formats such as DASH,
+ * HLS or Smooth Streaming.
  *
- * The fragments and the playlist can be written to disk or retrieved using the
- * availables signal actions
- *
+ * #GstBaseAdaptiveSink will use the GstForceKeyUnit events to fragment the
+ * incoming data and update the media representation.
  *
  */
 
@@ -253,8 +254,9 @@ gst_base_adaptive_sink_class_init (GstBaseAdaptiveSinkClass * klass)
    * GstBaseAdaptiveSink::eos:
    * @sink: the sink element that emited the signal
    *
-   * Signal that the end-of-stream has been reached. This signal is emited from
-   * the steaming thread.
+   * Signal that the end-of-stream has been reached.
+   *
+   * This signal is emited from the steaming thread.
    */
   gst_base_adaptive_sink_signals[SIGNAL_EOS] =
       g_signal_new ("eos", G_TYPE_FROM_CLASS (klass), G_SIGNAL_RUN_LAST,
@@ -263,15 +265,13 @@ gst_base_adaptive_sink_class_init (GstBaseAdaptiveSinkClass * klass)
 
   /**
    * GstBaseAdaptiveSink::new-playlist:
-   * @glssink: the sink element that emited the signal
+   * @sink: the sink element that emited the signal
+   * @filename: the filename of the media representation.
+   * @content: the content of the media representation.
    *
-   * Signal that the playlist has been modified and a new version is available
+   * This signal gets emitted when a media presentation has been updated.
    *
    * This signal is emited from the steaming thread.
-   *
-   * The new playlist can be retrieved with the "pull-playlist" action
-   * signal or gst_base_adaptive_sink_pull_buffer() either from this signal callback
-   * or from any other thread.
    *
    */
   gst_base_adaptive_sink_signals[SIGNAL_NEW_PLAYLIST] =
@@ -283,13 +283,11 @@ gst_base_adaptive_sink_class_init (GstBaseAdaptiveSinkClass * klass)
   /**
    * GstAppSink::new-fragment:
    * @sink: the sink element that emited the signal
+   * @fragment: the #GstFragment that was created
    *
-   * Signal that a new fragment is available.
+   * This signal gets emitted when a new fragment has been created.
    *
    * This signal is emited from the steaming thread.
-   *
-   * The new fragment can be retrieved with the "pull-fragment" action
-   * signal.
    *
    */
   gst_base_adaptive_sink_signals[SIGNAL_NEW_FRAGMENT] =
