@@ -73,15 +73,19 @@ gst_media_common_render (GstMediaCommon * common, xmlTextWriterPtr writer)
   if (!gst_media_presentation_write_uint32_attribute (writer, "height",
           common->height))
     return FALSE;
-  if (!gst_media_presentation_write_uint32_attribute (writer, "parx",
-          common->parx))
-    return FALSE;
-  if (!gst_media_presentation_write_uint32_attribute (writer, "pary",
-          common->pary))
-    return FALSE;
-  if (!gst_media_presentation_write_double_attribute (writer, "frameRate",
-          common->frameRate))
-    return FALSE;
+  /* FIXME: disabled since VLC, the only player that support DASH at this
+   * moment do not handle these fields correctly */
+  /*
+     if (!gst_media_presentation_write_uint32_attribute (writer, "parx",
+     common->parx))
+     return FALSE;
+     if (!gst_media_presentation_write_uint32_attribute (writer, "pary",
+     common->pary))
+     return FALSE;
+     if (!gst_media_presentation_write_double_attribute (writer, "frameRate",
+     common->frameRate))
+     return FALSE;
+   */
   if (!gst_media_presentation_write_uint32_attribute (writer, "group",
           common->group))
     return FALSE;
