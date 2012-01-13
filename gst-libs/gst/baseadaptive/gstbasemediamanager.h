@@ -1,6 +1,8 @@
-/*
- * GStreamer
- * Copyright (C) 2011 Flumotion S.L
+/* GStreamer
+ * Copyright (C) 2011 Flumotion S.L. <devteam@flumotion.com>
+ * Copyright (C) 2011 Andoni Morales Alastruey <ylatuya@gmail.com>
+ *
+ * gstbasemediamanager.h:
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
