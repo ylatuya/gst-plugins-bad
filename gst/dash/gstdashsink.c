@@ -39,6 +39,10 @@
 #include "gstdashsink.h"
 #include "gstmediamanager.h"
 
+#define SUPPORTED_STREAMS "video/x-h264; "\
+    "audio/mpeg, mpegversion={2, 4}; "\
+    "audio/mpeg, mpegversion=1, layer=3"
+
 static GstStaticPadTemplate sinktemplate = GST_STATIC_PAD_TEMPLATE ("stream_%d",
     GST_PAD_SINK,
     GST_PAD_REQUEST,
@@ -75,6 +79,10 @@ gst_dash_sink_class_init (GstDashSinkClass * klass)
 static void
 gst_dash_sink_init (GstDashSink * sink, GstDashSinkClass * g_class)
 {
+  GstBaseAdaptiveSink *b_sink = GST_BASE_ADAPTIVE_SINK (sink);
+
+  b_sink->supported_caps = gst_caps_from_string (SUPPORTED_STREAMS);
+  g_print ("%s\n", gst_caps_to_string (b_sink->supported_caps));
 }
 
 static GstBaseMediaManager *
