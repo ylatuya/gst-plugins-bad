@@ -510,10 +510,7 @@ gst_base_adaptive_sink_stop (GstBaseAdaptiveSink * sink)
   GstPad *pad;
   GstBaseAdaptivePadData *pad_data;
 
-  if (sink->media_manager != NULL) {
-    g_object_unref (sink->media_manager);
-    sink->media_manager = NULL;
-  }
+  gst_base_media_manager_clear (sink->media_manager);
 
   /* Clear all pad data */
   g_hash_table_iter_init (&iter, sink->pad_datas);
