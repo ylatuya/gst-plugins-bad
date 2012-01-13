@@ -1,7 +1,6 @@
-/*
- * GStreamer
- * Copyright (C) 2011 Flumotion S.L.
- * Copyright (C) 2011 Andoni Morales Alastruey
+/* GStreamer
+ * Copyright (C) 2011 Flumotion S.L. <devteam@flumotion.com>
+ * Copyright (C) 2011 Andoni Morales Alastruey <ylatuya@gmail.com>
  *
  * gstperiod.c:
  *
