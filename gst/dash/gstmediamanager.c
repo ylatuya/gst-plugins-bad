@@ -38,6 +38,7 @@ static gboolean gst_media_manager_add_headers (GstBaseMediaManager * manager,
     GstPad * pad, GstFragment * fragment);
 static GstMediaManagerFile *gst_media_manager_render (GstBaseMediaManager *
     manager, GstPad * pad);
+static void gst_media_manager_clear (GstBaseMediaManager * manager);
 
 G_DEFINE_TYPE (GstMediaManager, gst_media_manager, GST_TYPE_BASE_MEDIA_MANAGER);
 
@@ -53,6 +54,7 @@ gst_media_manager_class_init (GstMediaManagerClass * klass)
   manager_class->add_fragment = gst_media_manager_add_fragment;
   manager_class->add_headers = gst_media_manager_add_headers;
   manager_class->render = gst_media_manager_render;
+  manager_class->clear = gst_media_manager_clear;
 
   gobject_class->finalize = gst_media_manager_finalize;
 }
@@ -234,6 +236,19 @@ gst_media_manager_add_fragment (GstBaseMediaManager * b_manager,
   g_free (pad_name);
 
   return ret;
+}
+
+static void
+gst_media_manager_clear (GstBaseMediaManager * b_manager)
+{
+  GstMediaManager *manager;
+
+  manager = GST_MEDIA_MANAGER (b_manager);
+  if (manager->mdp != NULL) {
+    gst_media_presentation_free (manager->mdp);
+  }
+
+  manager->mdp = gst_media_presentation_new (MEDIA_PRESENTATION_TYPE_ONDEMAND);
 }
 
 static GstMediaManagerFile *
