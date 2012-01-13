@@ -1022,7 +1022,8 @@ done:
   {
     if (fragment_filename != NULL)
       g_free (fragment_filename);
-    g_object_unref (pad_data->fragment);
+    if (pad_data->fragment != NULL)
+      g_object_unref (pad_data->fragment);
     pad_data->fragment = NULL;
     return ret;
   }
