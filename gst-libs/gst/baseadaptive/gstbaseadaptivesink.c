@@ -44,6 +44,9 @@
 GST_DEBUG_CATEGORY_STATIC (gst_base_adaptive_sink_debug);
 #define GST_CAT_DEFAULT gst_base_adaptive_sink_debug
 
+#define GST_PAD_DATA_LOCK(p) (g_mutex_lock(p->lock))
+#define GST_PAD_DATA_UNLOCK(p) (g_mutex_unlock(p->lock))
+
 enum
 {
   /* signals */
@@ -80,6 +83,7 @@ typedef struct
   GstFragment *last_fragment;
   GCancellable *cancellable;
 
+  GMutex *lock;
   GMutex *discover_lock;
   GCond *discover_cond;
 
@@ -502,13 +506,22 @@ gst_base_adaptive_sink_unlock (GstBaseAdaptiveSink * sink)
 static void
 gst_base_adaptive_sink_stop (GstBaseAdaptiveSink * sink)
 {
+  GHashTableIter iter;
+  GstPad *pad;
+  GstBaseAdaptivePadData *pad_data;
+
   if (sink->media_manager != NULL) {
     g_object_unref (sink->media_manager);
     sink->media_manager = NULL;
   }
 
   /* Clear all pad data */
-  g_hash_table_remove_all (sink->pad_datas);
+  g_hash_table_iter_init (&iter, sink->pad_datas);
+  while (g_hash_table_iter_next (&iter, (void *) &pad, (void *) &pad_data)) {
+    GST_PAD_DATA_LOCK (pad_data);
+    g_hash_table_remove (sink->pad_datas, pad_data);
+    GST_PAD_DATA_UNLOCK (pad_data);
+  }
 }
 
 static GstPad *
@@ -555,8 +568,8 @@ static GstFlowReturn
 gst_base_adaptive_sink_chain (GstPad * pad, GstBuffer * buffer)
 {
   GstBaseAdaptiveSink *sink;
-  GstFlowReturn ret;
   GstBaseAdaptivePadData *pad_data;
+  GstFlowReturn ret = GST_FLOW_OK;
 
   sink = GST_BASE_ADAPTIVE_SINK (gst_pad_get_element_private (pad));
   pad_data = g_hash_table_lookup (sink->pad_datas, pad);
@@ -569,6 +582,7 @@ gst_base_adaptive_sink_chain (GstPad * pad, GstBuffer * buffer)
 
   /* Check if a new fragment needs to be created and save the old one updating
    * the playlist too */
+  GST_PAD_DATA_LOCK (pad_data);
   if (pad_data->new_fragment) {
     guint64 offset;
     guint index;
@@ -577,7 +591,8 @@ gst_base_adaptive_sink_chain (GstPad * pad, GstBuffer * buffer)
     /* Parse headers for this stream and add it to the media manager */
     if (G_UNLIKELY (!pad_data->parsed)) {
       if (!gst_base_adaptive_process_new_stream (sink, pad, pad_data)) {
-        return GST_FLOW_ERROR;
+        ret = GST_FLOW_ERROR;
+        goto quit;
       }
     }
 
@@ -590,7 +605,7 @@ gst_base_adaptive_sink_chain (GstPad * pad, GstBuffer * buffer)
       offset = pad_data->fragment->offset + pad_data->fragment->size;
       ret = gst_base_adaptive_sink_close_fragment (sink, pad_data, ts);
       if (ret != GST_FLOW_OK)
-        return ret;
+        goto quit;
     }
     gst_base_adaptive_sink_create_empty_fragment (sink, pad_data, ts, offset,
         index);
@@ -600,7 +615,7 @@ gst_base_adaptive_sink_chain (GstPad * pad, GstBuffer * buffer)
   if (pad_data->fragment == NULL) {
     GST_DEBUG_OBJECT (sink,
         "Dropping buffer because no fragment was started yet");
-    return GST_FLOW_OK;
+    goto quit;
   }
 
   GST_LOG_OBJECT (sink, "Added new buffer to fragment with timestamp: %"
@@ -610,7 +625,11 @@ gst_base_adaptive_sink_chain (GstPad * pad, GstBuffer * buffer)
 
   gst_fragment_add_buffer (pad_data->fragment, buffer);
 
-  return GST_FLOW_OK;
+quit:
+  {
+    GST_PAD_DATA_UNLOCK (pad_data);
+    return ret;
+  }
 }
 
 static gboolean
@@ -757,11 +776,11 @@ gst_base_adaptive_sink_event (GstPad * pad, GstEvent * event)
   if (gst_video_event_parse_downstream_force_key_unit (event, &timestamp,
           &stream_time, &running_time, &all_headers, &count)) {
     GST_DEBUG_OBJECT (sink, "Received GstForceKeyUnit event");
-    GST_OBJECT_LOCK (sink);
+    GST_PAD_DATA_LOCK (pad_data);
     pad_data->new_fragment_index = count;
     pad_data->new_fragment_ts = timestamp;
     pad_data->new_fragment = TRUE;
-    GST_OBJECT_UNLOCK (sink);
+    GST_PAD_DATA_UNLOCK (pad_data);
   }
 
   else if (GST_EVENT_TYPE (event) == GST_EVENT_EOS) {
@@ -772,10 +791,13 @@ gst_base_adaptive_sink_event (GstPad * pad, GstEvent * event)
     /*gst_base_playlist_finish(sink->playlist); */
     GST_OBJECT_UNLOCK (sink);
 
+    GST_PAD_DATA_LOCK (pad_data);
     if (pad_data->fragment != NULL) {
       gst_base_adaptive_sink_close_fragment (sink, pad_data,
           GST_CLOCK_TIME_NONE);
     }
+    GST_PAD_DATA_UNLOCK (pad_data);
+
     g_signal_emit (sink, gst_base_adaptive_sink_signals[SIGNAL_EOS], 0);
     /* ok, now we can post the message */
     GST_DEBUG_OBJECT (sink, "Posting EOS");
@@ -1047,6 +1069,7 @@ gst_base_adaptive_sink_pad_data_new (GstPad * pad)
   pad_data->cancellable = NULL;
   pad_data->n_streamheaders = 0;
   pad_data->streamheaders = NULL;
+  pad_data->lock = g_mutex_new ();
   pad_data->discover_lock = g_mutex_new ();
   pad_data->discover_cond = g_cond_new ();
 
@@ -1087,6 +1110,11 @@ gst_base_adaptive_sink_pad_data_free (GstBaseAdaptivePadData * pad_data)
   if (pad_data->pad != NULL) {
     gst_object_unref (pad_data->pad);
     pad_data->pad = NULL;
+  }
+
+  if (pad_data->lock != NULL) {
+    g_mutex_free (pad_data->lock);
+    pad_data->lock = NULL;
   }
 
   if (pad_data->discover_lock != NULL) {
