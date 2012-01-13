@@ -114,6 +114,9 @@ gst_segment_info_get_average_bitrate (GstSegmentInfo * info)
   GList *tmp;
   guint64 size = 0;
 
+  if (info->duration == 0)
+    return 0;
+
   tmp = g_list_first (info->segments);
   while (tmp != NULL) {
     size += ((GstMediaSegment *) tmp->data)->size;
