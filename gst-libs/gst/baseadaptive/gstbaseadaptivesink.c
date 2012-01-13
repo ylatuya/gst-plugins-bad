@@ -358,6 +358,11 @@ gst_base_adaptive_sink_dispose (GObject * object)
     sink->media_manager = NULL;
   }
 
+  if (sink->supported_caps != NULL) {
+    gst_caps_unref (sink->supported_caps);
+    sink->supported_caps = NULL;
+  }
+
   G_OBJECT_CLASS (parent_class)->dispose (object);
 }
 
@@ -572,9 +577,6 @@ gst_base_adaptive_sink_chain (GstPad * pad, GstBuffer * buffer)
     /* Parse headers for this stream and add it to the media manager */
     if (G_UNLIKELY (!pad_data->parsed)) {
       if (!gst_base_adaptive_process_new_stream (sink, pad, pad_data)) {
-        GST_ELEMENT_ERROR (sink, STREAM, FORMAT,
-            ("Error adding stream for pad %s:%s", GST_DEBUG_PAD_NAME (pad)),
-            NULL);
         return GST_FLOW_ERROR;
       }
     }
@@ -1139,8 +1141,8 @@ gst_base_adaptive_sink_parse_stream (GstBaseAdaptiveSink * sink,
       G_CALLBACK (on_new_decoded_pad_cb), pad_data);
 
   g_object_set (G_OBJECT (appsrc), "is-live", TRUE, "num-buffers", 1, NULL);
-  g_object_set (G_OBJECT (decodebin), "caps",
-      gst_caps_from_string ("video/x-h264"), NULL);
+  if (sink->supported_caps != NULL)
+    g_object_set (G_OBJECT (decodebin), "caps", sink->supported_caps, NULL);
 
   g_get_current_time (&timeout);
   g_time_val_add (&timeout, 5 * 1000 * 1000);
