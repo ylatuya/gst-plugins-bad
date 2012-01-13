@@ -280,10 +280,22 @@ gst_fragment_add_buffer (GstFragment * fragment, GstBuffer * buffer)
 void
 gst_fragment_set_name (GstFragment * fragment, gchar * name)
 {
-  g_return_if_fail (fragment != NULL);
+  g_return_if_fail (GST_IS_FRAGMENT (fragment));
 
   if (fragment->name != NULL)
     g_free (fragment->name);
 
   fragment->name = name;
+}
+
+guint64
+gst_fragment_get_duration (GstFragment * fragment)
+{
+  g_return_val_if_fail (GST_IS_FRAGMENT (fragment), GST_CLOCK_TIME_NONE);
+
+  if (!(GST_CLOCK_TIME_IS_VALID (fragment->start_ts) &&
+          GST_CLOCK_TIME_IS_VALID (fragment->stop_ts)))
+    return GST_CLOCK_TIME_NONE;
+
+  return fragment->stop_ts - fragment->start_ts;
 }
