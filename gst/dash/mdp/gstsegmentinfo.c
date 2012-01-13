@@ -67,7 +67,8 @@ gst_segment_info_add_media_segment (GstSegmentInfo * info,
   }
 
   info->segments = g_list_append (info->segments, segment);
-  info->duration += segment->duration;
+  if (segment->duration != GST_CLOCK_TIME_NONE)
+    info->duration += segment->duration;
 }
 
 void

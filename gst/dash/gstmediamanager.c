@@ -230,7 +230,7 @@ gst_media_manager_add_fragment (GstBaseMediaManager * b_manager,
 
   ret = gst_media_presentation_add_media_segment (manager->mdp,
       pad_name, fragment->name, fragment->index, fragment->start_ts,
-      fragment->stop_ts - fragment->start_ts, fragment->offset, fragment->size);
+      gst_fragment_get_duration (fragment), fragment->offset, fragment->size);
   g_free (pad_name);
 
   return ret;

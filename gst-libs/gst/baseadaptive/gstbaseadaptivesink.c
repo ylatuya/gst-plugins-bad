@@ -975,7 +975,7 @@ gst_base_adaptive_sink_close_fragment (GstBaseAdaptiveSink * sink,
 
   pad_data->fragment->completed = TRUE;
   pad_data->fragment->stop_ts = stop_ts;
-  duration = pad_data->fragment->stop_ts - pad_data->fragment->start_ts;
+  duration = gst_fragment_get_duration (pad_data->fragment);
 
   /* Add the new entry to the playlist after the fragment was succeesfully
    * written to disk */
