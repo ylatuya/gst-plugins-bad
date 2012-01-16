@@ -82,7 +82,6 @@ gst_dash_sink_init (GstDashSink * sink, GstDashSinkClass * g_class)
   GstBaseAdaptiveSink *b_sink = GST_BASE_ADAPTIVE_SINK (sink);
 
   b_sink->supported_caps = gst_caps_from_string (SUPPORTED_STREAMS);
-  g_print ("%s\n", gst_caps_to_string (b_sink->supported_caps));
 }
 
 static GstBaseMediaManager *
