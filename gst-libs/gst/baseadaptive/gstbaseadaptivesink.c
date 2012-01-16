@@ -135,7 +135,7 @@ static void gst_base_adaptive_sink_create_empty_fragment (GstBaseAdaptiveSink *
 static GstFlowReturn gst_base_adaptive_sink_write_element (GstBaseAdaptiveSink *
     sink, WriteFunc write_func, gchar * filename, gpointer data);
 static void gst_base_adaptive_sink_parse_stream (GstBaseAdaptiveSink * sink,
-    GstBaseAdaptivePadData * pad_data, GstBuffer * buf);
+    GstBaseAdaptivePadData * pad_data);
 static gboolean gst_base_adaptive_process_new_stream (GstBaseAdaptiveSink *
     sink, GstPad * pad, GstBaseAdaptivePadData * pad_data);
 
@@ -732,20 +732,7 @@ static gboolean
 gst_base_adaptive_process_new_stream (GstBaseAdaptiveSink * sink, GstPad * pad,
     GstBaseAdaptivePadData * pad_data)
 {
-  GstBuffer *buf = NULL;
-  gint i;
-
-  /* Parse the headers to get the muxed streams, needed for fragmented MP4 */
-  if (pad_data->n_streamheaders != 0) {
-    for (i = 0; i < pad_data->n_streamheaders; i++) {
-      if (buf == NULL)
-        buf = pad_data->streamheaders[i];
-      else
-        buf = gst_buffer_merge (buf, pad_data->streamheaders[i]);
-    }
-    gst_base_adaptive_sink_parse_stream (sink, pad_data, buf);
-    gst_buffer_unref (buf);
-  }
+  gst_base_adaptive_sink_parse_stream (sink, pad_data);
   pad_data->parsed = TRUE;
 
   if (!gst_base_media_manager_add_stream (sink->media_manager, pad,
@@ -1139,7 +1126,7 @@ on_drained_cb (GstElement * bin, GstBaseAdaptivePadData * pad_data)
 
 static void
 gst_base_adaptive_sink_parse_stream (GstBaseAdaptiveSink * sink,
-    GstBaseAdaptivePadData * pad_data, GstBuffer * buf)
+    GstBaseAdaptivePadData * pad_data)
 {
   GstElement *pipeline;
   GstElement *appsrc;
@@ -1167,8 +1154,19 @@ gst_base_adaptive_sink_parse_stream (GstBaseAdaptiveSink * sink,
   /* Push buffer and wait for the "drained" signal */
   g_mutex_lock (pad_data->discover_lock);
   gst_element_set_state (pipeline, GST_STATE_PLAYING);
-  gst_buffer_ref (buf);
-  gst_app_src_push_buffer (GST_APP_SRC (appsrc), buf);
+
+  /* Parse the headers to get the muxed streams, needed for fragmented MP4 */
+  if (pad_data->n_streamheaders != 0) {
+    gint i;
+
+    for (i = 0; i < pad_data->n_streamheaders; i++) {
+      gst_buffer_ref (pad_data->streamheaders[i]);
+      gst_app_src_push_buffer (GST_APP_SRC (appsrc),
+          pad_data->streamheaders[i]);
+    }
+  }
+  /* FIXME: Push first fragment too for formats with no headers like MPEGT-TS */
+
   if (!g_cond_timed_wait (pad_data->discover_cond, pad_data->discover_lock,
           &timeout)) {
     GST_WARNING ("Timed out decoding the fragment");
