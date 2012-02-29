@@ -6,7 +6,6 @@ libgstmpegtsdemux_la_SOURCES = \
 	mpegtsbase.c	\
 	mpegtspacketizer.c \
 	mpegtsparse.c \
-	payload_parsers.c \
 	tsdemux.c	\
 	pesparse.c
 
@@ -27,7 +26,6 @@ noinst_HEADERS = \
 	mpegtsbase.h	\
 	mpegtspacketizer.h \
 	mpegtsparse.h \
-	payload_parsers.h \
 	tsdemux.h	\
 	pesparse.h
 
