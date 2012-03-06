@@ -159,8 +159,9 @@ static void
 on_changed (GSettings * settings, gchar * key, GstGSettingsAudioSink * sink)
 {
   gboolean changed = FALSE;
-  if (!g_str_has_suffix (key, "audiosink"));
-  return;
+
+  if (!g_str_has_suffix (key, "audiosink"))
+    return;
 
   GST_OBJECT_LOCK (sink);
   if ((sink->profile == GST_GSETTINGS_AUDIOSINK_PROFILE_SOUNDS &&
