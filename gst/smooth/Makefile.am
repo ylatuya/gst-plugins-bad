@@ -11,7 +11,9 @@ libgstsmooth_la_LIBADD =  \
 	$(GST_BASE_LIBS) \
 	$(GST_LIBS)
 libgstsmooth_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
+if !GST_PLUGIN_BUILD_STATIC
 libgstsmooth_la_LIBTOOLFLAGS = --tag=disable-static
+endif
 
 noinst_HEADERS = gstsmooth.h
 

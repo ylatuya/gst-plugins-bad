@@ -586,8 +586,8 @@ plugin_init (GstPlugin * plugin)
       GST_TYPE_SPC_DEC);
 }
 
-GST_PLUGIN_DEFINE (GST_VERSION_MAJOR,
+GST_PLUGIN_DEFINE2 (GST_VERSION_MAJOR,
     GST_VERSION_MINOR,
-    "spcdec",
+    spcdec,
     "OpenSPC Audio Decoder",
     plugin_init, VERSION, "LGPL", GST_PACKAGE_NAME, GST_PACKAGE_ORIGIN);

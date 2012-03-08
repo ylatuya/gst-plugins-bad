@@ -15,7 +15,9 @@ libgstcolorspace_la_LIBADD = \
 	$(GST_LIBS) \
 	$(ORC_LIBS)
 libgstcolorspace_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
+if !GST_PLUGIN_BUILD_STATIC
 libgstcolorspace_la_LIBTOOLFLAGS = --tag=disable-static
+endif
 
 noinst_HEADERS = gstcolorspace.h colorspace.h
 

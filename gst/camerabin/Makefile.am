@@ -34,7 +34,9 @@ libgstcamerabin_la_LIBADD = \
 	-lgstinterfaces-$(GST_MAJORMINOR) -lgsttag-$(GST_MAJORMINOR)
 
 libgstcamerabin_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
+if !GST_PLUGIN_BUILD_STATIC
 libgstcamerabin_la_LIBTOOLFLAGS = --tag=disable-static
+endif
 
 noinst_HEADERS = gstcamerabin.h             \
 		 gstcamerabincolorbalance.h \

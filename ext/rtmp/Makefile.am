@@ -6,5 +6,7 @@ noinst_HEADERS = gstrtmpsrc.h gstrtmpsink.h
 libgstrtmp_la_CFLAGS = $(GST_PLUGINS_BASE_CFLAGS) $(GST_BASE_CFLAGS) $(GST_CFLAGS) $(RTMP_CFLAGS)
 libgstrtmp_la_LIBADD = $(GST_PLUGINS_BASE_LIBS) $(GST_BASE_LIBS) $(GST_LIBS) $(RTMP_LIBS)
 libgstrtmp_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
+if !GST_PLUGIN_BUILD_STATIC
 libgstrtmp_la_LIBTOOLFLAGS = --tag=disable-static
+endif
 

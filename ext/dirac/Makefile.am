@@ -16,7 +16,9 @@ libgstdirac_la_LIBADD = \
         $(GST_BASE_LIBS) $(GST_LIBS) \
 	$(DIRAC_LIBS) -lz $(LIBM)
 libgstdirac_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
+if !GST_PLUGIN_BUILD_STATIC
 libgstdirac_la_LIBTOOLFLAGS = --tag=disable-static
+endif
 
 noinst_HEADERS = \
 	gstdiracdec.h

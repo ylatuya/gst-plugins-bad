@@ -6,7 +6,9 @@ libgstbz2_la_SOURCES = \
 libgstbz2_la_CFLAGS = $(GST_BASE_CFLAGS) $(GST_CFLAGS)
 libgstbz2_la_LIBADD = $(GST_BASE_LIBS) $(BZ2_LIBS) 
 libgstbz2_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
+if !GST_PLUGIN_BUILD_STATIC
 libgstbz2_la_LIBTOOLFLAGS = --tag=disable-static
+endif
 
 noinst_HEADERS = \
 	gstbz2dec.h gstbz2enc.h

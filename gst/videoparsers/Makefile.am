@@ -15,7 +15,9 @@ libgstvideoparsersbad_la_LIBADD = \
 	$(GST_PLUGINS_BASE_LIBS) -lgstpbutils-$(GST_MAJORMINOR) -lgstvideo-$(GST_MAJORMINOR) \
 	$(GST_BASE_LIBS) $(GST_LIBS)
 libgstvideoparsersbad_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
+if !GST_PLUGIN_BUILD_STATIC
 libgstvideoparsersbad_la_LIBTOOLFLAGS = --tag=disable-static
+endif
 
 noinst_HEADERS = gsth263parse.h h263parse.h \
 	gstdiracparse.h dirac_parse.h \

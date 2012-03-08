@@ -11,7 +11,9 @@ libgstmplex_la_CXXFLAGS = \
 libgstmplex_la_LIBADD = \
 	$(GST_PLUGINS_BASE_LIBS) $(GST_BASE_LIBS) $(GST_LIBS) $(MPLEX_LIBS)
 libgstmplex_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS) $(MPLEX_LDFLAGS)
+if !GST_PLUGIN_BUILD_STATIC
 libgstmplex_la_LIBTOOLFLAGS = --tag=disable-static
+endif
 
 noinst_HEADERS = \
 	gstmplex.hh \

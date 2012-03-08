@@ -16,7 +16,9 @@ noinst_HEADERS = \
 libgstpcapparse_la_CFLAGS = $(GST_CFLAGS) $(GST_BASE_CFLAGS)
 libgstpcapparse_la_LIBADD = $(GST_LIBS) $(GST_BASE_LIBS) $(WINSOCK2_LIBS)
 libgstpcapparse_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
+if !GST_PLUGIN_BUILD_STATIC
 libgstpcapparse_la_LIBTOOLFLAGS = --tag=disable-static
+endif
 
 Android.mk: Makefile.am $(BUILT_SOURCES)
 	androgenizer \

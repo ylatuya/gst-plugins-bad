@@ -32,7 +32,9 @@ libgstdebugutilsbad_la_LIBADD = $(GST_BASE_LIBS) $(GST_PLUGINS_BASE_LIBS) \
 	-lgstvideo-$(GST_MAJORMINOR) \
 	-lgstinterfaces-$(GST_MAJORMINOR) $(GST_LIBS)
 libgstdebugutilsbad_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
+if !GST_PLUGIN_BUILD_STATIC
 libgstdebugutilsbad_la_LIBTOOLFLAGS = --tag=disable-static
+endif
 
 noinst_HEADERS = fpsdisplaysink.h
 

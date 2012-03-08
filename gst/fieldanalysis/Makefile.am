@@ -21,6 +21,8 @@ libgstfieldanalysis_la_LIBADD = \
 	$(ORC_LIBS)
 
 libgstfieldanalysis_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
+if !GST_PLUGIN_BUILD_STATIC
 libgstfieldanalysis_la_LIBTOOLFLAGS = --tag=disable-static
+endif
 
 noinst_HEADERS = gstfieldanalysis.h

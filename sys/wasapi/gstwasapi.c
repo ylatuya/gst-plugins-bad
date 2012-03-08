@@ -38,8 +38,8 @@ plugin_init (GstPlugin * plugin)
       GST_RANK_NONE, GST_TYPE_WASAPI_SINK);
 }
 
-GST_PLUGIN_DEFINE (GST_VERSION_MAJOR,
+GST_PLUGIN_DEFINE2 (GST_VERSION_MAJOR,
     GST_VERSION_MINOR,
-    "wasapi",
+    wasapi,
     "Windows audio session API plugin",
     plugin_init, VERSION, "LGPL", "GStreamer", "http://gstreamer.net/")

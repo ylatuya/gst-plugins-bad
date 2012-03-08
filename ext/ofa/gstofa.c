@@ -273,8 +273,8 @@ plugin_init (GstPlugin * plugin)
   return ret;
 }
 
-GST_PLUGIN_DEFINE (GST_VERSION_MAJOR,
+GST_PLUGIN_DEFINE2 (GST_VERSION_MAJOR,
     GST_VERSION_MINOR,
-    "ofa",
+    ofa,
     "Calculate MusicIP fingerprint from audio files",
     plugin_init, VERSION, "GPL", GST_PACKAGE_NAME, GST_PACKAGE_ORIGIN)

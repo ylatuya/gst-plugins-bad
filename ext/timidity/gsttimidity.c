@@ -798,8 +798,8 @@ plugin_init (GstPlugin * plugin)
       GST_RANK_PRIMARY, GST_TYPE_TIMIDITY);
 }
 
-GST_PLUGIN_DEFINE (GST_VERSION_MAJOR,
+GST_PLUGIN_DEFINE2 (GST_VERSION_MAJOR,
     GST_VERSION_MINOR,
-    "timidity",
+    timidity,
     "Timidity Plugin",
     plugin_init, VERSION, "GPL", GST_PACKAGE_NAME, GST_PACKAGE_ORIGIN)

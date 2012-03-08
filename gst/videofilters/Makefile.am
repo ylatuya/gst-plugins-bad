@@ -21,7 +21,9 @@ libgstvideofiltersbad_la_LIBADD = \
 	$(ORC_LIBS) \
 	$(LIBM)
 libgstvideofiltersbad_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
+if !GST_PLUGIN_BUILD_STATIC
 libgstvideofiltersbad_la_LIBTOOLFLAGS = --tag=disable-static
+endif
 
 noinst_HEADERS = \
 	gstzebrastripe.h \

@@ -18,7 +18,9 @@ libgstbayer_la_LIBADD = $(GST_PLUGINS_BASE_LIBS) -lgstvideo-$(GST_MAJORMINOR) \
     $(ORC_LIBS) \
     $(GST_BASE_LIBS)
 libgstbayer_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
+if !GST_PLUGIN_BUILD_STATIC
 libgstbayer_la_LIBTOOLFLAGS = --tag=disable-static
+endif
 nodist_libgstbayer_la_SOURCES = $(ORC_NODIST_SOURCES)
 
 

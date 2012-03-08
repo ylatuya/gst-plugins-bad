@@ -4,7 +4,9 @@ libgstfreeze_la_SOURCES	= gstfreeze.c
 libgstfreeze_la_CFLAGS	= $(GST_CFLAGS)
 libgstfreeze_la_LIBADD	= ${GST_LIBS}
 libgstfreeze_la_LDFLAGS	= $(GST_PLUGIN_LDFLAGS)
+if !GST_PLUGIN_BUILD_STATIC
 libgstfreeze_la_LIBTOOLFLAGS = --tag=disable-static
+endif
 
 noinst_HEADERS		= gstfreeze.h
 

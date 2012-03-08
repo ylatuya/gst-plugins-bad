@@ -5,6 +5,8 @@ libgstsndfile_la_SOURCES = gstsf.c gstsfsrc.c gstsfsink.c
 libgstsndfile_la_CFLAGS = $(GST_PLUGINS_BAD_CFLAGS) $(GST_PLUGINS_BASE_CFLAGS) $(GST_BASE_CFLAGS) $(GST_CFLAGS) $(SNDFILE_CFLAGS)
 libgstsndfile_la_LIBADD = $(GST_BASE_LIBS) $(GST_LIBS) $(SNDFILE_LIBS)
 libgstsndfile_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
+if !GST_PLUGIN_BUILD_STATIC
 libgstsndfile_la_LIBTOOLFLAGS = --tag=disable-static
+endif
 
 noinst_HEADERS = gstsf.h gstsfsrc.h gstsfsink.h

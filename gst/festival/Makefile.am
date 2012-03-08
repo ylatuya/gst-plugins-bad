@@ -14,7 +14,9 @@ libgstfestival_la_CFLAGS = $(GST_CFLAGS) $(GST_PLUGINS_BASE_CFLAGS)
 libgstfestival_la_LIBADD = $(GST_LIBS) $(GST_PLUGINS_BASE_LIBS) \
                            -lgstaudio-0.10 $(WINSOCK2_LIBS)
 libgstfestival_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
+if !GST_PLUGIN_BUILD_STATIC
 libgstfestival_la_LIBTOOLFLAGS = --tag=disable-static
+endif
 
 noinst_HEADERS = gstfestival.h 
 

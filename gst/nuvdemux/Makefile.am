@@ -5,7 +5,9 @@ libgstnuvdemux_la_CFLAGS = $(GST_PLUGINS_BAD_CFLAGS) $(GST_CFLAGS)
 libgstnuvdemux_la_LIBADD = $(GST_BASE_LIBS)
 libgstnuvdemux_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
 libgstnuvdemux_la_SOURCES = gstnuvdemux.c
+if !GST_PLUGIN_BUILD_STATIC
 libgstnuvdemux_la_LIBTOOLFLAGS = --tag=disable-static
+endif
 
 noinst_HEADERS = gstnuvdemux.h
 

@@ -53,8 +53,8 @@ plugin_init (GstPlugin * plugin)
   return result;
 }
 
-GST_PLUGIN_DEFINE (GST_VERSION_MAJOR,
+GST_PLUGIN_DEFINE2 (GST_VERSION_MAJOR,
     GST_VERSION_MINOR,
-    "resindvd",
+    resindvd,
     "Resin DVD playback elements",
     plugin_init, VERSION, "GPL", "GStreamer", "http://gstreamer.net/")

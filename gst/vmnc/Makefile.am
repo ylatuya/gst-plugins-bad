@@ -4,7 +4,9 @@ libgstvmnc_la_SOURCES = vmncdec.c
 libgstvmnc_la_CFLAGS = $(GST_PLUGINS_BASE_CFLAGS) $(GST_BASE_CFLAGS) $(GST_CFLAGS)
 libgstvmnc_la_LIBADD = $(GST_BASE_LIBS) $(GST_LIBS)
 libgstvmnc_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
+if !GST_PLUGIN_BUILD_STATIC
 libgstvmnc_la_LIBTOOLFLAGS = --tag=disable-static
+endif
 
 Android.mk: Makefile.am $(BUILT_SOURCES)
 	androgenizer \

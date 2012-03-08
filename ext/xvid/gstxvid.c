@@ -364,8 +364,8 @@ plugin_init (GstPlugin * plugin)
           GST_RANK_NONE, GST_TYPE_XVIDDEC));
 }
 
-GST_PLUGIN_DEFINE (GST_VERSION_MAJOR,
+GST_PLUGIN_DEFINE2 (GST_VERSION_MAJOR,
     GST_VERSION_MINOR,
-    "xvid",
+    xvid,
     "XviD plugin library", plugin_init, VERSION, "GPL", GST_PACKAGE_NAME,
     GST_PACKAGE_ORIGIN)

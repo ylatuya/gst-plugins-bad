@@ -765,8 +765,8 @@ plugin_init (GstPlugin * plugin)
   return gst_element_register (plugin, "speed", GST_RANK_NONE, GST_TYPE_SPEED);
 }
 
-GST_PLUGIN_DEFINE (GST_VERSION_MAJOR,
+GST_PLUGIN_DEFINE2 (GST_VERSION_MAJOR,
     GST_VERSION_MINOR,
-    "speed",
+    speed,
     "Set speed/pitch on audio/raw streams (resampler)",
     plugin_init, VERSION, GST_LICENSE, GST_PACKAGE_NAME, GST_PACKAGE_ORIGIN)

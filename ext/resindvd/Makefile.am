@@ -23,7 +23,9 @@ libresindvd_la_LIBADD = $(GST_PLUGINS_BASE_LIBS) \
 -lgstpbutils-$(GST_MAJORMINOR) \
 $(GST_BASE_LIBS) $(GST_LIBS) $(DVDNAV_LIBS)
 libresindvd_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
+if !GST_PLUGIN_BUILD_STATIC
 libresindvd_la_LIBTOOLFLAGS = --tag=disable-static
+endif
 
 noinst_HEADERS = resindvdbin.h \
 	rsnaudiomunge.h \

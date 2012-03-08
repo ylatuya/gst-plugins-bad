@@ -8,6 +8,8 @@ libgstshm_la_SOURCES = shmpipe.c shmalloc.c gstshm.c gstshmsrc.c gstshmsink.c
 libgstshm_la_CFLAGS = $(GST_CFLAGS) -DSHM_PIPE_USE_GLIB
 libgstshm_la_LIBADD = -lrt
 libgstshm_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS) $(GST_BASE_LIBS) $(GST_PLUGINS_BASE_LIBS)
+if !GST_PLUGIN_BUILD_STATIC
 libgstshm_la_LIBTOOLFLAGS = --tag=disable-static
+endif
 
 noinst_HEADERS = gstshmsrc.h gstshmsink.h shmpipe.h  shmalloc.h

@@ -47,8 +47,8 @@ plugin_init (GstPlugin * plugin)
 
 /* this is the structure that gst-register looks for
  * so keep the name plugin_desc, or you cannot get your plug-in registered */
-GST_PLUGIN_DEFINE (GST_VERSION_MAJOR,
+GST_PLUGIN_DEFINE2 (GST_VERSION_MAJOR,
     GST_VERSION_MINOR,
-    "jp2k",
+    jp2k,
     "Jasper-based JPEG2000 image decoder/encoder",
     plugin_init, VERSION, "LGPL", GST_PACKAGE_NAME, GST_PACKAGE_ORIGIN)

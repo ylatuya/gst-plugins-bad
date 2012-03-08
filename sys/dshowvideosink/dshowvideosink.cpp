@@ -1935,8 +1935,8 @@ plugin_init (GstPlugin * plugin)
   return TRUE;
 }
 
-extern "C" GST_PLUGIN_DEFINE (GST_VERSION_MAJOR,
+extern "C" GST_PLUGIN_DEFINE2 (GST_VERSION_MAJOR,
     GST_VERSION_MINOR,
-    "dshowsinkwrapper",
+    dshowsinkwrapper,
     "DirectShow sink wrapper plugin",
     plugin_init, VERSION, "LGPL", GST_PACKAGE_NAME, GST_PACKAGE_ORIGIN)

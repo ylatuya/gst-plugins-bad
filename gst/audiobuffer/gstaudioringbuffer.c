@@ -320,10 +320,8 @@ gst_audio_ringbuffer_class_init (GstAudioRingbufferClass * klass)
           G_MAXINT64, DEFAULT_SEGMENT_TIME,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
-  gst_element_class_add_static_pad_template (gstelement_class,
-      &srctemplate);
-  gst_element_class_add_static_pad_template (gstelement_class,
-      &sinktemplate);
+  gst_element_class_add_static_pad_template (gstelement_class, &srctemplate);
+  gst_element_class_add_static_pad_template (gstelement_class, &sinktemplate);
 
   gst_element_class_set_details_simple (gstelement_class, "AudioRingbuffer",
       "Generic",
@@ -1174,8 +1172,8 @@ plugin_init (GstPlugin * plugin)
       GST_TYPE_AUDIO_RINGBUFFER);
 }
 
-GST_PLUGIN_DEFINE (GST_VERSION_MAJOR,
+GST_PLUGIN_DEFINE2 (GST_VERSION_MAJOR,
     GST_VERSION_MINOR,
-    "audioringbuffer",
+    audioringbuffer,
     "An audio ringbuffer", plugin_init, VERSION, GST_LICENSE,
     GST_PACKAGE_NAME, GST_PACKAGE_ORIGIN)

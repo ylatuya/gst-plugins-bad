@@ -7,7 +7,9 @@ libgstrfbsrc_la_SOURCES = gstrfbsrc.c
 libgstrfbsrc_la_CFLAGS = $(GST_PLUGINS_BASE_CFLAGS) $(GST_CFLAGS) $(X11_CFLAGS) -I$(srcdir)/..
 libgstrfbsrc_la_LIBADD = $(GST_BASE_LIBS) $(X11_LIBS) librfb.la
 libgstrfbsrc_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
+if !GST_PLUGIN_BUILD_STATIC
 libgstrfbsrc_la_LIBTOOLFLAGS = --tag=disable-static
+endif
 
 librfb_la_SOURCES = \
 	rfbbuffer.c \

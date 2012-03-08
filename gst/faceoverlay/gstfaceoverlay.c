@@ -491,8 +491,8 @@ faceoverlay_init (GstPlugin * faceoverlay)
 #endif
 
 /* gstreamer looks for this structure to register plugins */
-GST_PLUGIN_DEFINE (GST_VERSION_MAJOR,
+GST_PLUGIN_DEFINE2 (GST_VERSION_MAJOR,
     GST_VERSION_MINOR,
-    "faceoverlay",
+    faceoverlay,
     "SVG Face Overlay",
     faceoverlay_init, VERSION, "LGPL", "GStreamer", "http://gstreamer.net/")

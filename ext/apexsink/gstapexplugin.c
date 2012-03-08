@@ -36,9 +36,9 @@ plugin_init (GstPlugin * plugin)
 }
 
 /* plugin export resolution */
-GST_PLUGIN_DEFINE
+GST_PLUGIN_DEFINE2
     (GST_VERSION_MAJOR,
     GST_VERSION_MINOR,
-    "apexsink",
+    apexsink,
     "Apple AirPort Express Plugin",
     plugin_init, VERSION, "LGPL", GST_PACKAGE_NAME, GST_PACKAGE_ORIGIN)

@@ -8,7 +8,9 @@ libgstdshowdecwrapper_la_CFLAGS = $(GST_CFLAGS) -I$(top_srcdir)/gst-libs/gst -DL
 libgstdshowdecwrapper_la_LIBADD = $(top_builddir)/gst-libs/gst/dshow/libgstdshow-@GST_MAJORMINOR@.la \
 	$(GST_BASE_LIBS) $(GST_LIBS)
 libgstdshowdecwrapper_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
+if !GST_PLUGIN_BUILD_STATIC
 libgstdshowdecwrapper_la_LIBTOOLFLAGS = --tag=disable-static
+endif
 
 noinst_HEADERS = gstdshowaudiodec.h gstdshowvideodec.h gstdshowfakesrc.h \
 				 gstdshowutil.h

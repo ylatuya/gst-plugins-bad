@@ -32,7 +32,9 @@ libgstapplemedia_la_LIBADD =			\
 	-lgstinterfaces-$(GST_MAJORMINOR)	\
 	-lgstvideo-$(GST_MAJORMINOR)
 
+if !GST_PLUGIN_BUILD_STATIC
 libgstapplemedia_la_LIBTOOLFLAGS = --tag=disable-static
+endif
 
 libgstapplemedia_la_LDFLAGS =			\
 	$(GST_PLUGIN_LDFLAGS)			\

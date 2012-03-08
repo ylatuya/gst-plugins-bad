@@ -19,7 +19,9 @@ libgstcamerabin2_la_LIBADD = \
 	$(GST_BASE_LIBS) $(GST_LIBS)
 
 libgstcamerabin2_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
+if !GST_PLUGIN_BUILD_STATIC
 libgstcamerabin2_la_LIBTOOLFLAGS = --tag=disable-static
+endif
 
 noinst_HEADERS = gstviewfinderbin.h \
 		camerabingeneral.h \

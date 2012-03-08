@@ -1805,8 +1805,8 @@ fieldanalysis_init (GstPlugin * fieldanalysis)
       GST_TYPE_FIELDANALYSIS);
 }
 
-GST_PLUGIN_DEFINE (GST_VERSION_MAJOR,
+GST_PLUGIN_DEFINE2 (GST_VERSION_MAJOR,
     GST_VERSION_MINOR,
-    "fieldanalysis",
+    fieldanalysis,
     "Video field analysis",
     fieldanalysis_init, VERSION, "LGPL", "GStreamer", "http://gstreamer.net/")

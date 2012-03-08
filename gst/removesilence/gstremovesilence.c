@@ -110,8 +110,7 @@ gst_remove_silence_base_init (gpointer gclass)
        Paulo Pizarro  <paulo.pizarro@gmail.com>");
 
   gst_element_class_add_static_pad_template (element_class, &src_template);
-  gst_element_class_add_static_pad_template (element_class,
-      &sink_template);
+  gst_element_class_add_static_pad_template (element_class, &sink_template);
 }
 
 /* initialize the removesilence's class */
@@ -254,8 +253,8 @@ plugin_init (GstPlugin * plugin)
       gst_remove_silence_get_type ());
 }
 
-GST_PLUGIN_DEFINE (GST_VERSION_MAJOR,
+GST_PLUGIN_DEFINE2 (GST_VERSION_MAJOR,
     GST_VERSION_MINOR,
-    "removesilence",
+    removesilence,
     "Removes silence from an audio stream",
     plugin_init, VERSION, "LGPL", GST_PACKAGE_NAME, GST_PACKAGE_ORIGIN);

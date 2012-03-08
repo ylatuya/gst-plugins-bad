@@ -9,7 +9,9 @@ noinst_HEADERS = \
 libgsthdvparse_la_CFLAGS = $(GST_CFLAGS) $(GST_BASE_CFLAGS)
 libgsthdvparse_la_LIBADD = $(GST_LIBS) $(GST_BASE_LIBS) $(LIBM)
 libgsthdvparse_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
+if !GST_PLUGIN_BUILD_STATIC
 libgsthdvparse_la_LIBTOOLFLAGS = --tag=disable-static
+endif
 
 Android.mk: Makefile.am $(BUILT_SOURCES)
 	androgenizer \

@@ -13,7 +13,9 @@ libgstid3tag_la_LIBADD = \
 	$(GST_LIBS)
 
 libgstid3tag_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
+if !GST_PLUGIN_BUILD_STATIC
 libgstid3tag_la_LIBTOOLFLAGS = --tag=disable-static
+endif
 
 noinst_HEADERS = gstid3mux.h id3tag.h
 

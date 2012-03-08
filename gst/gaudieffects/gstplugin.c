@@ -79,8 +79,8 @@ plugin_init (GstPlugin * plugin)
   return ret;
 }
 
-GST_PLUGIN_DEFINE (GST_VERSION_MAJOR,
+GST_PLUGIN_DEFINE2 (GST_VERSION_MAJOR,
     GST_VERSION_MINOR,
-    "gaudieffects",
+    gaudieffects,
     "Gaudi video effects.",
     plugin_init, VERSION, "LGPL", "GStreamer", "http://gstreamer.net/")

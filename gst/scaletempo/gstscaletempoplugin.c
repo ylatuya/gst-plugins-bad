@@ -68,7 +68,7 @@ plugin_init (GstPlugin * plugin)
  * exchange the strings 'plugin' and 'Template plugin' with you plugin name and
  * description
  */
-GST_PLUGIN_DEFINE (GST_VERSION_MAJOR, GST_VERSION_MINOR,
-    "scaletempo", "Scale audio tempo in sync with playback rate",
+GST_PLUGIN_DEFINE2 (GST_VERSION_MAJOR, GST_VERSION_MINOR,
+    scaletempo, "Scale audio tempo in sync with playback rate",
     plugin_init, VERSION, "LGPL", "GStreamer",
     "http://gstreamer.freedesktop.org/")

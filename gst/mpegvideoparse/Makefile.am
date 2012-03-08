@@ -5,7 +5,9 @@ libgstmpegvideoparse_la_SOURCES = mpegvideoparse.c mpegpacketiser.c
 libgstmpegvideoparse_la_CFLAGS = $(GST_CFLAGS)
 libgstmpegvideoparse_la_LIBADD = $(GST_BASE_LIBS) $(GST_LIBS)
 libgstmpegvideoparse_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
+if !GST_PLUGIN_BUILD_STATIC
 libgstmpegvideoparse_la_LIBTOOLFLAGS = --tag=disable-static
+endif
 
 noinst_HEADERS = mpegvideoparse.h mpegpacketiser.h
 

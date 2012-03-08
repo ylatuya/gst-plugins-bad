@@ -27,7 +27,9 @@ libgstvdpau_la_LIBADD = $(GST_LIBS) $(GST_BASE_LIBS) \
 	$(LIBM)
 	
 libgstvdpau_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
+if !GST_PLUGIN_BUILD_STATIC
 libgstvdpau_la_LIBTOOLFLAGS = --tag=disable-static
+endif
 
 noinst_HEADERS = \
 	gstvdpvideopostprocess.h \

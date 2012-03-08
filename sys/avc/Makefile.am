@@ -14,7 +14,9 @@ libgstavc_la_LIBADD =  \
 	$(GST_BASE_LIBS) \
 	$(GST_LIBS)
 
+if !GST_PLUGIN_BUILD_STATIC
 libgstavc_la_LIBTOOLFLAGS = --tag=disable-static
+endif
 
 libgstavc_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS) \
 	-Wl,-framework -Wl,AVCVideoServices \

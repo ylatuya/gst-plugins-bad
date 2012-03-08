@@ -52,9 +52,9 @@ plugin_init (GstPlugin * plugin)
   return TRUE;
 }
 
-GST_PLUGIN_DEFINE (GST_VERSION_MAJOR,
+GST_PLUGIN_DEFINE2 (GST_VERSION_MAJOR,
     GST_VERSION_MINOR,
-    "dccp",
+    dccp,
     "transfer data over the network via DCCP.",
     plugin_init, VERSION, GST_LICENSE, "DCCP",
     "http://garage.maemo.org/projects/ephone")

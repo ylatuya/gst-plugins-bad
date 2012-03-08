@@ -994,8 +994,8 @@ plugin_init (GstPlugin * plugin)
       GST_RANK_SECONDARY, GST_TYPE_WILDMIDI);
 }
 
-GST_PLUGIN_DEFINE (GST_VERSION_MAJOR,
+GST_PLUGIN_DEFINE2 (GST_VERSION_MAJOR,
     GST_VERSION_MINOR,
-    "wildmidi",
+    wildmidi,
     "Wildmidi Plugin",
     plugin_init, VERSION, "GPL", GST_PACKAGE_NAME, GST_PACKAGE_ORIGIN)

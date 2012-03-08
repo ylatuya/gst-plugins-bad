@@ -78,8 +78,8 @@ gst_ducati_alloc_2d (gint width, gint height, guint * sz)
 #  define PACKAGE "ducati"
 #endif
 
-GST_PLUGIN_DEFINE (GST_VERSION_MAJOR,
+GST_PLUGIN_DEFINE2 (GST_VERSION_MAJOR,
     GST_VERSION_MINOR,
-    "pvr",
+    pvr,
     "Pvr2d based plugin",
     plugin_init, VERSION, "LGPL", "GStreamer", "http://gstreamer.net/")

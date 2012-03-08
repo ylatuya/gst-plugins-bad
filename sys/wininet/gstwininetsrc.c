@@ -443,8 +443,8 @@ plugin_init (GstPlugin * plugin)
       GST_RANK_NONE, GST_TYPE_WIN_INET_SRC);
 }
 
-GST_PLUGIN_DEFINE (GST_VERSION_MAJOR,
+GST_PLUGIN_DEFINE2 (GST_VERSION_MAJOR,
     GST_VERSION_MINOR,
-    "wininet",
+    wininet,
     "Windows network plugins",
     plugin_init, VERSION, GST_LICENSE, GST_PACKAGE_NAME, GST_PACKAGE_ORIGIN)

@@ -36,7 +36,9 @@ libgstopencv_la_LIBADD = $(GST_LIBS) $(GST_BASE_LIBS) $(OPENCV_LIBS) \
 			$(GSTPB_BASE_LIBS) -lgstvideo-$(GST_MAJORMINOR)
 
 libgstopencv_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
+if !GST_PLUGIN_BUILD_STATIC
 libgstopencv_la_LIBTOOLFLAGS = --tag=disable-static
+endif
 
 # headers we need but don't want installed
 noinst_HEADERS = gstopencvvideofilter.h gstopencvutils.h \

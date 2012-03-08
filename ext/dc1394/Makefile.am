@@ -8,7 +8,9 @@ libgstdc1394_la_CFLAGS = 	$(GST_CFLAGS) \
 				$(LIBDC1394_CFLAGS)
 
 libgstdc1394_la_LDFLAGS = 	$(GST_PLUGIN_LDFLAGS)
+if !GST_PLUGIN_BUILD_STATIC
 libgstdc1394_la_LIBTOOLFLAGS = --tag=disable-static
+endif
 
 libgstdc1394_la_LIBADD = 	$(GST_BASE_LIBS) \
 				$(LIBDC1394_LIBS) 

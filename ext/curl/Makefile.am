@@ -10,6 +10,8 @@ libgstcurl_la_LIBADD = \
 	$(GST_LIBS) \
 	$(CURL_LIBS)
 libgstcurl_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
+if !GST_PLUGIN_BUILD_STATIC
 libgstcurl_la_LIBTOOLFLAGS = --tag=disable-static
+endif
 
 noinst_HEADERS = gstcurlsink.h

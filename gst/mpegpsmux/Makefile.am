@@ -10,7 +10,9 @@ libgstmpegpsmux_la_SOURCES = \
 libgstmpegpsmux_la_CFLAGS = $(GST_BASE_CFLAGS) $(GST_CFLAGS)
 libgstmpegpsmux_la_LIBADD = $(GST_BASE_LIBS) $(GST_LIBS)
 libgstmpegpsmux_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
+if !GST_PLUGIN_BUILD_STATIC
 libgstmpegpsmux_la_LIBTOOLFLAGS = --tag=disable-static
+endif
 
 noinst_HEADERS = \
 	mpegpsmux.h \

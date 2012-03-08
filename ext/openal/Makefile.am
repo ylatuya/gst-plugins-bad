@@ -9,7 +9,9 @@ libgstopenal_la_SOURCES = gstopenal.c gstopenalsink.c gstopenalsrc.c
 libgstopenal_la_CFLAGS = $(GST_PLUGINS_BASE_CFLAGS) $(GST_BASE_CFLAGS) $(GST_CFLAGS) $(OPENAL_CFLAGS) $(GST_PLUGINS_BAD_CFLAGS)
 libgstopenal_la_LIBADD = $(GST_PLUGINS_BASE_LIBS) -lgstaudio-@GST_MAJORMINOR@ $(GST_BASE_LIBS) $(GST_LIBS) $(OPENAL_LIBS)
 libgstopenal_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
+if !GST_PLUGIN_BUILD_STATIC
 libgstopenal_la_LIBTOOLFLAGS = --tag=disable-static
+endif
 
 # headers we need but don't want installed
 noinst_HEADERS = gstopenalsink.h gstopenalsrc.h

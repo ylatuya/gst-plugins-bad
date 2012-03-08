@@ -15,7 +15,9 @@ libgstaudiovisualizers_la_LIBADD = \
 	-lgstvideo-$(GST_MAJORMINOR) -lgstfft-$(GST_MAJORMINOR) \
 	$(GST_BASE_LIBS)  $(GST_CONTROLLER_LIBS) $(GST_LIBS) $(LIBM)
 libgstaudiovisualizers_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
+if !GST_PLUGIN_BUILD_STATIC
 libgstaudiovisualizers_la_LIBTOOLFLAGS = --tag=disable-static
+endif
 
 noinst_HEADERS = gstbaseaudiovisualizer.h gstdrawhelpers.h \
 	gstspacescope.h gstspectrascope.h gstsynaescope.h gstwavescope.h

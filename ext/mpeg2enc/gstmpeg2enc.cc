@@ -719,8 +719,8 @@ plugin_init (GstPlugin * plugin)
       GST_RANK_MARGINAL, GST_TYPE_MPEG2ENC);
 }
 
-GST_PLUGIN_DEFINE (GST_VERSION_MAJOR,
+GST_PLUGIN_DEFINE2 (GST_VERSION_MAJOR,
     GST_VERSION_MINOR,
-    "mpeg2enc",
+    mpeg2enc,
     "High-quality MPEG-1/2 video encoder",
     plugin_init, VERSION, "GPL", GST_PACKAGE_NAME, GST_PACKAGE_ORIGIN)

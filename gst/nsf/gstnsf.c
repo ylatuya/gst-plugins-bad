@@ -636,7 +636,7 @@ plugin_init (GstPlugin * plugin)
       GST_TYPE_NSFDEC);
 }
 
-GST_PLUGIN_DEFINE (GST_VERSION_MAJOR, GST_VERSION_MINOR,
-    "nsf",
+GST_PLUGIN_DEFINE2 (GST_VERSION_MAJOR, GST_VERSION_MINOR,
+    nsf,
     "Uses nosefart to decode .nsf files",
     plugin_init, VERSION, "GPL", GST_PACKAGE_NAME, GST_PACKAGE_ORIGIN);

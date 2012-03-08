@@ -120,8 +120,7 @@ gst_ass_render_base_init (gpointer gclass)
   gst_element_class_add_static_pad_template (element_class, &src_factory);
   gst_element_class_add_static_pad_template (element_class,
       &video_sink_factory);
-  gst_element_class_add_static_pad_template (element_class,
-      &text_sink_factory);
+  gst_element_class_add_static_pad_template (element_class, &text_sink_factory);
 
   gst_element_class_set_details_simple (element_class, "ASS/SSA Render",
       "Mixer/Video/Overlay/Subtitle",
@@ -1421,8 +1420,8 @@ plugin_init (GstPlugin * plugin)
       GST_RANK_PRIMARY, GST_TYPE_ASS_RENDER);
 }
 
-GST_PLUGIN_DEFINE (GST_VERSION_MAJOR,
+GST_PLUGIN_DEFINE2 (GST_VERSION_MAJOR,
     GST_VERSION_MINOR,
-    "assrender",
+    assrender,
     "ASS/SSA subtitle renderer",
     plugin_init, VERSION, "LGPL", GST_PACKAGE_NAME, GST_PACKAGE_ORIGIN)

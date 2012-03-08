@@ -44,8 +44,8 @@ plugin_init (GstPlugin * plugin)
   return TRUE;
 }
 
-GST_PLUGIN_DEFINE (GST_VERSION_MAJOR,
+GST_PLUGIN_DEFINE2 (GST_VERSION_MAJOR,
     GST_VERSION_MINOR,
-    "inter",
+    inter,
     "plugin for inter-pipeline communication",
     plugin_init, VERSION, "LGPL", PACKAGE_NAME, GST_PACKAGE_ORIGIN)

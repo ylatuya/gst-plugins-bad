@@ -110,8 +110,8 @@ plugin_init (GstPlugin * plugin)
 
 /* this is the structure that gstreamer looks for to register plugins
  */
-GST_PLUGIN_DEFINE (GST_VERSION_MAJOR,
+GST_PLUGIN_DEFINE2 (GST_VERSION_MAJOR,
     GST_VERSION_MINOR,
-    "kate",
+    kate,
     "Kate plugin",
     plugin_init, VERSION, "LGPL", GST_PACKAGE_NAME, GST_PACKAGE_ORIGIN)

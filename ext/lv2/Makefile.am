@@ -10,6 +10,8 @@ libgstlv2_la_LIBADD = \
 	$(GST_PLUGINS_BASE_LIBS) -lgstaudio-$(GST_MAJORMINOR) \
 	$(GST_CONTROLLER_LIBS) $(LIBM) $(SLV2_LIBS)
 libgstlv2_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
+if !GST_PLUGIN_BUILD_STATIC
 libgstlv2_la_LIBTOOLFLAGS = --tag=disable-static
+endif
 
 noinst_HEADERS = gstlv2.h

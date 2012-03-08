@@ -29,7 +29,9 @@ libgstnsf_la_SOURCES = gstnsf.c $(NOSEFART_SOURCES)
 libgstnsf_la_CFLAGS = $(GST_CFLAGS) -DNSF_PLAYER
 libgstnsf_la_LIBADD = $(GST_LIBS) $(LIBM)
 libgstnsf_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
+if !GST_PLUGIN_BUILD_STATIC
 libgstnsf_la_LIBTOOLFLAGS = --tag=disable-static
+endif
 
 noinst_HEADERS = gstnsf.h $(NOSEFART_INCLUDES)
 

@@ -8,7 +8,9 @@ libgstfreeverb_la_SOURCES = gstfreeverb.c
 libgstfreeverb_la_CFLAGS = $(GST_CFLAGS) $(GST_CONTROLLER_CFLAGS) 
 libgstfreeverb_la_LIBADD = $(GST_BASE_LIBS) $(GST_CONTROLLER_LIBS) $(GST_LIBS)
 libgstfreeverb_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
+if !GST_PLUGIN_BUILD_STATIC
 libgstfreeverb_la_LIBTOOLFLAGS = --tag=disable-static
+endif
 
 # headers we need but don't want installed
 noinst_HEADERS = gstfreeverb.h

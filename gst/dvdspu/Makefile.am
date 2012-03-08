@@ -7,7 +7,9 @@ libgstdvdspu_la_CFLAGS = $(GST_PLUGINS_BAD_CFLAGS) $(GST_PLUGINS_BASE_CFLAGS) $(
 libgstdvdspu_la_LIBADD = $(GST_PLUGINS_BASE_LIBS) -lgstvideo-$(GST_MAJORMINOR) \
      $(GST_LIBS)
 libgstdvdspu_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
+if !GST_PLUGIN_BUILD_STATIC
 libgstdvdspu_la_LIBTOOLFLAGS = --tag=disable-static
+endif
 
 noinst_HEADERS = gstdvdspu.h gstspu-pgs.h gstspu-vobsub.h gstspu-common.h
 

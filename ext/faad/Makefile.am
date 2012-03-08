@@ -7,7 +7,9 @@ libgstfaad_la_CFLAGS = -DGST_USE_UNSTABLE_API \
 libgstfaad_la_LIBADD = $(GST_PLUGINS_BASE_LIBS) -lgstaudio-@GST_MAJORMINOR@ \
 	$(GST_BASE_LIBS) $(GST_LIBS) $(FAAD_LIBS)
 libgstfaad_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
+if !GST_PLUGIN_BUILD_STATIC
 libgstfaad_la_LIBTOOLFLAGS = --tag=disable-static
+endif
 
 noinst_HEADERS = gstfaad.h
 

@@ -8,7 +8,9 @@ libgstadpcmdec_la_SOURCES = adpcmdec.c
 libgstadpcmdec_la_CFLAGS = $(GST_CFLAGS) $(GST_BASE_CFLAGS)
 libgstadpcmdec_la_LIBADD = $(GST_LIBS) $(GST_BASE_LIBS)
 libgstadpcmdec_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
+if !GST_PLUGIN_BUILD_STATIC
 libgstadpcmdec_la_LIBTOOLFLAGS = --tag=disable-static
+endif
 
 Android.mk: Makefile.am $(BUILT_SOURCES)
 	androgenizer \

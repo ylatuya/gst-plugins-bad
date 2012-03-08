@@ -75,8 +75,8 @@ plugin_init (GstPlugin * plugin)
   return res;
 }
 
-GST_PLUGIN_DEFINE (GST_VERSION_MAJOR,
+GST_PLUGIN_DEFINE2 (GST_VERSION_MAJOR,
     GST_VERSION_MINOR,
-    "applemedia",
+    applemedia,
     "Elements for capture and codec access on Apple OS X and iOS",
     plugin_init, VERSION, "LGPL", "GStreamer", "http://gstreamer.net/")

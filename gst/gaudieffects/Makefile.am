@@ -5,7 +5,9 @@ libgstgaudieffects_la_SOURCES = gstburn.c gstchromium.c gstdilate.c \
 libgstgaudieffects_la_CFLAGS = $(GST_PLUGINS_BASE_CFLAGS) $(GST_CONTROLLER_CFLAGS) $(GST_CFLAGS)
 libgstgaudieffects_la_LIBADD = $(GST_PLUGINS_BASE_LIBS) -lgstvideo-@GST_MAJORMINOR@ $(GST_CONTROLLER_LIBS) $(GST_LIBS) $(LIBM)
 libgstgaudieffects_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
+if !GST_PLUGIN_BUILD_STATIC
 libgstgaudieffects_la_LIBTOOLFLAGS = --tag=disable-static
+endif
 
 # headers we need but don't want installed
 noinst_HEADERS = \

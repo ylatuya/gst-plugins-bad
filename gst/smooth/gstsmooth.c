@@ -286,8 +286,8 @@ plugin_init (GstPlugin * plugin)
       GST_RANK_NONE, GST_TYPE_SMOOTH);
 }
 
-GST_PLUGIN_DEFINE (GST_VERSION_MAJOR,
+GST_PLUGIN_DEFINE2 (GST_VERSION_MAJOR,
     GST_VERSION_MINOR,
-    "smooth",
+    smooth,
     "Apply a smooth filter to an image",
     plugin_init, VERSION, "LGPL", GST_PACKAGE_NAME, GST_PACKAGE_ORIGIN)

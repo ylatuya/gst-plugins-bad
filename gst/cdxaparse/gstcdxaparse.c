@@ -571,8 +571,8 @@ plugin_init (GstPlugin * plugin)
   return TRUE;
 }
 
-GST_PLUGIN_DEFINE (GST_VERSION_MAJOR,
+GST_PLUGIN_DEFINE2 (GST_VERSION_MAJOR,
     GST_VERSION_MINOR,
-    "cdxaparse",
+    cdxaparse,
     "Parse a .dat file (VCD) into raw mpeg1",
     plugin_init, VERSION, "LGPL", GST_PACKAGE_NAME, GST_PACKAGE_ORIGIN)

@@ -17,7 +17,9 @@ libgstvoaacenc_la_LIBADD = \
 	$(GST_LIBS) \
 	$(VOAACENC_LIBS)
 libgstvoaacenc_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
+if !GST_PLUGIN_BUILD_STATIC
 libgstvoaacenc_la_LIBTOOLFLAGS = --tag=disable-static
+endif
 
 noinst_HEADERS = \
 	gstvoaacenc.h

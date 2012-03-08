@@ -12,5 +12,7 @@ libgstacmenc_la_LIBADD =     \
     -lmsacm32
 
 libgstacmenc_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
+if !GST_PLUGIN_BUILD_STATIC
 libgstacmenc_la_LIBTOOLFLAGS = --tag=disable-static
+endif
 

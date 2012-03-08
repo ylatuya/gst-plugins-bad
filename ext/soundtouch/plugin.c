@@ -36,8 +36,8 @@ plugin_init (GstPlugin * plugin)
       GST_TYPE_BPM_DETECT);
 }
 
-GST_PLUGIN_DEFINE (GST_VERSION_MAJOR,
+GST_PLUGIN_DEFINE2 (GST_VERSION_MAJOR,
     GST_VERSION_MINOR,
-    "soundtouch",
+    soundtouch,
     "Audio Pitch Controller & BPM Detection",
     plugin_init, VERSION, "LGPL", GST_PACKAGE_NAME, GST_PACKAGE_ORIGIN)

@@ -592,6 +592,6 @@ plugin_init (GstPlugin * plugin)
       GST_RANK_NONE, GST_TYPE_CSP);
 }
 
-GST_PLUGIN_DEFINE (GST_VERSION_MAJOR,
+GST_PLUGIN_DEFINE2 (GST_VERSION_MAJOR,
     GST_VERSION_MINOR,
-    "colorspace", "Colorspace conversion", plugin_init, VERSION, "LGPL", "", "")
+    colorspace, "Colorspace conversion", plugin_init, VERSION, "LGPL", "", "")

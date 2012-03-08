@@ -9,7 +9,9 @@ libgstd3dvideosink_la_LIBADD = $(GST_BASE_LIBS) $(GST_PLUGINS_BASE_LIBS) \
 	-lgstvideo-$(GST_MAJORMINOR) -lgstinterfaces-$(GST_MAJORMINOR) \
 	$(DIRECT3D_LIBS)
 libgstd3dvideosink_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS) $(DIRECTX_LDFAGS)
+if !GST_PLUGIN_BUILD_STATIC
 libgstd3dvideosink_la_LIBTOOLFLAGS = --tag=disable-static
+endif
 
 noinst_HEADERS = d3dvideosink.h directx/d3d.h directx/dx.h directx/directx.h \
 	directx/directx9/dx9.h directx/directx9/dx9_d3d.h \

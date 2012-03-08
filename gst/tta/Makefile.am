@@ -10,7 +10,9 @@ noinst_HEADERS = gstttaparse.h gstttadec.h \
 libgsttta_la_CFLAGS = $(GST_CFLAGS)
 libgsttta_la_LIBADD = $(GST_LIBS) $(LIBM)
 libgsttta_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
+if !GST_PLUGIN_BUILD_STATIC
 libgsttta_la_LIBTOOLFLAGS = --tag=disable-static
+endif
 
 Android.mk: Makefile.am $(BUILT_SOURCES)
 	androgenizer \

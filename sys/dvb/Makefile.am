@@ -20,7 +20,9 @@ libgstdvb_la_SOURCES = \
 libgstdvb_la_CFLAGS = $(GST_PLUGINS_BAD_CFLAGS) $(GST_CFLAGS)
 libgstdvb_la_LIBADD = $(GST_BASE_LIBS) $(GST_PLUGINS_BASE_LIBS)
 libgstdvb_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
+if !GST_PLUGIN_BUILD_STATIC
 libgstdvb_la_LIBTOOLFLAGS = --tag=disable-static
+endif
 
 noinst_HEADERS = \
 	gstdvbsrc.h  \

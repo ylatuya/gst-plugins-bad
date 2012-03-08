@@ -5,7 +5,9 @@ libgstsegmentclip_la_SOURCES = gstsegmentclip.c gstaudiosegmentclip.c gstvideose
 libgstsegmentclip_la_CFLAGS = $(GST_PLUGINS_BASE_CFLAGS) $(GST_CFLAGS)
 libgstsegmentclip_la_LIBADD = $(GST_PLUGINS_BASE_LIBS) $(GST_LIBS) -lgstaudio-@GST_MAJORMINOR@
 libgstsegmentclip_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
+if !GST_PLUGIN_BUILD_STATIC
 libgstsegmentclip_la_LIBTOOLFLAGS = --tag=disable-static
+endif
 
 noinst_HEADERS = gstsegmentclip.h gstaudiosegmentclip.h gstvideosegmentclip.h
 

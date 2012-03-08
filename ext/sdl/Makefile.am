@@ -12,7 +12,9 @@ libgstsdl_la_LIBADD =  $(GST_PLUGINS_BASE_LIBS) \
 				-lgstinterfaces-$(GST_MAJORMINOR) \
 				$(SDL_LIBS)
 libgstsdl_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS) 
+if !GST_PLUGIN_BUILD_STATIC
 libgstsdl_la_LIBTOOLFLAGS = --tag=disable-static
+endif
 
 noinst_HEADERS = \
 	sdlvideosink.h \

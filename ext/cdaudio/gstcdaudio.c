@@ -648,8 +648,8 @@ cdaudio_uri_handler_init (gpointer g_iface, gpointer iface_data)
   iface->set_uri = cdaudio_uri_set_uri;
 }
 
-GST_PLUGIN_DEFINE (GST_VERSION_MAJOR,
+GST_PLUGIN_DEFINE2 (GST_VERSION_MAJOR,
     GST_VERSION_MINOR,
-    "cdaudio",
+    cdaudio,
     "Play CD audio through the CD Drive",
     plugin_init, VERSION, "LGPL", GST_PACKAGE_NAME, GST_PACKAGE_ORIGIN)

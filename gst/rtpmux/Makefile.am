@@ -7,7 +7,9 @@ libgstrtpmux_la_CFLAGS = $(GST_PLUGINS_BASE_CFLAGS) $(GST_CFLAGS) \
 libgstrtpmux_la_LIBADD = $(GST_PLUGINS_BASE_LIBS) -lgstrtp-@GST_MAJORMINOR@ \
 	$(GST_BASE_LIBS) $(GST_LIBS)
 libgstrtpmux_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
+if !GST_PLUGIN_BUILD_STATIC
 libgstrtpmux_la_LIBTOOLFLAGS = --tag=disable-static
+endif
 
 noinst_HEADERS = gstrtpmux.h gstrtpdtmfmux.h
 

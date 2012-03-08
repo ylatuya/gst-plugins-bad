@@ -5,6 +5,8 @@ libgstgme_la_SOURCES = gstgme.c
 libgstgme_la_CFLAGS = $(GST_BASE_CFLAGS) $(GST_CFLAGS) $(GME_CFLAGS)
 libgstgme_la_LIBADD = $(GST_BASE_LIBS) $(GST_LIBS) $(GME_LIBS)
 libgstgme_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
+if !GST_PLUGIN_BUILD_STATIC
 libgstgme_la_LIBTOOLFLAGS = --tag=disable-static
+endif
 
 noinst_HEADERS = gstgme.h

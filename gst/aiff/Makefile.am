@@ -11,7 +11,9 @@ libgstaiff_la_LIBADD = \
 	$(GST_BASE_LIBS) \
 	$(LIBM)
 libgstaiff_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
+if !GST_PLUGIN_BUILD_STATIC
 libgstaiff_la_LIBTOOLFLAGS = --tag=disable-static
+endif
 
 noinst_HEADERS = aiffmux.h aiffparse.h
 

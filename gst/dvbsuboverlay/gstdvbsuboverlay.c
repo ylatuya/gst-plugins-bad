@@ -1078,8 +1078,8 @@ plugin_init (GstPlugin * plugin)
       GST_RANK_PRIMARY, GST_TYPE_DVBSUB_OVERLAY);
 }
 
-GST_PLUGIN_DEFINE (GST_VERSION_MAJOR,
+GST_PLUGIN_DEFINE2 (GST_VERSION_MAJOR,
     GST_VERSION_MINOR,
-    "dvbsuboverlay",
+    dvbsuboverlay,
     "DVB subtitle renderer",
     plugin_init, VERSION, "LGPL", GST_PACKAGE_NAME, GST_PACKAGE_ORIGIN)

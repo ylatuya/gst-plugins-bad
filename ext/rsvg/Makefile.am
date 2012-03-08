@@ -11,6 +11,8 @@ libgstrsvg_la_LIBADD = \
 	$(GST_LIBS) \
 	$(RSVG_LIBS)
 libgstrsvg_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS) $(LIBM)
+if !GST_PLUGIN_BUILD_STATIC
 libgstrsvg_la_LIBTOOLFLAGS = --tag=disable-static
+endif
 
 noinst_HEADERS = gstrsvgdec.h gstrsvgoverlay.h

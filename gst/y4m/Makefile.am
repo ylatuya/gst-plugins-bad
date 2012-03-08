@@ -8,7 +8,9 @@ libgsty4mdec_la_LIBADD = \
 	$(GST_BASE_LIBS) -lgstbase-@GST_MAJORMINOR@ \
 	$(GST_LIBS)
 libgsty4mdec_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
+if !GST_PLUGIN_BUILD_STATIC
 libgsty4mdec_la_LIBTOOLFLAGS = --tag=disable-static
+endif
 
 noinst_HEADERS = gsty4mdec.h
 

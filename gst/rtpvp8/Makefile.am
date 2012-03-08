@@ -14,7 +14,9 @@ libgstrtpvp8_la_CFLAGS = $(GST_PLUGINS_BASE_CFLAGS) \
 libgstrtpvp8_la_LIBADD = $(GST_PLUGINS_BASE_LIBS) -lgstrtp-@GST_MAJORMINOR@ \
 	$(GST_BASE_LIBS) $(GST_LIBS)
 libgstrtpvp8_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
+if !GST_PLUGIN_BUILD_STATIC
 libgstrtpvp8_la_LIBTOOLFLAGS = --tag=disable-static
+endif
 
 Android.mk: Makefile.am $(BUILT_SOURCES)
 	androgenizer \

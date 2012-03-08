@@ -42,7 +42,6 @@ plugin_init (GstPlugin * plugin)
 
 #define PACKAGE_ORIGIN "http://FIXME.org/"
 
-GST_PLUGIN_DEFINE (GST_VERSION_MAJOR,
+GST_PLUGIN_DEFINE2 (GST_VERSION_MAJOR,
     GST_VERSION_MINOR,
-    "linsys",
-    "FIXME", plugin_init, VERSION, "LGPL", PACKAGE_NAME, PACKAGE_ORIGIN)
+    linsys, "FIXME", plugin_init, VERSION, "LGPL", PACKAGE_NAME, PACKAGE_ORIGIN)

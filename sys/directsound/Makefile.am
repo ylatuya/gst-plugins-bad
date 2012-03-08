@@ -7,6 +7,8 @@ libgstdirectsoundsrc_la_LIBADD = $(DIRECTDRAW_LIBS) \
 	$(GST_BASE_LIBS) $(GST_PLUGINS_BASE_LIBS) -lgstaudio-$(GST_MAJORMINOR) \
 	-lgstinterfaces-$(GST_MAJORMINOR) -ldsound
 libgstdirectsoundsrc_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS) $(DIRECTX_LDFLAGS)
+if !GST_PLUGIN_BUILD_STATIC
 libgstdirectsoundsrc_la_LIBTOOLFLAGS = --tag=disable-static
+endif
 
 noinst_HEADERS= gstdirectsoundsrc.h

@@ -14,7 +14,9 @@ libgstdccp_la_SOURCES = gstdccpplugin.c \
 libgstdccp_la_CFLAGS = $(GST_CFLAGS)
 libgstdccp_la_LIBADD = $(GST_BASE_LIBS) $(GST_LIBS) $(DCCP_LIBS)
 libgstdccp_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
+if !GST_PLUGIN_BUILD_STATIC
 libgstdccp_la_LIBTOOLFLAGS = --tag=disable-static
+endif
 
 # headers we need but don't want installed
 noinst_HEADERS = gstdccp.h \

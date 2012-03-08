@@ -8,7 +8,9 @@ libgstosxvideosrc_la_LIBADD =  \
 	$(GST_BASE_LIBS) $(GST_PLUGINS_BASE_LIBS) -lgstvideo-$(GST_MAJORMINOR) \
 	-lgstinterfaces-$(GST_MAJORMINOR)
 
+if !GST_PLUGIN_BUILD_STATIC
 libgstosxvideosrc_la_LIBTOOLFLAGS = --tag=disable-static
+endif
 
 libgstosxvideosrc_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS) \
 	-Wl,-framework -Wl,Cocoa -Wl,-framework -Wl,QuickTime

@@ -9,7 +9,9 @@ libgstfragmented_la_SOURCES =			\
 libgstfragmented_la_CFLAGS = $(GST_CFLAGS) $(GST_BASE_CFLAGS) $(SOUP_CFLAGS)
 libgstfragmented_la_LIBADD = $(GST_LIBS) $(GST_BASE_LIBS) $(SOUP_LIBS)
 libgstfragmented_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS) -no-undefined
+if !GST_PLUGIN_BUILD_STATIC
 libgstfragmented_la_LIBTOOLFLAGS = --tag=disable-static
+endif
 
 # headers we need but don't want installed
 noinst_HEADERS = 			\

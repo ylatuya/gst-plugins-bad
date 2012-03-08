@@ -12,7 +12,9 @@ endif
 libgstkate_la_CFLAGS = $(GST_CFLAGS) $(GST_PLUGINS_BASE_CFLAGS) $(TIGER_CFLAGS) $(KATE_CFLAGS)
 libgstkate_la_LIBADD = $(GST_PLUGINS_BASE_LIBS) -lgstvideo-$(GST_MAJORMINOR) -lgsttag-$(GST_MAJORMINOR) $(GST_LIBS) $(TIGER_LIBS) $(KATE_LIBS)
 libgstkate_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
+if !GST_PLUGIN_BUILD_STATIC
 libgstkate_la_LIBTOOLFLAGS = --tag=disable-static
+endif
 
 # headers we need but don't want installed
 noinst_HEADERS = gstkate.h gstkatedec.h gstkateenc.h gstkateparse.h gstkatetag.h gstkateutil.h gstkatespu.h gstkatetiger.h

@@ -33,8 +33,8 @@ plugin_init (GstPlugin * plugin)
       gst_tta_dec_plugin_init (plugin));
 }
 
-GST_PLUGIN_DEFINE (GST_VERSION_MAJOR,
+GST_PLUGIN_DEFINE2 (GST_VERSION_MAJOR,
     GST_VERSION_MINOR,
-    "tta",
+    tta,
     "TTA lossless audio format handling",
     plugin_init, VERSION, GST_LICENSE, GST_PACKAGE_NAME, GST_PACKAGE_ORIGIN)

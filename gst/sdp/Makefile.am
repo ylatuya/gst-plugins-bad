@@ -8,7 +8,9 @@ libgstsdpelem_la_LIBADD = $(GST_PLUGINS_BASE_LIBS) $(GST_BASE_LIBS) \
 		       -lgstrtp-@GST_MAJORMINOR@ -lgstsdp-@GST_MAJORMINOR@ \
 		       $(GST_LIBS) $(WIN32_LIBS)
 libgstsdpelem_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
+if !GST_PLUGIN_BUILD_STATIC
 libgstsdpelem_la_LIBTOOLFLAGS = --tag=disable-static
+endif
 
 noinst_HEADERS = gstsdpdemux.h
 

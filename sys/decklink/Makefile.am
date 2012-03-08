@@ -13,7 +13,9 @@ libgstdecklink_la_LIBADD = \
 	$(DECKLINK_LIBS) \
 	$(LIBM)
 libgstdecklink_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS) 
+if !GST_PLUGIN_BUILD_STATIC
 libgstdecklink_la_LIBTOOLFLAGS = --tag=disable-static
+endif
 
 libgstdecklink_la_SOURCES = \
 	gstdecklinksrc.cpp \

@@ -34,8 +34,8 @@ vdpau_init (GstPlugin * vdpau_plugin)
   return TRUE;
 }
 
-GST_PLUGIN_DEFINE (GST_VERSION_MAJOR,
+GST_PLUGIN_DEFINE2 (GST_VERSION_MAJOR,
     GST_VERSION_MINOR,
-    "vdpau",
+    vdpau,
     "Various elements utilizing VDPAU",
     vdpau_init, VERSION, "LGPL", "GStreamer", "http://gstreamer.net/")

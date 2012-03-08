@@ -10,7 +10,9 @@ libgstfrei0r_la_CFLAGS = $(GST_PLUGINS_BASE_CFLAGS) $(GST_CONTROLLER_CFLAGS) $(G
 libgstfrei0r_la_LIBADD = $(GST_PLUGINS_BASE_LIBS) $(GST_CONTROLLER_LIBS) $(GST_BASE_LIBS) $(GST_LIBS) \
 	-lgstvideo-@GST_MAJORMINOR@
 libgstfrei0r_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
+if !GST_PLUGIN_BUILD_STATIC
 libgstfrei0r_la_LIBTOOLFLAGS = --tag=disable-static
+endif
 
 noinst_HEADERS = gstfrei0r.h gstfrei0rfilter.h gstfrei0rsrc.h gstfrei0rmixer.h frei0r.h
 
