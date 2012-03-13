@@ -2,16 +2,10 @@ plugin_LTLIBRARIES = libgstmpegdemux.la
 
 libgstmpegdemux_la_SOURCES = \
 	flumpegdemux.c \
-	flutspatinfo.c \
-	flutspmtinfo.c \
-	flutspmtstreaminfo.c \
 	gstmpegdemux.c \
 	gstmpegdesc.c \
-	gstmpegtsdemux.c \
 	gstpesfilter.c \
-	gstsectionfilter.c \
-	mpegtsparse.c \
-	mpegtspacketizer.c
+	gstsectionfilter.c
 
 libgstmpegdemux_la_CFLAGS = \
 	$(GST_PLUGINS_BASE_CFLAGS) \
@@ -30,12 +24,7 @@ noinst_HEADERS = \
 	gstmpegdemux.h  \
 	gstpesfilter.h  \
 	gstmpegtsdemux.h \
-	flutspatinfo.h \
-	flutspmtinfo.h \
-	flutspmtstreaminfo.h \
-	gstsectionfilter.h \
-	mpegtspacketizer.h \
-	mpegtsparse.h
+	gstsectionfilter.h
 
 Android.mk: Makefile.am $(BUILT_SOURCES)
 	androgenizer \

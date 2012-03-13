@@ -46,9 +46,6 @@
 #endif
 
 #include "gstmpegdemux.h"
-#include "gstmpegtsdemux.h"
-#include "mpegtsparse.h"
-#include "mpegtspacketizer.h"
 
 GST_DEBUG_CATEGORY_EXTERN (gstflupesfilter_debug);
 GST_DEBUG_CATEGORY_EXTERN (gstflusectionfilter_debug);
@@ -61,10 +58,6 @@ plugin_init (GstPlugin * plugin)
       "MPEG-TS Section filter output");
 
   if (!gst_flups_demux_plugin_init (plugin))
-    return FALSE;
-  if (!gst_mpegts_demux_plugin_init (plugin))
-    return FALSE;
-  if (!gst_mpegtsparse_plugin_init (plugin))
     return FALSE;
   return TRUE;
 }
