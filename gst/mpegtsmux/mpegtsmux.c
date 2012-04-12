@@ -288,6 +288,7 @@ mpegtsmux_dispose (GObject * object)
     g_list_free (mux->streamheader);
     mux->streamheader = NULL;
   }
+  gst_event_replace (&mux->force_key_unit_event, NULL);
   GST_CALL_PARENT (G_OBJECT_CLASS, dispose, (object));
 }
 
@@ -731,6 +732,8 @@ mpegtsmux_sink_event (GstPad * pad, GstEvent * event)
 out:
   if (forward)
     res = ts_data->eventfunc (pad, event);
+  else
+    gst_event_unref (event);
 
   gst_object_unref (mux);
   return res;
@@ -740,7 +743,7 @@ static gboolean
 mpegtsmux_src_event (GstPad * pad, GstEvent * event)
 {
   MpegTsMux *mux = GST_MPEG_TSMUX (gst_pad_get_parent (pad));
-  gboolean res = TRUE;
+  gboolean res = TRUE, forward = TRUE;
 
   switch (GST_EVENT_TYPE (event)) {
     case GST_EVENT_CUSTOM_UPSTREAM:
@@ -754,6 +757,8 @@ mpegtsmux_src_event (GstPad * pad, GstEvent * event)
 
       if (!gst_video_event_is_force_key_unit (event))
         break;
+
+      forward = FALSE;
 
       gst_video_event_parse_upstream_force_key_unit (event,
           &running_time, &all_headers, &count);
@@ -800,9 +805,13 @@ mpegtsmux_src_event (GstPad * pad, GstEvent * event)
       break;
     }
     default:
-      res = gst_pad_event_default (pad, event);
       break;
   }
+
+  if (forward)
+    res = gst_pad_event_default (pad, event);
+  else
+    gst_event_unref (event);
 
   gst_object_unref (mux);
   return res;
