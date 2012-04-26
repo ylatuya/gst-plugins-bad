@@ -1434,6 +1434,16 @@ AG_GST_CHECK_FEATURE(RSVG, [rsvg decoder], rsvg, [
   AC_SUBST(RSVG_LIBS)
 ])
 
+dnl *** android ***
+translit(dnm, m, l) AM_CONDITIONAL(USE_DROIDSINKS, true)
+AG_GST_CHECK_FEATURE(DROIDSINKS, [Vidroid, Android EGL/GLES sink], android, [
+  PKG_CHECK_MODULES(DROIDSINKS, egl glesv2, HAVE_DROIDSINKS="yes", [
+    HAVE_DROIDSINKS="no"
+  ])
+  AC_SUBST(DROIDSINKS_CFLAGS)
+  AC_SUBST(DROIDSINKS_LIBS)
+])
+
 dnl *** timidity ***
 translit(dnm, m, l) AM_CONDITIONAL(USE_TIMIDITY, true)
 AG_GST_CHECK_FEATURE(TIMIDITY, [timidity midi soft synth plugin], timidity, [
@@ -1788,6 +1798,7 @@ AM_CONDITIONAL(USE_CURL, false)
 AM_CONDITIONAL(USE_DC1394, false)
 AM_CONDITIONAL(USE_DECKLINK, false)
 AM_CONDITIONAL(USE_DIRECTFB, false)
+AM_CONDITIONAL(USE_DROIDSINKS, false)
 AM_CONDITIONAL(USE_DIRAC, false)
 AM_CONDITIONAL(USE_DTS, false)
 AM_CONDITIONAL(USE_DIVX, false)
@@ -1999,6 +2010,7 @@ sys/Makefile
 sys/dshowdecwrapper/Makefile
 sys/acmenc/Makefile
 sys/acmmp3dec/Makefile
+sys/android/Makefile
 sys/applemedia/Makefile
 sys/avc/Makefile
 sys/d3dvideosink/Makefile
