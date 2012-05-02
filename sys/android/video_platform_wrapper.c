@@ -49,8 +49,17 @@
 #include <gst/gst.h>
 #include "video_platform_wrapper.h"
 
-GST_DEBUG_CATEGORY_STATIC (gst_vidroidsink_debug);
-#define GST_CAT_DEFAULT gst_vidroidsink_debug
+GST_DEBUG_CATEGORY_STATIC (vidroid_platform_wrapper);
+#define GST_CAT_DEFAULT vidroid_platform_wrapper
+
+void
+platform_wrapper_init (void)
+{
+  GST_DEBUG_CATEGORY_INIT (vidroid_platform_wrapper,
+      "Vidroid Platform Wrapper", 0,
+      "Native window wrapper utility lib for Vidroid");
+  return;
+}
 
 #ifdef HAVE_X11
 #include <X11/Xlib.h>

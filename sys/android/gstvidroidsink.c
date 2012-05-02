@@ -147,6 +147,7 @@ GST_BOILERPLATE_FULL (GstViDroidSink, gst_vidroidsink, GstVideoSink,
     gboolean
 gst_vidroidsink_start (GstBaseSink * sink)
 {
+  platform_wrapper_init ();
   return TRUE;
 }
 

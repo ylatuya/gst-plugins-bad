@@ -50,10 +50,10 @@
 #ifndef __GST_ANDROID_VIDEO_PLATFORM_WRAPPER__
 #define __GST_ANDROID_VIDEO_PLATFORM_WRAPPER__
 
-
 #include <gst/gst.h>
 #include <EGL/egl.h>
 
+void platform_wrapper_init(void);
 EGLNativeWindowType platform_create_native_window (gint width, gint height);
 gboolean platform_destroy_native_window (EGLNativeDisplayType display,
     EGLNativeWindowType w);
