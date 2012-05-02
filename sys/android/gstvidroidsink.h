@@ -81,10 +81,11 @@ struct _GstViDroidSink
 {
   GstVideoSink videosink;
   GstVideoRectangle render_area;
+  GstVideoFormat format;
+  GstCaps *current_caps;
+  GstPad *sink;
 
   GMutex *flow_lock;
-
-  GstPad *sink;
 
   EGLConfig config;
   EGLContext context;

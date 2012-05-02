@@ -53,10 +53,9 @@
 
 #include <gst/gst.h>
 #include <EGL/egl.h>
-//#include <GLESv2/gles.h>
 
-EGLNativeWindowType gst_vidroidsink_create_window (gint width, gint height);
-gboolean gst_vidroidsink_destroy_window (EGLNativeDisplayType display,
+EGLNativeWindowType platform_create_native_window (gint width, gint height);
+gboolean platform_destroy_native_window (EGLNativeDisplayType display,
     EGLNativeWindowType w);
 
 #endif

@@ -56,7 +56,7 @@ GST_DEBUG_CATEGORY_STATIC (gst_vidroidsink_debug);
 #include <X11/Xlib.h>
 
 EGLNativeWindowType
-gst_vidroidsink_create_window (gint width, gint height)
+platform_create_native_window (gint width, gint height)
 {
   Display *d;
   Window w;
@@ -79,7 +79,7 @@ gst_vidroidsink_create_window (gint width, gint height)
 }
 
 gboolean
-gst_vidroidsink_destroy_window (EGLNativeDisplayType display,
+platform_destroy_native_window (EGLNativeDisplayType display,
     EGLNativeWindowType window)
 {
   /* XXX: Should proly catch BadWindow */
@@ -94,22 +94,22 @@ gst_vidroidsink_destroy_window (EGLNativeDisplayType display,
  * help us suport other EGL platforms.
  */
 EGLNativeWindowType
-gst_vidroidsink_create_window (gint width, gint height)
+platform_create_native_window (gint width, gint height)
 {
   /* XXX: There was one example on AOSP that was using something
    * along the lines of window = android_createDisplaySurface();
    * but wasn't working properly.
    */
 
-  GST_CAT_ERROR (GST_CAT_DEFAULT, "create_window not implemented");
+  GST_CAT_ERROR (GST_CAT_DEFAULT, "Android: Can't create native window");
   return (EGLNativeWindowType) 0;
 }
 
 gboolean
-gst_vidroidsink_destroy_window (EGLNativeDisplayType display,
+platform_destroy_native_window (EGLNativeDisplayType display,
     EGLNativeWindowType window)
 {
-  GST_CAT_ERROR (GST_CAT_DEFAULT, "destroy_window not implemented");
+  GST_CAT_ERROR (GST_CAT_DEFAULT, "Android: Can't destroy native window");
   return TRUE;
 }
 

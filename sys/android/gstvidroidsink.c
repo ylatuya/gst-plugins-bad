@@ -119,6 +119,7 @@ static void gst_vidroidsink_set_property (GObject * object, guint prop_id,
     const GValue * value, GParamSpec * pspec);
 static GstFlowReturn gst_vidroidsink_show_frame (GstVideoSink * vsink,
     GstBuffer * buf);
+static gboolean gst_vidroidsink_setcaps (GstBaseSink * bsink, GstCaps * caps);
 
 /* XOverlay interface cruft */
 static gboolean gst_vidroidsink_interface_supported
@@ -133,16 +134,17 @@ static void gst_vidroidsink_expose (GstXOverlay * overlay);
 static void gst_vidroidsink_set_window_handle (GstXOverlay * overlay,
     guintptr id);
 
+/* Utility */
+static gboolean gst_vidroidsink_start (GstBaseSink * sink);
+static gboolean gst_vidroidsink_stop (GstBaseSink * sink);
+static EGLNativeWindowType gst_vidroidsink_create_window (GstViDroidSink *
+    vidroidsink, gint width, gint height);
+
 GST_BOILERPLATE_FULL (GstViDroidSink, gst_vidroidsink, GstVideoSink,
     GST_TYPE_VIDEO_SINK, gst_vidroidsink_init_interfaces)
 
-/* Utility */
-     gboolean gst_vidroidsink_start (GstBaseSink * sink);
-     gboolean gst_vidroidsink_stop (GstBaseSink * sink);
-
-
 /* XXX: Should implement */
-gboolean
+    gboolean
 gst_vidroidsink_start (GstBaseSink * sink)
 {
   return TRUE;
@@ -172,6 +174,22 @@ static void
 gst_vidroidsink_implements_init (GstImplementsInterfaceClass * klass)
 {
   klass->supported = gst_vidroidsink_interface_supported;
+}
+
+/* XXX: Review. Drafted */
+static EGLNativeWindowType
+gst_vidroidsink_create_window (GstViDroidSink * vidroidsink, gint width,
+    gint height)
+{
+  EGLNativeWindowType window;
+
+  window = platform_create_native_window (width, height);
+  if (!window) {
+    GST_ERROR_OBJECT (vidroidsink, "Could not create window!");
+    return window;
+  }
+  gst_x_overlay_got_window_handle (GST_X_OVERLAY (vidroidsink), window);
+  return window;
 }
 
 /* XXX: Should implement (redisplay) */
@@ -212,8 +230,8 @@ gst_vidroidsink_set_window_handle (GstXOverlay * overlay, guintptr id)
    */
   if (!id) {
     GST_WARNING_OBJECT (vidroidsink, "OH NOES they want a new window");
-    vidroidsink->window = gst_vidroidsink_create_window
-        (vidroidsink->window_default_width, vidroidsink->window_default_height);
+    /* XXX: 0,0 should fire default size creation on _create_window() */
+    vidroidsink->window = gst_vidroidsink_create_window (vidroidsink, 0, 0);
     if (!vidroidsink->window) {
       GST_ERROR_OBJECT (vidroidsink, "Got a NULL window");
       goto HANDLE_ERROR;
@@ -295,6 +313,11 @@ gst_vidroidsink_set_window_handle (GstXOverlay * overlay, guintptr id)
   /* Ship it! */
   vidroidsink->surface_ready = TRUE;
   g_mutex_unlock (vidroidsink->flow_lock);
+
+  /* XXX: Not sure this belongs here
+   * Enable 2D texturing */
+  glEnable (GL_TEXTURE_2D);
+
   return;
 
   /* Errors */
@@ -324,13 +347,12 @@ HANDLE_ERROR:
 static GstFlowReturn
 gst_vidroidsink_show_frame (GstVideoSink * vsink, GstBuffer * buf)
 {
-  GstVidroidSink *vidroidsink;
+  GstViDroidSink *vidroidsink;
 
   g_return_val_if_fail (buf != NULL, GST_FLOW_ERROR);
 
-  GST_DEBUG_OBJECT (gstvidroidsink, "Got buffer: %p", buf);
-
-  *vidroidsink = GST_VIDROIDSINK (vsink);
+  vidroidsink = GST_VIDROIDSINK (vsink);
+  GST_DEBUG_OBJECT (vidroidsink, "Got buffer: %p", buf);
 
 #ifdef EGL_ANDROID_image_native_buffer
 
@@ -340,6 +362,76 @@ gst_vidroidsink_show_frame (GstVideoSink * vsink, GstBuffer * buf)
   GST_ERROR_OBJECT (vidroidsink, "EGL_ANDROID_image_native_buffer required");
 #endif
   return GST_FLOW_OK;
+}
+
+static gboolean
+gst_vidroidsink_setcaps (GstBaseSink * bsink, GstCaps * caps)
+{
+  GstViDroidSink *vidroidsink;
+  gboolean ret = TRUE;
+  //GstStructure *capstruct;
+  gint width, height;
+
+  vidroidsink = GST_VIDROIDSINK (bsink);
+
+  GST_DEBUG_OBJECT (vidroidsink, "Setcaps called with caps %", caps);
+
+  //capstruct = gst_caps_get_structure (caps, 0);
+  //  ie: gst_structure_get_value (structure, "framerate");
+
+  /* Quick safe measures */
+  if (!(ret = gst_video_format_parse_caps (caps, &vidroidsink->format, &width,
+              &height))) {
+    GST_ERROR_OBJECT (vidroidsink, "Got weird and/or incomplete caps");
+    return FALSE;
+  }
+
+  if (vidroidsink->format == GST_VIDEO_FORMAT_UNKNOWN) {
+    GST_ERROR_OBJECT (vidroidsink, "Got unknown video format caps");
+    return FALSE;
+  }
+
+  /* XXX: Renegotiation not implemented yet */
+  if (vidroidsink->current_caps) {
+    GST_ERROR_OBJECT (vidroidsink, "Caps already set, won't do it again");
+    if (gst_caps_is_always_compatible (vidroidsink->current_caps, caps)) {
+      GST_INFO_OBJECT (vidroidsink, "Caps are compatible anyway..");
+      return TRUE;
+    } else {
+      GST_WARNING_OBJECT (vidroidsink, "Renegotiation not implemented");
+      return FALSE;
+    }
+  }
+
+  /* OK, got caps and have none. Should be the first time!
+   * Write on our diary! A time to remember!.. And ask
+   * application to prety please give us a window while we
+   * are at it.
+   */
+  g_mutex_lock (vidroidsink->flow_lock);
+  if (!vidroidsink->have_window) {
+    g_mutex_unlock (vidroidsink->flow_lock);
+    gst_x_overlay_prepare_xwindow_id (GST_X_OVERLAY (vidroidsink));
+  } else {
+    g_mutex_unlock (vidroidsink->flow_lock);
+  }
+
+  GST_VIDEO_SINK_WIDTH (vidroidsink) = width;
+  GST_VIDEO_SINK_HEIGHT (vidroidsink) = height;
+
+  g_mutex_lock (vidroidsink->flow_lock);
+  if (!vidroidsink->have_window) {
+    if (!(vidroidsink->window = gst_vidroidsink_create_window (vidroidsink,
+                width, height))) {
+      GST_ERROR_OBJECT (vidroidsink, "Internal window creation failed!");
+      g_mutex_unlock (vidroidsink->flow_lock);
+      return FALSE;
+    }
+  }
+
+  vidroidsink->current_caps = gst_caps_ref (caps);
+  g_mutex_unlock (vidroidsink->flow_lock);
+  return TRUE;
 }
 
 static void
@@ -435,6 +527,7 @@ gst_vidroidsink_class_init (GstViDroidSinkClass * klass)
 
   gstbasesink_class->start = gst_vidroidsink_start;
   gstbasesink_class->stop = gst_vidroidsink_stop;
+  gstbasesink_class->set_caps = GST_DEBUG_FUNCPTR (gst_vidroidsink_setcaps);
 
   gstvideosink_class->show_frame =
       GST_DEBUG_FUNCPTR (gst_vidroidsink_show_frame);
