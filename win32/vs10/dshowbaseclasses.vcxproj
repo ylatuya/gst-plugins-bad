@@ -1,0 +1,130 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Condition="'$(Platform)'=='Win32'" Label="Globals">
+    <Arch>x86</Arch>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Platform)'=='x64'" Label="Globals">
+    <Arch>x86_64</Arch>
+  </PropertyGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{1804645B-539A-4688-AC7C-E60C124F8788}</ProjectGuid>
+    <TargetFrameworkVersion>v4.0</TargetFrameworkVersion>
+    <Keyword>ManagedCProj</Keyword>
+    <RootNamespace>baseclasses</RootNamespace>
+    <GstSdkPrefix>c:\gst-sdk\$(Arch)\</GstSdkPrefix>
+    <GstProps>$(GstSdkPrefix)\share\vs\2010\</GstProps>
+    <WindowsSdkDir>C:\Program Files\Microsoft SDKs\Windows\v7.1\</WindowsSdkDir>
+    <DshowBaseClasses>$(WindowsSdkDir)\Samples\Multimedia\directshow\baseclasses\</DshowBaseClasses>
+    <ProjectName>strmbase</ProjectName>
+  </PropertyGroup>
+  <PropertyGroup>
+    <OutDir>$(GstSdkPrefix)lib\</OutDir>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Label="Configuration">
+    <ConfigurationType>StaticLibrary</ConfigurationType>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="PropertySheets">
+    <Import Project="common.props" />
+  </ImportGroup>
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <AdditionalIncludeDirectories>$(DshowBaseClasses);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <AdditionalDependencies>strmiids.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(OutDir)\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClInclude Include="$(DshowBaseClasses)amextra.h" />
+    <ClInclude Include="$(DshowBaseClasses)amfilter.h" />
+    <ClInclude Include="$(DshowBaseClasses)cache.h" />
+    <ClInclude Include="$(DshowBaseClasses)combase.h" />
+    <ClInclude Include="$(DshowBaseClasses)cprop.h" />
+    <ClInclude Include="$(DshowBaseClasses)ctlutil.h" />
+    <ClInclude Include="$(DshowBaseClasses)ddmm.h" />
+    <ClInclude Include="$(DshowBaseClasses)dllsetup.h" />
+    <ClInclude Include="$(DshowBaseClasses)dxmperf.h" />
+    <ClInclude Include="$(DshowBaseClasses)fourcc.h" />
+    <ClInclude Include="$(DshowBaseClasses)measure.h" />
+    <ClInclude Include="$(DshowBaseClasses)msgthrd.h" />
+    <ClInclude Include="$(DshowBaseClasses)outputq.h" />
+    <ClInclude Include="$(DshowBaseClasses)perflog.h" />
+    <ClInclude Include="$(DshowBaseClasses)perfstruct.h" />
+    <ClInclude Include="$(DshowBaseClasses)pstream.h" />
+    <ClInclude Include="$(DshowBaseClasses)pullpin.h" />
+    <ClInclude Include="$(DshowBaseClasses)refclock.h" />
+    <ClInclude Include="$(DshowBaseClasses)reftime.h" />
+    <ClInclude Include="$(DshowBaseClasses)renbase.h" />
+    <ClInclude Include="$(DshowBaseClasses)schedule.h" />
+    <ClInclude Include="$(DshowBaseClasses)seekpt.h" />
+    <ClInclude Include="$(DshowBaseClasses)source.h" />
+    <ClInclude Include="$(DshowBaseClasses)streams.h" />
+    <ClInclude Include="$(DshowBaseClasses)strmctl.h" />
+    <ClInclude Include="$(DshowBaseClasses)sysclock.h" />
+    <ClInclude Include="$(DshowBaseClasses)transfrm.h" />
+    <ClInclude Include="$(DshowBaseClasses)transip.h" />
+    <ClInclude Include="$(DshowBaseClasses)videoctl.h" />
+    <ClInclude Include="$(DshowBaseClasses)vtrans.h" />
+    <ClInclude Include="$(DshowBaseClasses)winctrl.h" />
+    <ClInclude Include="$(DshowBaseClasses)winutil.h" />
+    <ClInclude Include="$(DshowBaseClasses)wxdebug.h" />
+    <ClInclude Include="$(DshowBaseClasses)wxlist.h" />
+    <ClInclude Include="$(DshowBaseClasses)wxutil.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="$(DshowBaseClasses)amextra.cpp" />
+    <ClCompile Include="$(DshowBaseClasses)amfilter.cpp" />
+    <ClCompile Include="$(DshowBaseClasses)amvideo.cpp" />
+    <ClCompile Include="$(DshowBaseClasses)arithutil.cpp" />
+    <ClCompile Include="$(DshowBaseClasses)combase.cpp" />
+    <ClCompile Include="$(DshowBaseClasses)cprop.cpp" />
+    <ClCompile Include="$(DshowBaseClasses)ctlutil.cpp" />
+    <ClCompile Include="$(DshowBaseClasses)ddmm.cpp" />
+    <ClCompile Include="$(DshowBaseClasses)dllentry.cpp" />
+    <ClCompile Include="$(DshowBaseClasses)dllsetup.cpp" />
+    <ClCompile Include="$(DshowBaseClasses)mtype.cpp" />
+    <ClCompile Include="$(DshowBaseClasses)outputq.cpp" />
+    <ClCompile Include="$(DshowBaseClasses)perflog.cpp" />
+    <ClCompile Include="$(DshowBaseClasses)pstream.cpp" />
+    <ClCompile Include="$(DshowBaseClasses)pullpin.cpp" />
+    <ClCompile Include="$(DshowBaseClasses)refclock.cpp" />
+    <ClCompile Include="$(DshowBaseClasses)renbase.cpp" />
+    <ClCompile Include="$(DshowBaseClasses)schedule.cpp" />
+    <ClCompile Include="$(DshowBaseClasses)seekpt.cpp" />
+    <ClCompile Include="$(DshowBaseClasses)source.cpp" />
+    <ClCompile Include="$(DshowBaseClasses)strmctl.cpp" />
+    <ClCompile Include="$(DshowBaseClasses)sysclock.cpp" />
+    <ClCompile Include="$(DshowBaseClasses)transfrm.cpp" />
+    <ClCompile Include="$(DshowBaseClasses)transip.cpp" />
+    <ClCompile Include="$(DshowBaseClasses)videoctl.cpp" />
+    <ClCompile Include="$(DshowBaseClasses)vtrans.cpp" />
+    <ClCompile Include="$(DshowBaseClasses)winctrl.cpp" />
+    <ClCompile Include="$(DshowBaseClasses)winutil.cpp" />
+    <ClCompile Include="$(DshowBaseClasses)wxdebug.cpp" />
+    <ClCompile Include="$(DshowBaseClasses)wxlist.cpp" />
+    <ClCompile Include="$(DshowBaseClasses)wxutil.cpp" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

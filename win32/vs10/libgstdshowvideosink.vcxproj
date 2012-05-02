@@ -1,0 +1,77 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Condition="'$(Platform)'=='Win32'" Label="Globals">
+    <Arch>x86</Arch>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Platform)'=='x64'" Label="Globals">
+    <Arch>x86_64</Arch>
+  </PropertyGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{1808645B-539A-4688-AA7C-E60C124F8788}</ProjectGuid>
+    <TargetFrameworkVersion>v4.0</TargetFrameworkVersion>
+    <Keyword>ManagedCProj</Keyword>
+    <RootNamespace>libgstdshowvideosrc</RootNamespace>
+    <GstSource>..\..\</GstSource>
+    <GstSdkPrefix>c:\gst-sdk\$(Arch)</GstSdkPrefix>
+    <GstProps>$(GstSdkPrefix)\share\vs\2010\</GstProps>
+    <WindowsSdkDir>C:\Program Files\Microsoft SDKs\Windows\v7.1\</WindowsSdkDir>
+    <DshowBaseClasses>$(WindowsSdkDir)\Samples\Multimedia\directshow\baseclasses\</DshowBaseClasses>
+  </PropertyGroup>
+  <PropertyGroup>
+    <OutDir>$(GstSdkPrefix)\lib\gstreamer-0.10\</OutDir>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <PlatformToolset Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Windows7.1SDK</PlatformToolset>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets">
+    <Import Project="common.props" />
+    <Import Project="$(GstProps)libs\gstreamer-0.10.props" />
+    <Import Project="$(GstProps)libs\gstreamer-interfaces-0.10.props" />
+    <Import Project="$(GstProps)libs\gstreamer-video-0.10.props" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(DshowBaseClasses);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+    <Link>
+      <AdditionalDependencies>strmbase.lib;winmm.lib;dmoguids.lib;wmcodecdspuuid.lib;rpcrt4.lib;Mfuuid.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(GstSdkPrefix)lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClInclude Include="$(GstSource)win32\common\config.h" />
+    <ClInclude Include="..\..\sys\dshowvideosink\dshowvideofakesrc.h" />
+    <ClInclude Include="..\..\sys\dshowvideosink\dshowvideosink.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\sys\dshowvideosink\dshowvideofakesrc.cpp" />
+    <ClCompile Include="..\..\sys\dshowvideosink\dshowvideosink.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="dshowbaseclasses.vcxproj">
+      <Project>{1804645b-539a-4688-ac7c-e60c124f8788}</Project>
+    </ProjectReference>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>
