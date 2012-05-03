@@ -42,6 +42,9 @@
  * Boston, MA 02111-1307, USA.
  */
 
+#ifdef HAVE_CONFIG_H
+#  include <config.h>
+#endif
 
 #include <EGL/egl.h>
 #include <GLES2/gl2.h>
