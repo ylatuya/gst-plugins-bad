@@ -300,7 +300,7 @@ gst_vidroidsink_init_egl_display (GstViDroidSink * vidroidsink)
    */
 
   if (!eglChooseConfig (vidroidsink->display, vidroidsink_RGB16_config,
-          vidroidsink->config, 1, &egl_configs)) {
+          &vidroidsink->config, 1, &egl_configs)) {
     GST_ERROR_OBJECT (vidroidsink, "eglChooseConfig failed\n");
     goto HANDLE_ERROR;
   }
