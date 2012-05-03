@@ -120,6 +120,8 @@ static void gst_vidroidsink_set_property (GObject * object, guint prop_id,
 static GstFlowReturn gst_vidroidsink_show_frame (GstVideoSink * vsink,
     GstBuffer * buf);
 static gboolean gst_vidroidsink_setcaps (GstBaseSink * bsink, GstCaps * caps);
+static gboolean gst_vidroidsink_start (GstBaseSink * sink);
+static gboolean gst_vidroidsink_stop (GstBaseSink * sink);
 
 /* XOverlay interface cruft */
 static gboolean gst_vidroidsink_interface_supported
@@ -135,8 +137,6 @@ static void gst_vidroidsink_set_window_handle (GstXOverlay * overlay,
     guintptr id);
 
 /* Utility */
-static gboolean gst_vidroidsink_start (GstBaseSink * sink);
-static gboolean gst_vidroidsink_stop (GstBaseSink * sink);
 static EGLNativeWindowType gst_vidroidsink_create_window (GstViDroidSink *
     vidroidsink, gint width, gint height);
 
@@ -225,6 +225,8 @@ gst_vidroidsink_set_window_handle (GstXOverlay * overlay, guintptr id)
   g_return_if_fail (GST_IS_VIDROIDSINK (vidroidsink));
 
   g_mutex_lock (vidroidsink->flow_lock);
+
+  GST_DEBUG_OBJECT (vidroidsink, "_set_window_handle() called");
 
   /* If !id we are being requested to create a window to display on.
    * This is no yet implemented in the code but it's here as a reference
@@ -355,12 +357,17 @@ gst_vidroidsink_show_frame (GstVideoSink * vsink, GstBuffer * buf)
   vidroidsink = GST_VIDROIDSINK (vsink);
   GST_DEBUG_OBJECT (vidroidsink, "Got buffer: %p", buf);
 
+  if (!vidroidsink->have_window) {
+    GST_ERROR_OBJECT (vidroidsink, "I don't have a window to render to");
+    return GST_FLOW_ERROR;
+  }
 #ifdef EGL_ANDROID_image_native_buffer
 
   /* Real deal */
 
 #else
-  GST_ERROR_OBJECT (vidroidsink, "EGL_ANDROID_image_native_buffer required");
+  GST_WARNING_OBJECT (vidroidsink, "EGL_ANDROID_image_native_buffer not "
+      "available");
 #endif
   return GST_FLOW_OK;
 }
@@ -375,7 +382,7 @@ gst_vidroidsink_setcaps (GstBaseSink * bsink, GstCaps * caps)
 
   vidroidsink = GST_VIDROIDSINK (bsink);
 
-  GST_DEBUG_OBJECT (vidroidsink, "Setcaps called with caps %", caps);
+  GST_DEBUG_OBJECT (vidroidsink, "Got caps %", caps);
 
   //capstruct = gst_caps_get_structure (caps, 0);
   //  ie: gst_structure_get_value (structure, "framerate");
@@ -430,6 +437,7 @@ gst_vidroidsink_setcaps (GstBaseSink * bsink, GstCaps * caps)
     }
   }
 
+  vidroidsink->have_window = TRUE;
   vidroidsink->current_caps = gst_caps_ref (caps);
   g_mutex_unlock (vidroidsink->flow_lock);
   return TRUE;
