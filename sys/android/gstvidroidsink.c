@@ -55,6 +55,19 @@
  * </refsect2>
  */
 
+/* Rationale on OpenGL ES version
+ *
+ * So we have a window/surface/display/context
+ * now we need to render and display.
+ * Android supports OpenGL ES 1.0 / 1.1 and since 2.2
+ * (API level 8) it supports OpenGL ES 2.0. Most widely
+ * supported version is OpenGL ES 1.1 according to
+ * http://developer.android.com/resources/dashboard/opengl.html
+ * and its both easier to use and more suitable for the
+ * relative low complexity of what we are trying to achive,
+ * so that's what we will use
+ */
+
 #ifdef HAVE_CONFIG_H
 #  include <config.h>
 #endif
@@ -85,8 +98,9 @@ GST_DEBUG_CATEGORY_STATIC (gst_vidroidsink_debug);
 #define MAX_FRAME_HEIGHT 720
 
 /* XXX: proly  needs ifdef against EGL_KHR_image */
-static PFNEGLCREATEIMAGEKHRPROC egl_ext_create_image;
-static PFNEGLDESTROYIMAGEKHRPROC egl_ext_destroy_image;
+static PFNEGLCREATEIMAGEKHRPROC my_eglCreateImageKHR;
+static PFNEGLDESTROYIMAGEKHRPROC my_eglDestroyImageKHR;
+static PFNGLEGLIMAGETARGETTEXTURE2DOESPROC my_glEGLImageTargetTexture2DOES;
 
 /* Input capabilities.
  *
@@ -145,6 +159,8 @@ static EGLNativeWindowType gst_vidroidsink_create_window (GstViDroidSink *
     vidroidsink, gint width, gint height);
 static gboolean gst_vidroidsink_init_egl_display (GstViDroidSink * vidroidsink);
 static gboolean gst_vidroidsink_init_egl_surface (GstViDroidSink * vidroidsink);
+static void gst_vidroidsink_render_and_display (GstViDroidSink * sink,
+    GstBuffer * buf);
 
 GST_BOILERPLATE_FULL (GstViDroidSink, gst_vidroidsink, GstVideoSink,
     GST_TYPE_VIDEO_SINK, gst_vidroidsink_init_interfaces)
@@ -164,13 +180,23 @@ gst_vidroidsink_start (GstBaseSink * sink)
    * with  glGetString(GL_EXTENSIONS) o
    * reglQueryString(display, EGL_EXTENSIONS) too
    */
-  egl_ext_create_image =
+  my_eglCreateImageKHR =
       (PFNEGLCREATEIMAGEKHRPROC) eglGetProcAddress ("eglCreateImageKHR");
-  egl_ext_destroy_image =
+  my_eglDestroyImageKHR =
       (PFNEGLDESTROYIMAGEKHRPROC) eglGetProcAddress ("eglDestroyImageKHR");
 
-  if (!egl_ext_create_image || !egl_ext_destroy_image) {
+  if (!my_eglCreateImageKHR || !my_eglDestroyImageKHR) {
     GST_ERROR_OBJECT (vidroidsink, "EGL_KHR_IMAGE ext not available");
+    goto HANDLE_ERROR;
+  }
+
+  my_glEGLImageTargetTexture2DOES =
+      (PFNGLEGLIMAGETARGETTEXTURE2DOESPROC) eglGetProcAddress
+      ("glEGLImageTargetTexture2DOES");
+
+  if (!my_glEGLImageTargetTexture2DOES) {
+    GST_ERROR_OBJECT (vidroidsink,
+        "glEGLImageTargetTexture2DOES not available");
     goto HANDLE_ERROR;
   }
 
@@ -231,26 +257,24 @@ gst_vidroidsink_create_window (GstViDroidSink * vidroidsink, gint width,
   return window;
 }
 
-/* XXX: Should implement (redisplay) */
+/* XXX: Should implement (redisplay)
+ * We need at least the last buffer stored for this to work
+ */
 static void
 gst_vidroidsink_expose (GstXOverlay * overlay)
 {
-  /* Sample code from glimagesink
-     GstGLImageSink *glimage_sink = GST_GLIMAGE_SINK (overlay);
+  GstViDroidSink *vidroidsink;
+  vidroidsink = GST_VIDROIDSINK (overlay);
+  GST_DEBUG_OBJECT (vidroidsink, "Expose catched, redisplay");
 
-     //redisplay opengl scene
-     if (glimage_sink->display && glimage_sink->window_id) {
+  /* Logic would be to get _render_and_display() to use
+   * last seen buffer to render from when NULL it's
+   * passed on */
+  g_mutex_lock (vidroidsink->flow_lock);
+  gst_vidroidsink_render_and_display (vidroidsink, NULL);
+  g_mutex_unlock (vidroidsink->flow_lock);
 
-     if (glimage_sink->window_id != glimage_sink->new_window_id) {
-     glimage_sink->window_id = glimage_sink->new_window_id;
-     gst_gl_display_set_window_id (glimage_sink->display,
-     glimage_sink->window_id);
-     }
-
-     gst_gl_display_redisplay (glimage_sink->display, 0, 0, 0, 0, 0,
-     glimage_sink->keep_aspect_ratio);
-     }
-   */
+  return;
 }
 
 static gboolean
@@ -407,20 +431,39 @@ HANDLE_ERROR:
   return;
 }
 
-/* Rendering & display
- *
- * Rationale on OpenGL ES version
- *
- * So we have a window/surface/display/context
- * now we need to render and display.
- * Android supports OpenGL ES 1.0 / 1.1 and since 2.2
- * (API level 8) it supports OpenGL ES 2.0. Most widely
- * supported version is OpenGL ES 1.1 according to
- * http://developer.android.com/resources/dashboard/opengl.html
- * and its both easier to use and more suitable for the
- * relative low complexity of what we are trying to achive,
- * so that's what we will use
- */
+/* Rendering and display */
+static void
+gst_vidroidsink_render_and_display (GstViDroidSink * vidroidsink,
+    GstBuffer * buf)
+{
+  EGLImageKHR img = EGL_NO_IMAGE_KHR;
+  EGLint attrs[] = { EGL_IMAGE_PRESERVED_KHR,
+    EGL_TRUE, EGL_NONE, EGL_NONE
+  };
+
+  if (!buf) {
+    GST_ERROR_OBJECT (vidroidsink, "Null buffer, no past queue implemented");
+    goto HANDLE_ERROR;
+  }
+
+  img = my_eglCreateImageKHR (vidroidsink->display, EGL_NO_CONTEXT,
+      EGL_NATIVE_PIXMAP_KHR, (EGLClientBuffer) GST_BUFFER_DATA (buf), attrs);
+
+  if (img == EGL_NO_IMAGE_KHR) {
+    GST_ERROR_OBJECT (vidroidsink, "my_eglCreateImageKHR failed");
+    goto HANDLE_EGL_ERROR;
+  }
+
+  my_glEGLImageTargetTexture2DOES (GL_TEXTURE_2D, img);
+
+
+HANDLE_EGL_ERROR:
+  GST_ERROR_OBJECT (vidroidsink, "EGL call returned error %x", eglGetError ());
+HANDLE_ERROR:
+  GST_ERROR_OBJECT (vidroidsink, "Rendering disabled for this frame");
+
+}
+
 static GstFlowReturn
 gst_vidroidsink_show_frame (GstVideoSink * vsink, GstBuffer * buf)
 {
@@ -435,14 +478,20 @@ gst_vidroidsink_show_frame (GstVideoSink * vsink, GstBuffer * buf)
     GST_ERROR_OBJECT (vidroidsink, "I don't have a window to render to");
     return GST_FLOW_ERROR;
   }
-#ifdef EGL_ANDROID_image_native_buffer
 
-  /* Real deal */
-
-#else
+  if (!vidroidsink->surface_ready) {
+    GST_ERROR_OBJECT (vidroidsink, "I don't have a surface to render to");
+    return GST_FLOW_ERROR;
+  }
+#ifndef EGL_ANDROID_image_native_buffer
   GST_WARNING_OBJECT (vidroidsink, "EGL_ANDROID_image_native_buffer not "
       "available");
 #endif
+
+  g_mutex_lock (vidroidsink->flow_lock);
+  gst_vidroidsink_render_and_display (vidroidsink, buf);
+  g_mutex_unlock (vidroidsink->flow_lock);
+
   return GST_FLOW_OK;
 }
 
