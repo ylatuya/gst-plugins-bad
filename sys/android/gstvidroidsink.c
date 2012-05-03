@@ -139,16 +139,28 @@ static void gst_vidroidsink_set_window_handle (GstXOverlay * overlay,
 /* Utility */
 static EGLNativeWindowType gst_vidroidsink_create_window (GstViDroidSink *
     vidroidsink, gint width, gint height);
+static gboolean gst_vidroidsink_init_egl_display (GstViDroidSink * vidroidsink);
+static gboolean gst_vidroidsink_init_egl_surface (GstViDroidSink * vidroidsink);
 
 GST_BOILERPLATE_FULL (GstViDroidSink, gst_vidroidsink, GstVideoSink,
     GST_TYPE_VIDEO_SINK, gst_vidroidsink_init_interfaces)
 
-/* XXX: Should implement */
+/* End prototypes */
     gboolean
 gst_vidroidsink_start (GstBaseSink * sink)
 {
+  gboolean ret;
+  GstViDroidSink *vidroidsink = GST_VIDROIDSINK (sink);
+
   platform_wrapper_init ();
-  return TRUE;
+  g_mutex_lock (vidroidsink->flow_lock);
+  ret = gst_vidroidsink_init_egl_display (vidroidsink);
+  g_mutex_unlock (vidroidsink->flow_lock);
+
+  if (!ret)
+    GST_ERROR_OBJECT (vidroidsink, "Couldn't init EGL display. Bailing out");
+
+  return ret;
 }
 
 /* XXX: Should implement */
@@ -215,41 +227,51 @@ gst_vidroidsink_expose (GstXOverlay * overlay)
    */
 }
 
-/* XXX: Never actually tested */
-static void
-gst_vidroidsink_set_window_handle (GstXOverlay * overlay, guintptr id)
+static gboolean
+gst_vidroidsink_init_egl_surface (GstViDroidSink * vidroidsink)
 {
-  GstViDroidSink *vidroidsink = GST_VIDROIDSINK (overlay);
-  GLint egl_configs;
+  GST_DEBUG_OBJECT (vidroidsink, "Enter EGL surface setup");
 
-  g_return_if_fail (GST_IS_VIDROIDSINK (vidroidsink));
-
-  g_mutex_lock (vidroidsink->flow_lock);
-
-  GST_DEBUG_OBJECT (vidroidsink, "_set_window_handle() called");
-
-  /* If !id we are being requested to create a window to display on.
-   * This is no yet implemented in the code but it's here as a reference
-   */
-  if (!id) {
-    GST_WARNING_OBJECT (vidroidsink, "OH NOES they want a new window");
-    /* XXX: 0,0 should fire default size creation on _create_window() */
-    vidroidsink->window = gst_vidroidsink_create_window (vidroidsink, 0, 0);
-    if (!vidroidsink->window) {
-      GST_ERROR_OBJECT (vidroidsink, "Got a NULL window");
-      goto HANDLE_ERROR;
-    }
-  } else if (vidroidsink->window == id) {
-    /* Already used window? (under what circumstances this can happen??) */
-    GST_WARNING_OBJECT (vidroidsink, "We've got the %x handle again", id);
-    GST_INFO_OBJECT (vidroidsink, "Skipping surface setup");
+  /* XXX: Unlikely, check logic and remove if not needed */
+  if (!vidroidsink->have_window) {
+    GST_ERROR_OBJECT (vidroidsink, "Attempted to setup surface without window");
     goto HANDLE_ERROR;
-  } else {
-    vidroidsink->window = (EGLNativeWindowType) id;
   }
 
-  /* OK, we have a new window */
-  vidroidsink->have_window = TRUE;
+  vidroidsink->surface = eglCreateWindowSurface (vidroidsink->display,
+      vidroidsink->config, vidroidsink->window, NULL);
+
+  if (vidroidsink->surface == EGL_NO_SURFACE) {
+    GST_ERROR_OBJECT (vidroidsink, "Can't create surface, eglCreateSurface");
+    goto HANDLE_EGL_ERROR;
+  }
+
+  if (!eglMakeCurrent (vidroidsink->display, vidroidsink->surface,
+          vidroidsink->surface, vidroidsink->context)) {
+    GST_ERROR_OBJECT (vidroidsink, "Couldn't bind surface/context, "
+        "eglMakeCurrent");
+    goto HANDLE_EGL_ERROR;
+  }
+
+  /* Ship it! */
+  vidroidsink->surface_ready = TRUE;
+  return TRUE;
+
+  /* Errors */
+HANDLE_EGL_ERROR:
+  GST_ERROR_OBJECT (vidroidsink, "EGL call returned error %x", eglGetError ());
+HANDLE_ERROR:
+  GST_ERROR_OBJECT (vidroidsink, "Couldn't setup EGL surface");
+  g_mutex_unlock (vidroidsink->flow_lock);
+  return FALSE;
+}
+
+static gboolean
+gst_vidroidsink_init_egl_display (GstViDroidSink * vidroidsink)
+{
+  GLint egl_configs;
+
+  GST_DEBUG_OBJECT (vidroidsink, "Enter EGL initial configuration");
 
   /* Begin real action! BIG_FUCKING_WARNING: This needs to be reviewed */
 
@@ -296,42 +318,68 @@ gst_vidroidsink_set_window_handle (GstXOverlay * overlay, guintptr id)
 
   GST_INFO_OBJECT (vidroidsink, "GL context: %x", vidroidsink->context);
 
-  vidroidsink->surface = eglCreateWindowSurface (vidroidsink->display,
-      vidroidsink->config, vidroidsink->window, NULL);
-
-  if (vidroidsink->surface == EGL_NO_SURFACE) {
-    GST_ERROR_OBJECT (vidroidsink, "Can't create surface, eglCreateSurface");
-    goto HANDLE_EGL_ERROR;
-  }
-
-  if (!eglMakeCurrent (vidroidsink->display, vidroidsink->surface,
-          vidroidsink->surface, vidroidsink->context)) {
-    GST_ERROR_OBJECT (vidroidsink, "Couldn't bind surface/context, "
-        "eglMakeCurrent");
-    goto HANDLE_EGL_ERROR;
-  }
-
-  /* End real action */
-
-  /* Ship it! */
-  vidroidsink->surface_ready = TRUE;
-  g_mutex_unlock (vidroidsink->flow_lock);
 
   /* XXX: Not sure this belongs here
    * Enable 2D texturing */
   glEnable (GL_TEXTURE_2D);
 
-  return;
+  return TRUE;
 
   /* Errors */
 HANDLE_EGL_ERROR:
   GST_ERROR_OBJECT (vidroidsink, "EGL call returned error %x", eglGetError ());
 HANDLE_ERROR:
   GST_ERROR_OBJECT (vidroidsink, "Couldn't setup window/surface from handle");
+  return FALSE;
+}
+
+/* XXX: Never actually tested */
+static void
+gst_vidroidsink_set_window_handle (GstXOverlay * overlay, guintptr id)
+{
+  GstViDroidSink *vidroidsink = GST_VIDROIDSINK (overlay);
+
+  g_return_if_fail (GST_IS_VIDROIDSINK (vidroidsink));
+  GST_DEBUG_OBJECT (vidroidsink, "We got a window handle!");
+
+  g_mutex_lock (vidroidsink->flow_lock);
+
+  /* If !id we are being requested to create a window to display on.
+   * This is no yet implemented in the code but it's here as a reference
+   */
+  if (!id) {
+    GST_WARNING_OBJECT (vidroidsink, "OH NOES they want a new window");
+    /* XXX: 0,0 should fire default size creation on _create_window() */
+    vidroidsink->window = gst_vidroidsink_create_window (vidroidsink, 0, 0);
+    if (!vidroidsink->window) {
+      GST_ERROR_OBJECT (vidroidsink, "Got a NULL window");
+      goto HANDLE_ERROR;
+    }
+  } else if (vidroidsink->window == id) {
+    /* Already used window? (under what circumstances this can happen??) */
+    GST_WARNING_OBJECT (vidroidsink, "We've got the %x handle again", id);
+    GST_INFO_OBJECT (vidroidsink, "Skipping surface setup");
+    goto HANDLE_ERROR;
+  } else {
+    vidroidsink->window = (EGLNativeWindowType) id;
+  }
+
+  /* OK, we have a new window */
+  vidroidsink->have_window = TRUE;
+  if (!gst_vidroidsink_init_egl_surface (vidroidsink)) {
+    GST_ERROR_OBJECT (vidroidsink, "Couldn't init EGL surface!");
+    goto HANDLE_ERROR;
+  }
+
+  g_mutex_unlock (vidroidsink->flow_lock);
+  return;
+
+  /* Errors */
+HANDLE_ERROR:
+  GST_ERROR_OBJECT (vidroidsink, "Couldn't setup window/surface from handle");
   g_mutex_unlock (vidroidsink->flow_lock);
   return;
 }
-
 
 /* Rendering & display
  *
@@ -439,6 +487,14 @@ gst_vidroidsink_setcaps (GstBaseSink * bsink, GstCaps * caps)
 
   vidroidsink->have_window = TRUE;
   vidroidsink->current_caps = gst_caps_ref (caps);
+
+  if (!gst_vidroidsink_init_egl_surface (vidroidsink)) {
+    g_mutex_unlock (vidroidsink->flow_lock);
+    GST_ERROR_OBJECT (vidroidsink, "Couldn't init EGL surface from window");
+    return FALSE;
+  }
+
+  vidroidsink->surface_ready = TRUE;
   g_mutex_unlock (vidroidsink->flow_lock);
   return TRUE;
 }
