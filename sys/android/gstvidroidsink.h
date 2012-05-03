@@ -102,6 +102,12 @@ struct _GstViDroidSink
   gboolean can_create_window;
   gint window_default_width;
   gint window_default_height;
+
+  /* GLExtensions 
+  EGLImageKHR (*egl_ext_create_image)(EGLDisplay, EGLContext, EGLenum,
+      EGLClientBuffer, const EGLint *);
+  EGLBoolean  (*egl_ext_destroy_image)(EGLDisplay, EGLImageKHR);
+*/
 };
 
 struct _GstViDroidSinkClass

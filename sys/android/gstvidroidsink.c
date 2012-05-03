@@ -84,6 +84,10 @@ GST_DEBUG_CATEGORY_STATIC (gst_vidroidsink_debug);
 #define MAX_FRAME_WIDTH 1280
 #define MAX_FRAME_HEIGHT 720
 
+/* XXX: proly  needs ifdef against EGL_KHR_image */
+static PFNEGLCREATEIMAGEKHRPROC egl_ext_create_image;
+static PFNEGLDESTROYIMAGEKHRPROC egl_ext_destroy_image;
+
 /* Input capabilities.
  *
  * OpenGL ES Standard does not mandate YUV support
@@ -154,13 +158,35 @@ gst_vidroidsink_start (GstBaseSink * sink)
 
   platform_wrapper_init ();
   g_mutex_lock (vidroidsink->flow_lock);
+
+  /* XXX: non-NULL from getprocaddress doesn't
+   * imply func is supported at runtime. Should check
+   * with  glGetString(GL_EXTENSIONS) o
+   * reglQueryString(display, EGL_EXTENSIONS) too
+   */
+  egl_ext_create_image =
+      (PFNEGLCREATEIMAGEKHRPROC) eglGetProcAddress ("eglCreateImageKHR");
+  egl_ext_destroy_image =
+      (PFNEGLDESTROYIMAGEKHRPROC) eglGetProcAddress ("eglDestroyImageKHR");
+
+  if (!egl_ext_create_image || !egl_ext_destroy_image) {
+    GST_ERROR_OBJECT (vidroidsink, "EGL_KHR_IMAGE ext not available");
+    goto HANDLE_ERROR;
+  }
+
   ret = gst_vidroidsink_init_egl_display (vidroidsink);
   g_mutex_unlock (vidroidsink->flow_lock);
 
-  if (!ret)
+  if (!ret) {
     GST_ERROR_OBJECT (vidroidsink, "Couldn't init EGL display. Bailing out");
+    goto HANDLE_ERROR;
+  }
 
-  return ret;
+  return TRUE;
+
+HANDLE_ERROR:
+  g_mutex_unlock (vidroidsink->flow_lock);
+  return FALSE;
 }
 
 /* XXX: Should implement */
