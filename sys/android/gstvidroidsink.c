@@ -198,7 +198,7 @@ gst_vidroidsink_create_window (GstViDroidSink * vidroidsink, gint width,
 
   window = platform_create_native_window (width, height);
   if (!window) {
-    GST_ERROR_OBJECT (vidroidsink, "Could not create window!");
+    GST_ERROR_OBJECT (vidroidsink, "Could not create window");
     return window;
   }
   gst_x_overlay_got_window_handle (GST_X_OVERLAY (vidroidsink), window);
@@ -232,7 +232,7 @@ gst_vidroidsink_init_egl_surface (GstViDroidSink * vidroidsink)
 {
   GST_DEBUG_OBJECT (vidroidsink, "Enter EGL surface setup");
 
-  /* XXX: Unlikely, check logic and remove if not needed */
+  /* XXX: Unlikely. Check logic and remove if not needed */
   if (!vidroidsink->have_window) {
     GST_ERROR_OBJECT (vidroidsink, "Attempted to setup surface without window");
     goto HANDLE_ERROR;
@@ -433,7 +433,7 @@ gst_vidroidsink_setcaps (GstBaseSink * bsink, GstCaps * caps)
   GST_DEBUG_OBJECT (vidroidsink, "Got caps %", caps);
 
   //capstruct = gst_caps_get_structure (caps, 0);
-  //  ie: gst_structure_get_value (structure, "framerate");
+  //  ie: gst_structure_get_value (capstruct, "framerate");
 
   /* Quick safe measures */
   if (!(ret = gst_video_format_parse_caps (caps, &vidroidsink->format, &width,
@@ -557,7 +557,6 @@ gst_vidroidsink_get_property (GObject * object, guint prop_id,
   }
 }
 
-// Needed - drafted
 static void
 gst_vidroidsink_base_init (gpointer gclass)
 {
@@ -604,7 +603,6 @@ gst_vidroidsink_class_init (GstViDroidSinkClass * klass)
       g_param_spec_boolean ("can_create_window", "CanCreateWindow",
           "Attempt to create a window?", FALSE, G_PARAM_READWRITE));
 
-  /* XXX: Check availability of gst macro for max w/h/frame size */
   g_object_class_install_property (gobject_class, PROP_DEFAULT_WIDTH,
       g_param_spec_int ("window_default_width", "DefaultWidth",
           "Default width for self created windows", 0, MAX_FRAME_WIDTH, 640,
@@ -621,7 +619,6 @@ gst_vidroidsink_init (GstViDroidSink * vidroidsink,
     GstViDroidSinkClass * gclass)
 {
   /* Init defaults */
-
   vidroidsink->have_window = FALSE;
   vidroidsink->surface_ready = FALSE;
   vidroidsink->flow_lock = g_mutex_new ();
@@ -645,7 +642,6 @@ gst_vidroidsink_init_interfaces (GType type)
       &implements_info);
   g_type_add_interface_static (type, GST_TYPE_X_OVERLAY, &xoverlay_info);
 
-  /* glimagesink has the DEBUG_CATEGORY_INIT here. Check why?! */
 }
 
 /* entry point to initialize the plug-in
