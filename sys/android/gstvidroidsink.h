@@ -94,6 +94,8 @@ struct _GstViDroidSink
   EGLNativeWindowType window;
   EGLSurface surface;
 
+  GLuint textid;
+
   gboolean have_window;
   gboolean surface_ready;
 

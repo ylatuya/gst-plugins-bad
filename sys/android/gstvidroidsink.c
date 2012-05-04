@@ -369,9 +369,9 @@ gst_vidroidsink_init_egl_display (GstViDroidSink * vidroidsink)
   GST_INFO_OBJECT (vidroidsink, "GL context: %x", vidroidsink->context);
 
 
-  /* XXX: Not sure this belongs here
-   * Enable 2D texturing */
   glEnable (GL_TEXTURE_2D);
+  glGenTextures (1, &vidroidsink->textid);
+  glBindTexture (GL_TEXTURE_2D, vidroidsink->textid);
 
   return TRUE;
 
