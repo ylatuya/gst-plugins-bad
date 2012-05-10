@@ -2064,7 +2064,11 @@ gst_base_video_decoder_alloc_src_buffer (GstBaseVideoDecoder *
       GST_PAD_CAPS (GST_BASE_VIDEO_CODEC_SRC_PAD (base_video_decoder)),
       &buffer);
 
-  if (flow_ret != GST_FLOW_OK) {
+  GST_DEBUG ("alloc returned %d buffer %" GST_PTR_FORMAT, flow_ret, buffer);
+
+  /* TODO need to check that the buffer size matches and properly attempt
+   * a renegotiation if the videodecoder is able to handle it */
+  if (flow_ret != GST_FLOW_OK || GST_BUFFER_SIZE (buffer) != num_bytes) {
     buffer = gst_buffer_new_and_alloc (num_bytes);
     gst_buffer_set_caps (buffer,
         GST_PAD_CAPS (GST_BASE_VIDEO_CODEC_SRC_PAD (base_video_decoder)));
