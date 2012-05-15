@@ -57,5 +57,6 @@ void platform_wrapper_init(void);
 EGLNativeWindowType platform_create_native_window (gint width, gint height);
 gboolean platform_destroy_native_window (EGLNativeDisplayType display,
     EGLNativeWindowType w);
+EGLClientBuffer platform_crate_native_image_buffer (void);
 
 #endif

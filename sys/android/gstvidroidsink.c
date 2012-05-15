@@ -140,6 +140,8 @@ static GstFlowReturn gst_vidroidsink_show_frame (GstVideoSink * vsink,
 static gboolean gst_vidroidsink_setcaps (GstBaseSink * bsink, GstCaps * caps);
 static gboolean gst_vidroidsink_start (GstBaseSink * sink);
 static gboolean gst_vidroidsink_stop (GstBaseSink * sink);
+static GstFlowReturn gst_vidroidsink_buffer_alloc (GstBaseSink * sink,
+    guint64 offset, guint size, GstCaps * caps, GstBuffer ** buf);
 
 /* XOverlay interface cruft */
 static gboolean gst_vidroidsink_interface_supported
@@ -154,6 +156,20 @@ static void gst_vidroidsink_expose (GstXOverlay * overlay);
 static void gst_vidroidsink_set_window_handle (GstXOverlay * overlay,
     guintptr id);
 
+/* Custom Buffer funcs */
+static void gst_vidroidbuffer_destroy (GstViDroidBuffer * vidroidsink);
+static void gst_vidroidbuffer_init (GstViDroidBuffer * vidroidsink,
+    gpointer g_class);
+static GType gst_vidroidbuffer_get_type (void);
+static gint gst_vidroidsink_get_compat_format_from_caps
+    (GstViDroidSink * vidroidsink, GstCaps * caps);
+static void gst_vidroidbuffer_finalize (GstViDroidBuffer * vidroidsink);
+static void gst_vidroidbuffer_class_init (gpointer g_class,
+    gpointer class_data);
+static void gst_vidroidbuffer_free (GstViDroidBuffer * vidroidbuffer);
+static GstViDroidBuffer *gst_vidroidbuffer_new (GstViDroidSink * vidroidsink,
+    GstCaps * caps);
+
 /* Utility */
 static EGLNativeWindowType gst_vidroidsink_create_window (GstViDroidSink *
     vidroidsink, gint width, gint height);
@@ -162,11 +178,461 @@ static gboolean gst_vidroidsink_init_egl_surface (GstViDroidSink * vidroidsink);
 static void gst_vidroidsink_render_and_display (GstViDroidSink * sink,
     GstBuffer * buf);
 
+static GstBufferClass *gstvidroidsink_buffer_parent_class = NULL;
+#define GST_TYPE_VIDROIDBUFFER (gst_vidroidbuffer_get_type())
+#define GST_IS_VIDROIDBUFFER(obj) (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GST_TYPE_VIDROIDBUFFER))
+#define GST_VIDROIDBUFFER(obj) (G_TYPE_CHECK_INSTANCE_CAST ((obj), GST_TYPE_VIDROIDBUFFER, GstViDroidBuffer))
+#define GST_VIDROIDBUFFER_CAST(obj) ((GstViDroidBuffer *)(obj))
+
+
 GST_BOILERPLATE_FULL (GstViDroidSink, gst_vidroidsink, GstVideoSink,
     GST_TYPE_VIDEO_SINK, gst_vidroidsink_init_interfaces)
 
-/* End prototypes */
-    gboolean
+/* Custom Buffer Funcs */
+     static GstViDroidBuffer *gst_vidroidbuffer_new (GstViDroidSink *
+    vidroidsink, GstCaps * caps)
+{
+  GstViDroidBuffer *vidroidbuffer = NULL;
+  GstStructure *structure = NULL;
+
+  g_return_val_if_fail (GST_IS_VIDROIDSINK (vidroidsink), NULL);
+  g_return_val_if_fail (caps, NULL);
+
+  vidroidbuffer =
+      (GstViDroidBuffer *) gst_mini_object_new (GST_TYPE_VIDROIDBUFFER);
+  GST_DEBUG_OBJECT (vidroidbuffer, "Creating new GstViDroidBuffer");
+
+  structure = gst_caps_get_structure (caps, 0);
+
+  if (!gst_structure_get_int (structure, "width", &vidroidbuffer->width) ||
+      !gst_structure_get_int (structure, "height", &vidroidbuffer->height)) {
+    GST_WARNING ("failed getting geometry from caps %" GST_PTR_FORMAT, caps);
+  }
+
+  GST_LOG_OBJECT (vidroidsink, "creating %dx%d", vidroidbuffer->width,
+      vidroidbuffer->height);
+
+  vidroidbuffer->format =
+      gst_vidroidsink_get_compat_format_from_caps (vidroidsink, caps);
+
+  if (vidroidbuffer->format == -1) {
+    GST_WARNING_OBJECT (vidroidsink,
+        "failed to get format from caps %" GST_PTR_FORMAT, caps);
+    GST_ERROR_OBJECT (vidroidsink,
+        "Invalid input caps. Failed to create  %dx%d buffer",
+        vidroidbuffer->width, vidroidbuffer->height);
+    goto beach_unlocked;
+  }
+
+  vidroidbuffer->vidroidsink = gst_object_ref (vidroidsink);
+
+  /* XXX: create_native_image_buffer func not implemented */
+  vidroidbuffer->image = platform_crate_native_image_buffer ();
+  if (!vidroidbuffer->image) {
+    GST_ERROR_OBJECT (vidroidsink,
+        "Failed to create native %sx%d image buffer", vidroidbuffer->width,
+        vidroidbuffer->height);
+    goto beach_unlocked;
+  }
+
+  GST_BUFFER_DATA (vidroidbuffer) = (guchar *) vidroidbuffer->image;
+  GST_BUFFER_SIZE (vidroidbuffer) = vidroidbuffer->size;
+
+  return vidroidbuffer;
+
+beach_unlocked:
+  gst_vidroidbuffer_free (vidroidbuffer);
+  vidroidbuffer = NULL;
+  return NULL;
+}
+
+static void
+gst_vidroidbuffer_destroy (GstViDroidBuffer * vidroidbuffer)
+{
+
+  GstViDroidSink *vidroidsink;
+
+  GST_DEBUG_OBJECT (vidroidbuffer, "Destroying buffer");
+
+  vidroidsink = vidroidbuffer->vidroidsink;
+  if (G_UNLIKELY (vidroidsink == NULL))
+    goto no_sink;
+
+  g_return_if_fail (GST_IS_VIDROIDSINK (vidroidsink));
+
+  GST_OBJECT_LOCK (vidroidsink);
+
+  /* XXX: Pool code left here for reference. If the destroyed image is the
+   * current one we destroy our reference too:
+
+   if (vidroidsink->cur_image == vidroidbuffer)
+   vidroidsink->cur_image = NULL;
+   */
+
+  GST_DEBUG_OBJECT (vidroidsink, "Destroying image");
+
+  if (vidroidbuffer->image) {
+    if (GST_BUFFER_DATA (vidroidbuffer)) {
+      g_free (GST_BUFFER_DATA (vidroidbuffer));
+    }
+    vidroidbuffer->image = NULL;
+    /* Unallocate EGL/GL especific resources asociated with this
+     * Image here
+     */
+  }
+
+  GST_OBJECT_UNLOCK (vidroidsink);
+  vidroidbuffer->vidroidsink = NULL;
+  gst_object_unref (vidroidsink);
+
+  GST_MINI_OBJECT_CLASS (gstvidroidsink_buffer_parent_class)->finalize
+      (GST_MINI_OBJECT (vidroidbuffer));
+
+  return;
+
+no_sink:
+  {
+    GST_WARNING ("no sink found");
+    return;
+  }
+}
+
+/* XXX: Missing implementation.
+ * This function will have the code for maintaing the pool. readding or
+ * destroying the buffers on size or runing/status change. Right now all
+ * it does is to call _destroy.
+ * for a proper implementation take a look at xvimagesink's image buffer
+ * destroy func.
+ */
+static void
+gst_vidroidbuffer_finalize (GstViDroidBuffer * vidroidbuffer)
+{
+  GstViDroidSink *vidroidsink;
+
+  vidroidsink = vidroidbuffer->vidroidsink;
+  if (G_UNLIKELY (vidroidsink == NULL))
+    goto no_sink;
+
+  g_return_if_fail (GST_IS_VIDROIDSINK (vidroidsink));
+
+/*
+  GST_OBJECT_LOCK (vidroidsink);
+  running = vidroidsink->running;
+  width   = GST_VIDEO_SINK_WIDTH (vidroidsink);
+  height  = GST_VIDEO_SINK_HEIGHT (vidroidsink);
+  GST_OBJECT_UNLOCK (vidroidsink);
+*/
+
+  gst_vidroidbuffer_destroy (vidroidbuffer);
+
+  return;
+
+no_sink:
+  {
+    GST_WARNING ("no sink found");
+    return;
+  }
+}
+
+static void
+gst_vidroidbuffer_free (GstViDroidBuffer * vidroidbuffer)
+{
+  /* make sure it is not recycled
+   * This is meaningless without a pool but was left here
+   * as a reference */
+  vidroidbuffer->width = -1;
+  vidroidbuffer->height = -1;
+
+  gst_buffer_unref (GST_BUFFER (vidroidbuffer));
+}
+
+static void
+gst_vidroidbuffer_init (GstViDroidBuffer * vidroidsink, gpointer g_class)
+{
+  return;
+}
+
+static void
+gst_vidroidbuffer_class_init (gpointer g_class, gpointer class_data)
+{
+  GstMiniObjectClass *mini_object_class = GST_MINI_OBJECT_CLASS (g_class);
+
+  gstvidroidsink_buffer_parent_class = g_type_class_peek_parent (g_class);
+
+  mini_object_class->finalize = (GstMiniObjectFinalizeFunction)
+      gst_vidroidbuffer_finalize;
+}
+
+static GType
+gst_vidroidbuffer_get_type (void)
+{
+  static GType _gst_vidroidsink_buffer_type;
+
+  if (G_UNLIKELY (_gst_vidroidsink_buffer_type == 0)) {
+    static const GTypeInfo vidroidsink_buffer_info = {
+      sizeof (GstBufferClass),
+      NULL,
+      NULL,
+      gst_vidroidbuffer_class_init,
+      NULL,
+      NULL,
+      sizeof (GstViDroidBuffer),
+      0,
+      (GInstanceInitFunc) gst_vidroidbuffer_init,
+      NULL
+    };
+    _gst_vidroidsink_buffer_type = g_type_register_static (GST_TYPE_BUFFER,
+        "GstViDroidBuffer", &vidroidsink_buffer_info, 0);
+  }
+  return _gst_vidroidsink_buffer_type;
+}
+
+
+ /* This function is sort of meaningless right now as we
+  * Only Support one image format / caps but left here as a
+  * reference for future improvements. 
+  */
+static gint
+gst_vidroidsink_get_compat_format_from_caps (GstViDroidSink * vidroidsink,
+    GstCaps * caps)
+{
+
+  GList *list = NULL;
+  GstViDroidImageFmt *format;
+
+  g_return_val_if_fail (GST_IS_VIDROIDSINK (vidroidsink), 0);
+
+  list = vidroidsink->supported_fmts;
+
+  /* Traverse the list trying to find a compatible format */
+  while (list) {
+    format = list->data;
+    if (format) {
+      if (gst_caps_can_intersect (caps, format->caps)) {
+        return format->fmt;
+      }
+    }
+    list = g_list_next (list);
+  }
+
+  return -1;
+}
+
+static GstCaps *
+gst_vidroidsink_different_size_suggestion (GstViDroidSink * vidroidsink,
+    GstCaps * caps)
+{
+  GstCaps *intersection;
+  GstCaps *new_caps;
+  GstStructure *s;
+  gint width, height;
+  gint par_n = 1, par_d = 1;
+  gint dar_n, dar_d;
+  gint w, h;
+
+  new_caps = gst_caps_copy (caps);
+
+  s = gst_caps_get_structure (new_caps, 0);
+
+  gst_structure_get_int (s, "width", &width);
+  gst_structure_get_int (s, "height", &height);
+  gst_structure_get_fraction (s, "pixel-aspect-ratio", &par_n, &par_d);
+
+  gst_structure_remove_field (s, "width");
+  gst_structure_remove_field (s, "height");
+  gst_structure_remove_field (s, "pixel-aspect-ratio");
+
+  intersection = gst_caps_intersect (vidroidsink->current_caps, new_caps);
+  gst_caps_unref (new_caps);
+
+  if (gst_caps_is_empty (intersection))
+    return intersection;
+
+  s = gst_caps_get_structure (intersection, 0);
+
+  gst_util_fraction_multiply (width, height, par_n, par_d, &dar_n, &dar_d);
+
+  /* XXX: xvimagesink supports all PARs not sure about our vidroidsink
+   * though, need to review this afterwards.
+   */
+
+  gst_structure_fixate_field_nearest_int (s, "width", width);
+  gst_structure_fixate_field_nearest_int (s, "height", height);
+  gst_structure_get_int (s, "width", &w);
+  gst_structure_get_int (s, "height", &h);
+
+  gst_util_fraction_multiply (h, w, dar_n, dar_d, &par_n, &par_d);
+  gst_structure_set (s, "pixel-aspect-ratio", GST_TYPE_FRACTION, par_n, par_d,
+      NULL);
+
+  return intersection;
+}
+
+static GstFlowReturn
+gst_vidroidsink_buffer_alloc (GstBaseSink * bsink, guint64 offset,
+    guint size, GstCaps * caps, GstBuffer ** buf)
+{
+
+  GstFlowReturn ret = GST_FLOW_OK;
+  GstViDroidSink *vidroidsink;
+  GstViDroidBuffer *vidroidbuffer = NULL;
+  GstCaps *intersection = NULL;
+  GstStructure *structure = NULL;
+  GstVideoFormat image_format;
+  gint width, height;
+
+  vidroidsink = GST_VIDROIDSINK (bsink);
+
+  if (G_UNLIKELY (!caps))
+    goto no_caps;
+
+  if (G_LIKELY (gst_caps_is_equal (caps, vidroidsink->current_caps))) {
+    GST_LOG_OBJECT (vidroidsink,
+        "buffer alloc for same last_caps, reusing caps");
+    intersection = gst_caps_ref (caps);
+    image_format = vidroidsink->format;
+    width = GST_VIDEO_SINK_WIDTH (vidroidsink);
+    height = GST_VIDEO_SINK_HEIGHT (vidroidsink);
+
+    goto reuse_last_caps;
+  }
+
+  GST_DEBUG_OBJECT (vidroidsink, "buffer alloc requested size %d with caps %"
+      GST_PTR_FORMAT ", intersecting with our caps %" GST_PTR_FORMAT, size,
+      caps, vidroidsink->current_caps);
+
+  /* Check the caps against our current caps */
+  intersection = gst_caps_intersect (vidroidsink->current_caps, caps);
+
+  GST_DEBUG_OBJECT (vidroidsink, "intersection in buffer alloc returned %"
+      GST_PTR_FORMAT, intersection);
+
+  if (gst_caps_is_empty (intersection)) {
+    GstCaps *new_caps;
+
+    gst_caps_unref (intersection);
+
+    /* So we don't support this kind of buffer, let's define one we'd like */
+    new_caps = gst_caps_copy (caps);
+
+    structure = gst_caps_get_structure (new_caps, 0);
+    if (!gst_structure_has_field (structure, "width") ||
+        !gst_structure_has_field (structure, "height")) {
+      gst_caps_unref (new_caps);
+      goto invalid;
+    }
+
+    /* Try different dimensions */
+    intersection =
+        gst_vidroidsink_different_size_suggestion (vidroidsink, new_caps);
+
+    /* YUV not implemented yet */
+    if (gst_caps_is_empty (intersection)) {
+      /* Try with different YUV formats first */
+      gst_structure_set_name (structure, "video/x-raw-rgb");
+
+      /* Remove format specific fields */
+      gst_structure_remove_field (structure, "format");
+      gst_structure_remove_field (structure, "endianness");
+      gst_structure_remove_field (structure, "depth");
+      gst_structure_remove_field (structure, "bpp");
+      gst_structure_remove_field (structure, "red_mask");
+      gst_structure_remove_field (structure, "green_mask");
+      gst_structure_remove_field (structure, "blue_mask");
+      gst_structure_remove_field (structure, "alpha_mask");
+
+      /* Reuse intersection with current_caps */
+      intersection = gst_caps_intersect (vidroidsink->current_caps, new_caps);
+    }
+
+    if (gst_caps_is_empty (intersection)) {
+      /* Try with different dimensions */
+      intersection =
+          gst_vidroidsink_different_size_suggestion (vidroidsink, new_caps);
+    }
+
+    /* Clean this copy */
+    gst_caps_unref (new_caps);
+
+    if (gst_caps_is_empty (intersection))
+      goto incompatible;
+  }
+
+  /* Ensure the returned caps are fixed */
+  gst_caps_truncate (intersection);
+
+  GST_DEBUG_OBJECT (vidroidsink, "allocating a buffer with caps %"
+      GST_PTR_FORMAT, intersection);
+  if (gst_caps_is_equal (intersection, caps)) {
+    /* Things work better if we return a buffer with the same caps ptr
+     * as was asked for when we can */
+    gst_caps_replace (&intersection, caps);
+  }
+
+  /* Get image format from caps */
+  image_format = gst_vidroidsink_get_compat_format_from_caps (vidroidsink,
+      intersection);
+
+  /* Get geometry from caps */
+  structure = gst_caps_get_structure (intersection, 0);
+  if (!gst_structure_get_int (structure, "width", &width) ||
+      !gst_structure_get_int (structure, "height", &height) ||
+      image_format == -1)
+    goto invalid_caps;
+
+reuse_last_caps:
+
+  GST_DEBUG_OBJECT (vidroidsink, "Creating vidroidbuffer");
+  vidroidbuffer = gst_vidroidbuffer_new (vidroidsink, intersection);
+
+  if (vidroidbuffer) {
+    /* Make sure the buffer is cleared of any previously used flags */
+    GST_MINI_OBJECT_CAST (vidroidbuffer)->flags = 0;
+    gst_buffer_set_caps (GST_BUFFER_CAST (vidroidbuffer), intersection);
+  }
+
+  *buf = GST_BUFFER_CAST (vidroidbuffer);
+
+beach:
+  if (intersection) {
+    gst_caps_unref (intersection);
+  }
+
+  return ret;
+
+  /* ERRORS */
+invalid:
+  {
+    GST_DEBUG_OBJECT (vidroidsink, "No width/hegight on caps!?");
+    ret = GST_FLOW_WRONG_STATE;
+    goto beach;
+  }
+incompatible:
+  {
+    GST_WARNING_OBJECT (vidroidsink, "we were requested a buffer with "
+        "caps %" GST_PTR_FORMAT ", but our current caps %" GST_PTR_FORMAT
+        " are completely incompatible with those caps", caps,
+        vidroidsink->current_caps);
+    ret = GST_FLOW_NOT_NEGOTIATED;
+    goto beach;
+  }
+invalid_caps:
+  {
+    GST_WARNING_OBJECT (vidroidsink, "invalid caps for buffer allocation %"
+        GST_PTR_FORMAT, intersection);
+    ret = GST_FLOW_NOT_NEGOTIATED;
+    goto beach;
+  }
+no_caps:
+  {
+    GST_WARNING_OBJECT (vidroidsink, "have no caps, doing fallback allocation");
+    *buf = NULL;
+    ret = GST_FLOW_OK;
+    goto beach;
+  }
+}
+
+gboolean
 gst_vidroidsink_start (GstBaseSink * sink)
 {
   gboolean ret;
@@ -438,7 +904,7 @@ gst_vidroidsink_render_and_display (GstViDroidSink * vidroidsink,
 {
   EGLImageKHR img = EGL_NO_IMAGE_KHR;
   EGLint attrs[] = { EGL_IMAGE_PRESERVED_KHR,
-    EGL_TRUE, EGL_NONE, EGL_NONE
+    EGL_FALSE, EGL_NONE, EGL_NONE
   };
 
   if (!buf) {
@@ -502,6 +968,7 @@ gst_vidroidsink_setcaps (GstBaseSink * bsink, GstCaps * caps)
   gboolean ret = TRUE;
   //GstStructure *capstruct;
   gint width, height;
+  GstViDroidImageFmt *format;
 
   vidroidsink = GST_VIDROIDSINK (bsink);
 
@@ -562,6 +1029,18 @@ gst_vidroidsink_setcaps (GstBaseSink * bsink, GstCaps * caps)
 
   vidroidsink->have_window = TRUE;
   vidroidsink->current_caps = gst_caps_ref (caps);
+
+
+  /* Init supported caps list (Right now we just harcode 1)
+   * XXX: Nor sure this is the right place to do it.
+   */
+  format = g_new0 (GstViDroidImageFmt, 1);
+  if (format) {
+    format->fmt = GST_VIDROIDSINK_RGB565;
+    format->caps = gst_caps_copy (caps);
+    vidroidsink->supported_fmts = g_list_append
+        (vidroidsink->supported_fmts, format);
+  }
 
   if (!gst_vidroidsink_init_egl_surface (vidroidsink)) {
     g_mutex_unlock (vidroidsink->flow_lock);
@@ -667,6 +1146,8 @@ gst_vidroidsink_class_init (GstViDroidSinkClass * klass)
   gstbasesink_class->start = gst_vidroidsink_start;
   gstbasesink_class->stop = gst_vidroidsink_stop;
   gstbasesink_class->set_caps = GST_DEBUG_FUNCPTR (gst_vidroidsink_setcaps);
+  gstbasesink_class->buffer_alloc = GST_DEBUG_FUNCPTR
+      (gst_vidroidsink_buffer_alloc);
 
   gstvideosink_class->show_frame =
       GST_DEBUG_FUNCPTR (gst_vidroidsink_show_frame);

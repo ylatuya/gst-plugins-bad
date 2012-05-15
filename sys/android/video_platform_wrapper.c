@@ -102,6 +102,13 @@ platform_destroy_native_window (EGLNativeDisplayType display,
   return TRUE;
 }
 
+/* XXX: Missing implementation */
+EGLClientBuffer
+platform_crate_native_image_buffer (void)
+{
+  return (EGLClientBuffer) 0;
+}
+
 #else
 /* Android does not support the creation of an egl window surface
  * from native code. Hence, we just return NULL here for the time
@@ -128,4 +135,10 @@ platform_destroy_native_window (EGLNativeDisplayType display,
   return TRUE;
 }
 
+/* XXX: Missing implementation */
+EGLClientBuffer
+platform_crate_native_image_buffer (void)
+{
+  return (EGLClientBuffer) 0;
+}
 #endif

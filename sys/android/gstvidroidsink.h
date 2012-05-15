@@ -66,8 +66,16 @@ G_BEGIN_DECLS
 #define GST_IS_VIDROIDSINK_CLASS(klass) \
   (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_VIDROIDSINK))
 
+/* XXX: Harcoded format. Should be runtime built latter on. */
+#define GST_VIDROIDSINK_RGB565 1
+
+typedef struct _GstViDroidBuffer GstViDroidBuffer;
+typedef struct _GstViDroidBufferClass GstViDroidBufferClass;
+
 typedef struct _GstViDroidSink      GstViDroidSink;
 typedef struct _GstViDroidSinkClass GstViDroidSinkClass;
+
+typedef struct _GstViDroidImageFmt GstViDroidImageFmt;
 
 const EGLint vidroidsink_RGB16_config[] =
 {
@@ -77,6 +85,24 @@ const EGLint vidroidsink_RGB16_config[] =
   EGL_NONE
 };
 
+struct _GstViDroidImageFmt
+{
+  gint fmt;
+  GstCaps *caps;
+};
+
+struct _GstViDroidBuffer
+{
+  GstBuffer buffer;
+  GstViDroidSink *vidroidsink;
+
+  EGLClientBuffer image;
+  gint format;
+
+  gint width, height;
+  size_t size;
+};
+
 struct _GstViDroidSink
 {
   GstVideoSink videosink;
@@ -84,6 +110,13 @@ struct _GstViDroidSink
   GstVideoFormat format;
   GstCaps *current_caps;
   GstPad *sink;
+
+  /* XXX: The supported format list should likely be part
+   * of a local EGL/GLES context and built at runtime from
+   * the platform supported fmts. Right now we just add one
+   * format/caps at init.
+   */
+  GList *supported_fmts;
 
   GMutex *flow_lock;
 
@@ -98,18 +131,13 @@ struct _GstViDroidSink
 
   gboolean have_window;
   gboolean surface_ready;
+  gboolean running;
 
   /* props */
   gboolean silent;
   gboolean can_create_window;
   gint window_default_width;
   gint window_default_height;
-
-  /* GLExtensions 
-  EGLImageKHR (*egl_ext_create_image)(EGLDisplay, EGLContext, EGLenum,
-      EGLClientBuffer, const EGLint *);
-  EGLBoolean  (*egl_ext_destroy_image)(EGLDisplay, EGLImageKHR);
-*/
 };
 
 struct _GstViDroidSinkClass
