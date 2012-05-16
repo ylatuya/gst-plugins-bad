@@ -1,5 +1,5 @@
 /*
- * GStreamer Android Video Platform Wrapper 
+ * GStreamer Android Video Platform Wrapper
  * Copyright (C) 2012 Collabora Ltd.
  *   @author: Reynaldo H. Verdejo Pinochet <reynaldo@collabora.com>
  *
@@ -46,12 +46,16 @@
 #  include <config.h>
 #endif
 
+#define EGL_EGLEXT_PROTOTYPES
+
 #include <EGL/egl.h>
+#include <EGL/eglext.h>
 #include <GLES2/gl2.h>
 
 #include <gst/gst.h>
 #include "video_platform_wrapper.h"
 
+/* XXX: need a proper macro to choose between android and x11/mesa */
 #ifdef HAVE_X11
 #include <X11/Xlib.h>
 #endif
@@ -59,12 +63,31 @@
 GST_DEBUG_CATEGORY_STATIC (vidroid_platform_wrapper);
 #define GST_CAT_DEFAULT vidroid_platform_wrapper
 
+#ifndef HAVE_X11
+static PFNEGLLOCKSURFACEKHRPROC my_eglLockSurfaceKHR;
+
+static EGLint lock_attribs[] = {
+  EGL_MAP_PRESERVE_PIXELS_KHR, EGL_TRUE,
+  EGL_LOCK_USAGE_HINT_KHR, EGL_READ_SURFACE_BIT_KHR | EGL_WRITE_SURFACE_BIT_KHR,
+  EGL_NONE
+};
+#endif
+
 void
 platform_wrapper_init (void)
 {
   GST_DEBUG_CATEGORY_INIT (vidroid_platform_wrapper,
       "ViDroid Platform Wrapper", 0,
       "Platform dependent native-window utility routines for ViDroid");
+
+#ifndef HAVE_X11
+  my_eglLockSurfaceKHR =
+      (PFNEGLLOCKSURFACEKHRPROC) eglGetProcAddress ("eglLockSurfaceKHR");
+
+  if (!my_eglLockSurfaceKHR)
+    GST_CAT_ERROR (GST_CAT_DEFAULT, "Extension missing: eglLockSurfaceKHR");
+#endif
+
   return;
 }
 
@@ -103,10 +126,11 @@ platform_destroy_native_window (EGLNativeDisplayType display,
 }
 
 /* XXX: Missing implementation */
-EGLClientBuffer
-platform_crate_native_image_buffer (void)
+EGLint *
+platform_crate_native_image_buffer (EGLNativeWindowType win, EGLConfig config,
+    EGLNativeDisplayType display, const EGLint * egl_attribs)
 {
-  return (EGLClientBuffer) 0;
+  return NULL;
 }
 
 #else
@@ -139,6 +163,45 @@ platform_destroy_native_window (EGLNativeDisplayType display,
 EGLClientBuffer
 platform_crate_native_image_buffer (void)
 {
-  return (EGLClientBuffer) 0;
+  XWindowAttributes xattribs;
+  EGLNativePixmapType pix;
+  EGLSurface pix_surface;
+  EGLint *buffer = NULL;
+
+  if (!XGetWindowAttributes (display, win, &xattribs)) {
+    GST_CAT_ERROR (GST_CAT_DEFAULT, "Unable to get window attributes");
+    goto ERROR;
+  }
+
+  pix = XCreatePixmap (display, win, xattribs.width, xattribs.height,
+      xattribs.depth);
+
+  pix_surface = eglCreatePixmapSurface (display, config, pix, egl_attribs);
+
+  if (pix_surface == EGL_NO_SURFACE) {
+    GST_CAT_ERROR (GST_CAT_DEFAULT, "Unable to create pixmap surface");
+    goto EGL_ERROR;
+  }
+
+  if (my_eglLockSurfaceKHR (display, pix_surface, lock_attribs) == EGL_FALSE) {
+    GST_CAT_ERROR (GST_CAT_DEFAULT, "Unable to lock surface");
+    goto EGL_ERROR;
+  }
+
+  if (eglQuerySurface (display, pix_surface, EGL_BITMAP_POINTER_KHR, buffer)
+      == EGL_FALSE) {
+    GST_CAT_ERROR (GST_CAT_DEFAULT,
+        "Unable to query surface for bitmap pointer");
+    goto EGL_ERROR;
+  }
+
+  return buffer;
+
+EGL_ERROR:
+  GST_CAT_ERROR (GST_CAT_DEFAULT, "EGL call returned error %x", eglGetError ());
+  XFreePixmap (display, pix);
+ERROR:
+  GST_CAT_ERROR (GST_CAT_DEFAULT, "Can't create native buffer. Bailing out");
+  return NULL;
 }
 #endif

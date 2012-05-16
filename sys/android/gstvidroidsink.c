@@ -101,6 +101,9 @@ GST_DEBUG_CATEGORY_STATIC (gst_vidroidsink_debug);
 static PFNEGLCREATEIMAGEKHRPROC my_eglCreateImageKHR;
 static PFNEGLDESTROYIMAGEKHRPROC my_eglDestroyImageKHR;
 static PFNGLEGLIMAGETARGETTEXTURE2DOESPROC my_glEGLImageTargetTexture2DOES;
+#ifndef HAVE_X11
+static PFNEGLUNLOCKSURFACEKHRPROC my_eglUnlockSurfaceKHR;
+#endif
 
 /* Input capabilities.
  *
@@ -129,6 +132,14 @@ enum
   PROP_CAN_CREATE_WINDOW,
   PROP_DEFAULT_HEIGHT,
   PROP_DEFAULT_WIDTH
+};
+
+/* XXX: Harcoded for now */
+static EGLint vidroidsink_RGB16_config[] = {
+  EGL_RED_SIZE, 5,
+  EGL_GREEN_SIZE, 6,
+  EGL_BLUE_SIZE, 5,
+  EGL_NONE
 };
 
 static void gst_vidroidsink_get_property (GObject * object, guint prop_id,
@@ -226,8 +237,9 @@ GST_BOILERPLATE_FULL (GstViDroidSink, gst_vidroidsink, GstVideoSink,
 
   vidroidbuffer->vidroidsink = gst_object_ref (vidroidsink);
 
-  /* XXX: create_native_image_buffer func not implemented */
-  vidroidbuffer->image = platform_crate_native_image_buffer ();
+  /* XXX: create_native_image_buffer func drafted and only for x11/mesa egl */
+  vidroidbuffer->image = platform_crate_native_image_buffer
+      (vidroidsink->window, vidroidsink->config, vidroidsink->display, NULL);
   if (!vidroidbuffer->image) {
     GST_ERROR_OBJECT (vidroidsink,
         "Failed to create native %sx%d image buffer", vidroidbuffer->width,
@@ -655,6 +667,15 @@ gst_vidroidsink_start (GstBaseSink * sink)
     GST_ERROR_OBJECT (vidroidsink, "EGL_KHR_IMAGE ext not available");
     goto HANDLE_ERROR;
   }
+#ifndef HAVE_X11
+  my_eglUnlockSurfaceKHR =
+      (PFNEGLUNLOCKSURFACEKHRPROC) eglGetProcAddress ("eglUnlockSurfaceKHR");
+
+  if (!my_eglUnlockSurfaceKHR) {
+    GST_ERROR_OBJECT (vidroidsink, "Ext eglUnlockSurfaceKHR not available");
+    goto HANDLE_ERROR;
+  }
+#endif
 
   my_glEGLImageTargetTexture2DOES =
       (PFNGLEGLIMAGETARGETTEXTURE2DOESPROC) eglGetProcAddress
@@ -802,6 +823,9 @@ gst_vidroidsink_init_egl_display (GstViDroidSink * vidroidsink)
     GST_ERROR_OBJECT (vidroidsink, "Could not init EGL display connection");
     goto HANDLE_EGL_ERROR;
   }
+
+  GST_ERROR_OBJECT (vidroidsink, "AVAILABLE EGL EXTENSIONS %s",
+      eglQueryString (vidroidsink->display, EGL_EXTENSIONS));
 
   GST_DEBUG_OBJECT (vidroidsink, "EGL version %d.%d", vidroidsink->majorVersion,
       vidroidsink->minorVersion);

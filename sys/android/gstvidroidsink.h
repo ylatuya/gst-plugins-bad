@@ -53,7 +53,6 @@
 #include <GLES2/gl2ext.h>
 
 G_BEGIN_DECLS
-
 /* #defines don't like whitespacey bits */
 #define GST_TYPE_VIDROIDSINK \
   (gst_vidroidsink_get_type())
@@ -65,25 +64,15 @@ G_BEGIN_DECLS
   (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_VIDROIDSINK))
 #define GST_IS_VIDROIDSINK_CLASS(klass) \
   (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_VIDROIDSINK))
-
 /* XXX: Harcoded format. Should be runtime built latter on. */
 #define GST_VIDROIDSINK_RGB565 1
-
 typedef struct _GstViDroidBuffer GstViDroidBuffer;
 typedef struct _GstViDroidBufferClass GstViDroidBufferClass;
 
-typedef struct _GstViDroidSink      GstViDroidSink;
+typedef struct _GstViDroidSink GstViDroidSink;
 typedef struct _GstViDroidSinkClass GstViDroidSinkClass;
 
 typedef struct _GstViDroidImageFmt GstViDroidImageFmt;
-
-const EGLint vidroidsink_RGB16_config[] =
-{
-  EGL_RED_SIZE, 5,
-  EGL_GREEN_SIZE, 6,
-  EGL_BLUE_SIZE, 5,
-  EGL_NONE
-};
 
 struct _GstViDroidImageFmt
 {
@@ -96,7 +85,7 @@ struct _GstViDroidBuffer
   GstBuffer buffer;
   GstViDroidSink *vidroidsink;
 
-  EGLClientBuffer image;
+  EGLint *image;
   gint format;
 
   gint width, height;
@@ -148,5 +137,4 @@ struct _GstViDroidSinkClass
 GType gst_vidroidsink_get_type (void);
 
 G_END_DECLS
-
 #endif /* __GST_VIDROIDSINK_H__ */

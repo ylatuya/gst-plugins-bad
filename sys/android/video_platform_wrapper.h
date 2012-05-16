@@ -53,10 +53,12 @@
 #include <gst/gst.h>
 #include <EGL/egl.h>
 
-void platform_wrapper_init(void);
+void platform_wrapper_init (void);
 EGLNativeWindowType platform_create_native_window (gint width, gint height);
 gboolean platform_destroy_native_window (EGLNativeDisplayType display,
     EGLNativeWindowType w);
-EGLClientBuffer platform_crate_native_image_buffer (void);
+EGLint *platform_crate_native_image_buffer (EGLNativeWindowType win,
+    EGLConfig config, EGLNativeDisplayType display, const EGLint * egl_attribs);
+
 
 #endif
