@@ -87,7 +87,7 @@ platform_create_native_window (gint width, gint height)
   s = DefaultScreen (d);
   w = XCreateSimpleWindow (d, RootWindow (d, s), 10, 10, width, height, 1,
       BlackPixel (d, s), WhitePixel (d, s));
-  XStoreName (d, w, "title");
+  XStoreName (d, w, "vidroidsink");
   XMapWindow (d, w);
   XFlush (d);
   return (EGLNativeWindowType) w;
