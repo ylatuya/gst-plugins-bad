@@ -89,13 +89,11 @@
 GST_DEBUG_CATEGORY_STATIC (gst_vidroidsink_debug);
 #define GST_CAT_DEFAULT gst_vidroidsink_debug
 
-/* These should be defined per model
- * or proly find a less braindamaged
- * solution. For the Galaxy Nexus we
- * have:
+/* These should be defined per model.
+ * Galaxy Nexus:
  */
-#define MAX_FRAME_WIDTH 1280
-#define MAX_FRAME_HEIGHT 720
+#define VIDROIDSINK_MAX_FRAME_WIDTH 1280
+#define VIDROIDSINK_MAX_FRAME_HEIGHT 720
 
 /* XXX: proly  needs ifdef against EGL_KHR_image */
 static PFNEGLCREATEIMAGEKHRPROC my_eglCreateImageKHR;
@@ -237,7 +235,6 @@ GST_BOILERPLATE_FULL (GstViDroidSink, gst_vidroidsink, GstVideoSink,
 
   vidroidbuffer->vidroidsink = gst_object_ref (vidroidsink);
 
-  /* XXX: create_native_image_buffer func drafted and only for x11/mesa egl */
   vidroidbuffer->image = platform_crate_native_image_buffer
       (vidroidsink->window, vidroidsink->config, vidroidsink->display, NULL);
   if (!vidroidbuffer->image) {
@@ -273,14 +270,6 @@ gst_vidroidbuffer_destroy (GstViDroidBuffer * vidroidbuffer)
   g_return_if_fail (GST_IS_VIDROIDSINK (vidroidsink));
 
   GST_OBJECT_LOCK (vidroidsink);
-
-  /* XXX: Pool code left here for reference. If the destroyed image is the
-   * current one we destroy our reference too:
-
-   if (vidroidsink->cur_image == vidroidbuffer)
-   vidroidsink->cur_image = NULL;
-   */
-
   GST_DEBUG_OBJECT (vidroidsink, "Destroying image");
 
   if (vidroidbuffer->image) {
@@ -326,14 +315,6 @@ gst_vidroidbuffer_finalize (GstViDroidBuffer * vidroidbuffer)
     goto no_sink;
 
   g_return_if_fail (GST_IS_VIDROIDSINK (vidroidsink));
-
-/*
-  GST_OBJECT_LOCK (vidroidsink);
-  running = vidroidsink->running;
-  width   = GST_VIDEO_SINK_WIDTH (vidroidsink);
-  height  = GST_VIDEO_SINK_HEIGHT (vidroidsink);
-  GST_OBJECT_UNLOCK (vidroidsink);
-*/
 
   gst_vidroidbuffer_destroy (vidroidbuffer);
 
@@ -400,10 +381,10 @@ gst_vidroidbuffer_get_type (void)
 }
 
 
- /* This function is sort of meaningless right now as we
-  * Only Support one image format / caps but left here as a
-  * reference for future improvements. 
-  */
+/* This function is sort of meaningless right now as we
+ * Only Support one image format / caps but was left here
+ * as a reference for future improvements. 
+ */
 static gint
 gst_vidroidsink_get_compat_format_from_caps (GstViDroidSink * vidroidsink,
     GstCaps * caps)
@@ -427,7 +408,7 @@ gst_vidroidsink_get_compat_format_from_caps (GstViDroidSink * vidroidsink,
     list = g_list_next (list);
   }
 
-  return GST_VIDROIDSINK_NOFMT;
+  return GST_VIDROIDSINK_IMAGE_NOFMT;
 }
 
 static GstCaps *
@@ -540,7 +521,7 @@ gst_vidroidsink_buffer_alloc (GstBaseSink * bsink, guint64 offset,
 
     /* YUV not implemented yet */
     if (gst_caps_is_empty (intersection)) {
-      /* Try with different YUV formats first */
+
       gst_structure_set_name (structure, "video/x-raw-rgb");
 
       /* Remove format specific fields */
@@ -557,11 +538,10 @@ gst_vidroidsink_buffer_alloc (GstBaseSink * bsink, guint64 offset,
       intersection = gst_caps_intersect (vidroidsink->current_caps, new_caps);
     }
 
-    if (gst_caps_is_empty (intersection)) {
-      /* Try with different dimensions */
+    /* Try with different dimensions */
+    if (gst_caps_is_empty (intersection))
       intersection =
           gst_vidroidsink_different_size_suggestion (vidroidsink, new_caps);
-    }
 
     /* Clean this copy */
     gst_caps_unref (new_caps);
@@ -585,14 +565,14 @@ gst_vidroidsink_buffer_alloc (GstBaseSink * bsink, guint64 offset,
   image_format = gst_vidroidsink_get_compat_format_from_caps (vidroidsink,
       intersection);
 
-  if (image_format == GST_VIDROIDSINK_NOFMT)
+  if (image_format == GST_VIDROIDSINK_IMAGE_NOFMT)
     GST_WARNING_OBJECT (vidroidsink, "Can't get a compatible format from caps");
 
   /* Get geometry from caps */
   structure = gst_caps_get_structure (intersection, 0);
   if (!gst_structure_get_int (structure, "width", &width) ||
       !gst_structure_get_int (structure, "height", &height) ||
-      image_format == GST_VIDROIDSINK_NOFMT)
+      image_format == GST_VIDROIDSINK_IMAGE_NOFMT)
     goto invalid_caps;
 
 reuse_last_caps:
@@ -669,24 +649,19 @@ gst_vidroidsink_start (GstBaseSink * sink)
    */
   format = g_new0 (GstViDroidImageFmt, 1);
   if (format) {
-    format->fmt = GST_VIDROIDSINK_RGB565;
+    format->fmt = GST_VIDROIDSINK_IMAGE_RGB565;
     format->caps = gst_caps_copy (vidroidsink->current_caps);
     vidroidsink->supported_fmts = g_list_append
         (vidroidsink->supported_fmts, format);
   }
 
-  /* XXX: non-NULL from getprocaddress doesn't
-   * imply func is supported at runtime. Should check
-   * with  glGetString(GL_EXTENSIONS) o
-   * reglQueryString(display, EGL_EXTENSIONS) too
-   */
   my_eglCreateImageKHR =
       (PFNEGLCREATEIMAGEKHRPROC) eglGetProcAddress ("eglCreateImageKHR");
   my_eglDestroyImageKHR =
       (PFNEGLDESTROYIMAGEKHRPROC) eglGetProcAddress ("eglDestroyImageKHR");
 
   if (!my_eglCreateImageKHR || !my_eglDestroyImageKHR) {
-    GST_ERROR_OBJECT (vidroidsink, "EGL_KHR_IMAGE ext not available");
+    GST_ERROR_OBJECT (vidroidsink, "Extension EGL_KHR_IMAGE not available");
     goto HANDLE_ERROR;
   }
 #ifndef HAVE_X11
@@ -694,7 +669,8 @@ gst_vidroidsink_start (GstBaseSink * sink)
       (PFNEGLUNLOCKSURFACEKHRPROC) eglGetProcAddress ("eglUnlockSurfaceKHR");
 
   if (!my_eglUnlockSurfaceKHR) {
-    GST_ERROR_OBJECT (vidroidsink, "Ext eglUnlockSurfaceKHR not available");
+    GST_ERROR_OBJECT (vidroidsink,
+        "Extension eglUnlockSurfaceKHR not available");
     goto HANDLE_ERROR;
   }
 #endif
@@ -710,6 +686,13 @@ gst_vidroidsink_start (GstBaseSink * sink)
   }
 
   ret = gst_vidroidsink_init_egl_display (vidroidsink);
+
+  /* XXX: non-NULL from getprocaddress doesn't
+   * imply func is supported at runtime. Should check
+   * for needed extensions with  glGetString(GL_EXTENSIONS)
+   * or reglQueryString(display, EGL_EXTENSIONS) here too. 
+   */
+
   g_mutex_unlock (vidroidsink->flow_lock);
 
   if (!ret) {
@@ -757,6 +740,11 @@ gst_vidroidsink_create_window (GstViDroidSink * vidroidsink, gint width,
 {
   EGLNativeWindowType window;
 
+  if (!width || !height) {      /* Create a default size window */
+    width = vidroidsink->window_default_width;
+    height = vidroidsink->window_default_height;
+  }
+
   window = platform_create_native_window (width, height);
   if (!window) {
     GST_ERROR_OBJECT (vidroidsink, "Could not create window");
@@ -791,8 +779,8 @@ gst_vidroidsink_init_egl_surface (GstViDroidSink * vidroidsink)
 {
   GST_DEBUG_OBJECT (vidroidsink, "Enter EGL surface setup");
 
-  /* XXX: Unlikely. Check logic and remove if not needed */
-  if (!vidroidsink->have_window) {
+  /* XXX: Impossible?. Check logic and remove if not needed */
+  if (G_UNLIKELY (!vidroidsink->have_window)) {
     GST_ERROR_OBJECT (vidroidsink, "Attempted to setup surface without window");
     goto HANDLE_ERROR;
   }
@@ -832,8 +820,6 @@ gst_vidroidsink_init_egl_display (GstViDroidSink * vidroidsink)
 
   GST_DEBUG_OBJECT (vidroidsink, "Enter EGL initial configuration");
 
-  /* Begin real action! BIG_FUCKING_WARNING: This needs to be reviewed */
-
   vidroidsink->display = eglGetDisplay (EGL_DEFAULT_DISPLAY);
   if (vidroidsink->display == EGL_NO_DISPLAY) {
     GST_ERROR_OBJECT (vidroidsink, "Could not get EGL display connection");
@@ -846,20 +832,12 @@ gst_vidroidsink_init_egl_display (GstViDroidSink * vidroidsink)
     goto HANDLE_EGL_ERROR;
   }
 
-  GST_ERROR_OBJECT (vidroidsink, "AVAILABLE EGL EXTENSIONS %s",
-      eglQueryString (vidroidsink->display, EGL_EXTENSIONS));
-
   GST_DEBUG_OBJECT (vidroidsink, "EGL version %d.%d", vidroidsink->majorVersion,
       vidroidsink->minorVersion);
+  GST_DEBUG_OBJECT (vidroidsink, "Available EGL extensions: %s",
+      eglQueryString (vidroidsink->display, EGL_EXTENSIONS));
 
-  /* XXX: Check for vidroidsink's EGL supported versions */
-
-  /* XXX: this doesn't work, check how to get window dimensions!
-     GST_INFO_OBJECT (vidroidsink, "Window: %d*%d format=%d\n",
-     vidroidsink->window->width,
-     vidroidsink->window->height,
-     vidroidsink->window->format);
-   */
+  /* XXX: Check for vidroidsink's EGL needed versions */
 
   if (!eglChooseConfig (vidroidsink->display, vidroidsink_RGB16_config,
           &vidroidsink->config, 1, &egl_configs)) {
@@ -879,7 +857,6 @@ gst_vidroidsink_init_egl_display (GstViDroidSink * vidroidsink)
   }
 
   GST_DEBUG_OBJECT (vidroidsink, "EGL Context: %x", vidroidsink->context);
-
 
   glEnable (GL_TEXTURE_2D);
   glGenTextures (1, &vidroidsink->textid);
@@ -906,20 +883,18 @@ gst_vidroidsink_set_window_handle (GstXOverlay * overlay, guintptr id)
 
   g_mutex_lock (vidroidsink->flow_lock);
 
-  /* If !id we are being requested to create a window to display on.
-   * This is no yet implemented in the code but it's here as a reference
-   */
   if (!id) {
+    /* We are being requested to create our own window */
     GST_WARNING_OBJECT (vidroidsink, "OH NOES they want a new window");
-    /* XXX: 0,0 should fire default size creation on _create_window() */
+    /* 0x0 fires default size creation */
     vidroidsink->window = gst_vidroidsink_create_window (vidroidsink, 0, 0);
     if (!vidroidsink->window) {
       GST_ERROR_OBJECT (vidroidsink, "Got a NULL window");
       goto HANDLE_ERROR;
     }
-  } else if (vidroidsink->window == id) {
-    /* Already used window? (under what circumstances this can happen??) */
-    GST_WARNING_OBJECT (vidroidsink, "We've got the %x handle again", id);
+  } else if (vidroidsink->window == id) {       /* Already used window */
+    GST_WARNING_OBJECT (vidroidsink,
+        "We've got the same %x window handle again", id);
     GST_INFO_OBJECT (vidroidsink, "Skipping surface setup");
     goto HANDLE_ERROR;
   } else {
@@ -968,12 +943,10 @@ gst_vidroidsink_render_and_display (GstViDroidSink * vidroidsink,
 
   my_glEGLImageTargetTexture2DOES (GL_TEXTURE_2D, img);
 
-
 HANDLE_EGL_ERROR:
   GST_ERROR_OBJECT (vidroidsink, "EGL call returned error %x", eglGetError ());
 HANDLE_ERROR:
   GST_ERROR_OBJECT (vidroidsink, "Rendering disabled for this frame");
-
 }
 
 static GstFlowReturn
@@ -1012,15 +985,11 @@ gst_vidroidsink_setcaps (GstBaseSink * bsink, GstCaps * caps)
 {
   GstViDroidSink *vidroidsink;
   gboolean ret = TRUE;
-  //GstStructure *capstruct;
   gint width, height;
 
   vidroidsink = GST_VIDROIDSINK (bsink);
 
   GST_DEBUG_OBJECT (vidroidsink, "Got caps %", caps);
-
-  //capstruct = gst_caps_get_structure (caps, 0);
-  //  ie: gst_structure_get_value (capstruct, "framerate");
 
   /* Quick safe measures */
   if (!(ret = gst_video_format_parse_caps (caps, &vidroidsink->format, &width,
@@ -1164,12 +1133,10 @@ static void
 gst_vidroidsink_class_init (GstViDroidSinkClass * klass)
 {
   GObjectClass *gobject_class;
-//  GstElementClass *gstelement_class;
   GstBaseSinkClass *gstbasesink_class;
   GstVideoSinkClass *gstvideosink_class;
 
   gobject_class = (GObjectClass *) klass;
-//  gstelement_class = (GstElementClass *) klass;
   gstbasesink_class = (GstBaseSinkClass *) klass;
   gstvideosink_class = (GstVideoSinkClass *) klass;
 
@@ -1194,11 +1161,13 @@ gst_vidroidsink_class_init (GstViDroidSinkClass * klass)
 
   g_object_class_install_property (gobject_class, PROP_DEFAULT_WIDTH,
       g_param_spec_int ("window_default_width", "DefaultWidth",
-          "Default width for self created windows", 0, MAX_FRAME_WIDTH, 640,
+          "Default width for self created windows", 0,
+          VIDROIDSINK_MAX_FRAME_WIDTH, VIDROIDSINK_MAX_FRAME_WIDTH,
           G_PARAM_READWRITE));
   g_object_class_install_property (gobject_class, PROP_DEFAULT_HEIGHT,
       g_param_spec_int ("window_default_height", "CanCreateWindow",
-          "Default height for self created windows", 0, MAX_FRAME_HEIGHT, 480,
+          "Default height for self created windows", 0,
+          VIDROIDSINK_MAX_FRAME_HEIGHT, VIDROIDSINK_MAX_FRAME_HEIGHT,
           G_PARAM_READWRITE));
 }
 

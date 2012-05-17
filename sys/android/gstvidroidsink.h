@@ -53,7 +53,6 @@
 #include <GLES2/gl2ext.h>
 
 G_BEGIN_DECLS
-/* #defines don't like whitespacey bits */
 #define GST_TYPE_VIDROIDSINK \
   (gst_vidroidsink_get_type())
 #define GST_VIDROIDSINK(obj) \
@@ -65,8 +64,8 @@ G_BEGIN_DECLS
 #define GST_IS_VIDROIDSINK_CLASS(klass) \
   (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_VIDROIDSINK))
 /* XXX: Harcoded format. Should be runtime built latter on. */
-#define GST_VIDROIDSINK_RGB565 1
-#define GST_VIDROIDSINK_NOFMT -1
+#define GST_VIDROIDSINK_IMAGE_RGB565 1
+#define GST_VIDROIDSINK_IMAGE_NOFMT -1
 typedef struct _GstViDroidBuffer GstViDroidBuffer;
 typedef struct _GstViDroidBufferClass GstViDroidBufferClass;
 
