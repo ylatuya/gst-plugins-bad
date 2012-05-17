@@ -66,6 +66,7 @@ G_BEGIN_DECLS
   (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_VIDROIDSINK))
 /* XXX: Harcoded format. Should be runtime built latter on. */
 #define GST_VIDROIDSINK_RGB565 1
+#define GST_VIDROIDSINK_NOFMT -1
 typedef struct _GstViDroidBuffer GstViDroidBuffer;
 typedef struct _GstViDroidBufferClass GstViDroidBufferClass;
 

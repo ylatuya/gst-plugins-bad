@@ -427,7 +427,7 @@ gst_vidroidsink_get_compat_format_from_caps (GstViDroidSink * vidroidsink,
     list = g_list_next (list);
   }
 
-  return -1;
+  return GST_VIDROIDSINK_NOFMT;
 }
 
 static GstCaps *
@@ -585,11 +585,14 @@ gst_vidroidsink_buffer_alloc (GstBaseSink * bsink, guint64 offset,
   image_format = gst_vidroidsink_get_compat_format_from_caps (vidroidsink,
       intersection);
 
+  if (image_format == GST_VIDROIDSINK_NOFMT)
+    GST_WARNING_OBJECT (vidroidsink, "Can't get a compatible format from caps");
+
   /* Get geometry from caps */
   structure = gst_caps_get_structure (intersection, 0);
   if (!gst_structure_get_int (structure, "width", &width) ||
       !gst_structure_get_int (structure, "height", &height) ||
-      image_format == -1)
+      image_format == GST_VIDROIDSINK_NOFMT)
     goto invalid_caps;
 
 reuse_last_caps:
@@ -649,6 +652,7 @@ gst_vidroidsink_start (GstBaseSink * sink)
 {
   gboolean ret;
   GstViDroidSink *vidroidsink = GST_VIDROIDSINK (sink);
+  GstViDroidImageFmt *format;
 
   platform_wrapper_init ();
   g_mutex_lock (vidroidsink->flow_lock);
@@ -659,6 +663,17 @@ gst_vidroidsink_start (GstBaseSink * sink)
   if (!vidroidsink->current_caps)
     vidroidsink->current_caps = gst_caps_copy (gst_pad_get_pad_template_caps
         (GST_VIDEO_SINK_PAD (vidroidsink)));
+
+  /* Init supported caps list (Right now we just harcode the only one we support)
+   * XXX: Not sure this is the right place to do it.
+   */
+  format = g_new0 (GstViDroidImageFmt, 1);
+  if (format) {
+    format->fmt = GST_VIDROIDSINK_RGB565;
+    format->caps = gst_caps_copy (vidroidsink->current_caps);
+    vidroidsink->supported_fmts = g_list_append
+        (vidroidsink->supported_fmts, format);
+  }
 
   /* XXX: non-NULL from getprocaddress doesn't
    * imply func is supported at runtime. Should check
@@ -999,7 +1014,6 @@ gst_vidroidsink_setcaps (GstBaseSink * bsink, GstCaps * caps)
   gboolean ret = TRUE;
   //GstStructure *capstruct;
   gint width, height;
-  GstViDroidImageFmt *format;
 
   vidroidsink = GST_VIDROIDSINK (bsink);
 
@@ -1060,18 +1074,6 @@ gst_vidroidsink_setcaps (GstBaseSink * bsink, GstCaps * caps)
 
   vidroidsink->have_window = TRUE;
   vidroidsink->current_caps = gst_caps_ref (caps);
-
-
-  /* Init supported caps list (Right now we just harcode 1)
-   * XXX: Nor sure this is the right place to do it.
-   */
-  format = g_new0 (GstViDroidImageFmt, 1);
-  if (format) {
-    format->fmt = GST_VIDROIDSINK_RGB565;
-    format->caps = gst_caps_copy (caps);
-    vidroidsink->supported_fmts = g_list_append
-        (vidroidsink->supported_fmts, format);
-  }
 
   if (!gst_vidroidsink_init_egl_surface (vidroidsink)) {
     g_mutex_unlock (vidroidsink->flow_lock);
