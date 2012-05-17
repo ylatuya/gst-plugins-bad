@@ -653,6 +653,13 @@ gst_vidroidsink_start (GstBaseSink * sink)
   platform_wrapper_init ();
   g_mutex_lock (vidroidsink->flow_lock);
 
+  /* XXX: Hack? need to find a proper place
+   * to set the default caps at start;
+   */
+  if (!vidroidsink->current_caps)
+    vidroidsink->current_caps = gst_caps_copy (gst_pad_get_pad_template_caps
+        (GST_VIDEO_SINK_PAD (vidroidsink)));
+
   /* XXX: non-NULL from getprocaddress doesn't
    * imply func is supported at runtime. Should check
    * with  glGetString(GL_EXTENSIONS) o
@@ -856,7 +863,7 @@ gst_vidroidsink_init_egl_display (GstViDroidSink * vidroidsink)
     goto HANDLE_EGL_ERROR;
   }
 
-  GST_INFO_OBJECT (vidroidsink, "GL context: %x", vidroidsink->context);
+  GST_DEBUG_OBJECT (vidroidsink, "EGL Context: %x", vidroidsink->context);
 
 
   glEnable (GL_TEXTURE_2D);
