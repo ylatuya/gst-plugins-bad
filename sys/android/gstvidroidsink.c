@@ -400,6 +400,8 @@ gst_vidroidsink_get_compat_format_from_caps (GstViDroidSink * vidroidsink,
   /* Traverse the list trying to find a compatible format */
   while (list) {
     format = list->data;
+    GST_DEBUG_OBJECT (vidroidsink, "Checking compatibility between listed %"
+        GST_PTR_FORMAT " and %" GST_PTR_FORMAT, format->caps, caps);
     if (format) {
       if (gst_caps_can_intersect (caps, format->caps)) {
         return format->fmt;
@@ -466,8 +468,8 @@ gst_vidroidsink_buffer_alloc (GstBaseSink * bsink, guint64 offset,
     guint size, GstCaps * caps, GstBuffer ** buf)
 {
 
-  GstFlowReturn ret = GST_FLOW_OK;
   GstViDroidSink *vidroidsink;
+  GstFlowReturn ret = GST_FLOW_OK;
   GstViDroidBuffer *vidroidbuffer = NULL;
   GstCaps *intersection = NULL;
   GstStructure *structure = NULL;
@@ -475,6 +477,12 @@ gst_vidroidsink_buffer_alloc (GstBaseSink * bsink, guint64 offset,
   gint width, height;
 
   vidroidsink = GST_VIDROIDSINK (bsink);
+#ifdef HAVE_X11
+  /* no custom alloc for X11 */
+  GST_WARNING_OBJECT (vidroidsink, "No custom alloc for x11/mesa");
+  *buf = NULL;
+  return GST_FLOW_OK;
+#endif
 
   if (G_UNLIKELY (!caps))
     goto no_caps;
@@ -637,20 +645,14 @@ gst_vidroidsink_start (GstBaseSink * sink)
   platform_wrapper_init ();
   g_mutex_lock (vidroidsink->flow_lock);
 
-  /* XXX: Hack? need to find a proper place
-   * to set the default caps at start;
-   */
-  if (!vidroidsink->current_caps)
-    vidroidsink->current_caps = gst_caps_copy (gst_pad_get_pad_template_caps
-        (GST_VIDEO_SINK_PAD (vidroidsink)));
-
   /* Init supported caps list (Right now we just harcode the only one we support)
    * XXX: Not sure this is the right place to do it.
    */
   format = g_new0 (GstViDroidImageFmt, 1);
   if (format) {
     format->fmt = GST_VIDROIDSINK_IMAGE_RGB565;
-    format->caps = gst_caps_copy (vidroidsink->current_caps);
+    format->caps = gst_caps_copy (gst_pad_get_pad_template_caps
+        (GST_VIDEO_SINK_PAD (vidroidsink)));
     vidroidsink->supported_fmts = g_list_append
         (vidroidsink->supported_fmts, format);
   }
@@ -989,9 +991,12 @@ gst_vidroidsink_setcaps (GstBaseSink * bsink, GstCaps * caps)
 
   vidroidsink = GST_VIDROIDSINK (bsink);
 
-  GST_DEBUG_OBJECT (vidroidsink, "Got caps %", caps);
+  GST_DEBUG_OBJECT (vidroidsink,
+      "In setcaps. Possible caps %" GST_PTR_FORMAT ", setting caps %"
+      GST_PTR_FORMAT, vidroidsink->current_caps, caps);
 
   /* Quick safe measures */
+
   if (!(ret = gst_video_format_parse_caps (caps, &vidroidsink->format, &width,
               &height))) {
     GST_ERROR_OBJECT (vidroidsink, "Got weird and/or incomplete caps");
@@ -1003,13 +1008,22 @@ gst_vidroidsink_setcaps (GstBaseSink * bsink, GstCaps * caps)
     return FALSE;
   }
 
+  if (gst_vidroidsink_get_compat_format_from_caps (vidroidsink, caps) ==
+      GST_VIDROIDSINK_IMAGE_NOFMT) {
+    GST_ERROR_OBJECT (vidroidsink, "Unsupported format");
+    return FALSE;
+  }
+
   /* XXX: Renegotiation not implemented yet */
   if (vidroidsink->current_caps) {
-    GST_ERROR_OBJECT (vidroidsink, "Caps already set, won't do it again");
-    if (gst_caps_is_always_compatible (vidroidsink->current_caps, caps)) {
-      GST_INFO_OBJECT (vidroidsink, "Caps are compatible anyway..");
+    GST_ERROR_OBJECT (vidroidsink, "Caps already set. Won't do it again");
+    if (gst_caps_is_always_compatible (caps, vidroidsink->current_caps)) {
+      GST_INFO_OBJECT (vidroidsink, "Caps are compatible anyway");
       return TRUE;
     } else {
+      GST_INFO_OBJECT (vidroidsink,
+          "Caps %" GST_PTR_FORMAT "Not always compatible with current-caps %"
+          GST_PTR_FORMAT, caps, vidroidsink->current_caps);
       GST_WARNING_OBJECT (vidroidsink, "Renegotiation not implemented");
       return FALSE;
     }
@@ -1033,6 +1047,8 @@ gst_vidroidsink_setcaps (GstBaseSink * bsink, GstCaps * caps)
 
   g_mutex_lock (vidroidsink->flow_lock);
   if (!vidroidsink->have_window) {
+    GST_INFO_OBJECT (vidroidsink,
+        "No window. Will attempt internal window creation");
     if (!(vidroidsink->window = gst_vidroidsink_create_window (vidroidsink,
                 width, height))) {
       GST_ERROR_OBJECT (vidroidsink, "Internal window creation failed!");
@@ -1052,6 +1068,8 @@ gst_vidroidsink_setcaps (GstBaseSink * bsink, GstCaps * caps)
 
   vidroidsink->surface_ready = TRUE;
   g_mutex_unlock (vidroidsink->flow_lock);
+
+  vidroidsink->current_caps = gst_caps_ref (caps);
   return TRUE;
 }
 
