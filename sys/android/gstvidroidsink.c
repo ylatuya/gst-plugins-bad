@@ -1037,7 +1037,6 @@ static void
 gst_vidroidsink_render_and_display (GstViDroidSink * vidroidsink,
     GstBuffer * buf)
 {
-  GLuint texture[1];
   gint w, h;
 
   if (!buf) {
@@ -1048,28 +1047,30 @@ gst_vidroidsink_render_and_display (GstViDroidSink * vidroidsink,
   w = GST_VIDEO_SINK_WIDTH (vidroidsink);
   h = GST_VIDEO_SINK_HEIGHT (vidroidsink);
   GST_DEBUG_OBJECT (vidroidsink,
-      "Got good buffer. Sink geometry is %dx%d size %d", w, h,
+      "Got good buffer %x. Sink geometry is %dx%d size %d", buf, w, h,
       GST_BUFFER_SIZE (buf));
 
-  glGenTextures (1, &texture[0]);
-  if (got_gl_error ("glGenTextures"))
-    goto HANDLE_ERROR;
-
-  /* Invalid with GLESv2
-     glEnable (GL_TEXTURE_2D);
-     if (got_gl_error ("glEnable"))
-     goto HANDLE_ERROR;
+  /* XXX: This should actually happen each time
+   * frame/window dimension changes.
    */
+  if (!vidroidsink->have_texture) {
+    GST_INFO_OBJECT (vidroidsink, "Doing initial texture setup");
 
-  glBindTexture (GL_TEXTURE_2D, texture[0]);
-  if (got_gl_error ("glBindTexture"))
-    goto HANDLE_ERROR;
+    glGenTextures (1, &vidroidsink->texture[0]);
+    if (got_gl_error ("glGenTextures"))
+      goto HANDLE_ERROR;
 
-  /* XXX: Test only but should work (tm) to show some garbled
-   * stuff at least. Need to find a way to pass real buffer
-   * with and height values when non power of two and no npot
-   * extension available. Harcoded right now at 256x256 for
-   * testing purposes.
+    glBindTexture (GL_TEXTURE_2D, vidroidsink->texture[0]);
+    if (got_gl_error ("glBindTexture"))
+      goto HANDLE_ERROR;
+
+    vidroidsink->have_texture = TRUE;
+  }
+
+  /* XXX: Test only but should work (tm).
+   * Need to find a way to pass real buffer's
+   * width and height values when non power
+   * of two and no npot extension available.
    */
   glTexImage2D (GL_TEXTURE_2D, 0, GL_RGB, w, h, 0, GL_RGB,
       GL_UNSIGNED_SHORT_5_6_5, GST_BUFFER_DATA (buf));

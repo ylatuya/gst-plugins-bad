@@ -123,12 +123,13 @@ struct _GstViDroidSink
   EGLNativeWindowType window;
   EGLSurface surface;
 
-  GLuint textid;
+  GLuint texture[1]; /* should be part of the custom buffer mambo */
 
   gboolean have_window;
   gboolean surface_ready;
   gboolean running;
   gboolean have_vbo;
+  gboolean have_texture;
 
   coord coordarray[4];
   unsigned short indexarray[5];
