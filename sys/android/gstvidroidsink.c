@@ -871,11 +871,11 @@ gst_vidroidsink_init_egl_surface (GstViDroidSink * vidroidsink)
   GST_DEBUG_OBJECT (vidroidsink, "sending %s to handle %d", vert_prog,
       verthandle);
   glShaderSource (verthandle, 1, &vert_prog, NULL);
-  if (got_gl_error ("glShaderSource"))
+  if (got_gl_error ("glShaderSource vertex"))
     goto HANDLE_ERROR;
 
   glCompileShader (verthandle);
-  if (got_gl_error ("glCompuleShader"))
+  if (got_gl_error ("glCompileShader vertex"))
     goto HANDLE_ERROR;
 
   glGetShaderiv (verthandle, GL_COMPILE_STATUS, &test);
@@ -884,14 +884,26 @@ gst_vidroidsink_init_egl_surface (GstViDroidSink * vidroidsink)
 
   fraghandle = glCreateShader (GL_FRAGMENT_SHADER);
   glShaderSource (fraghandle, 1, &frag_prog, NULL);
+  if (got_gl_error ("glShaderSource fragment"))
+    goto HANDLE_ERROR;
+
   glCompileShader (fraghandle);
+  if (got_gl_error ("glCompileShader fragment"))
+    goto HANDLE_ERROR;
+
   glGetShaderiv (fraghandle, GL_COMPILE_STATUS, &test);
   if (test != GL_FALSE)
     GST_DEBUG_OBJECT (vidroidsink, "Successfully compiled fragment program");
 
   prog = glCreateProgram ();
+  if (got_gl_error ("glCreateProgram"))
+    goto HANDLE_ERROR;
   glAttachShader (prog, verthandle);
+  if (got_gl_error ("glAttachShader vertices"))
+    goto HANDLE_ERROR;
   glAttachShader (prog, fraghandle);
+  if (got_gl_error ("glAttachShader fragments"))
+    goto HANDLE_ERROR;
   glLinkProgram (prog);
   glGetProgramiv (prog, GL_LINK_STATUS, &test);
   if (test != GL_FALSE)
@@ -917,6 +929,7 @@ static gboolean
 gst_vidroidsink_init_egl_display (GstViDroidSink * vidroidsink)
 {
   GLint egl_configs;
+  EGLint con_attribs[] = { EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE };
 
   GST_DEBUG_OBJECT (vidroidsink, "Enter EGL initial configuration");
 
@@ -951,7 +964,7 @@ gst_vidroidsink_init_egl_display (GstViDroidSink * vidroidsink)
    * vidroidsink->context = eglGetCurrentContext() ?
    */
   vidroidsink->context = eglCreateContext (vidroidsink->display,
-      vidroidsink->config, EGL_NO_CONTEXT, NULL);
+      vidroidsink->config, EGL_NO_CONTEXT, con_attribs);
 
   if (vidroidsink->context == EGL_NO_CONTEXT) {
     GST_ERROR_OBJECT (vidroidsink, "Error getting context, eglCreateContext");
@@ -959,8 +972,6 @@ gst_vidroidsink_init_egl_display (GstViDroidSink * vidroidsink)
   }
 
   GST_DEBUG_OBJECT (vidroidsink, "EGL Context: %x", vidroidsink->context);
-
-  glEnable (GL_TEXTURE_2D);
 
 //  glGenTextures (1, &vidroidsink->textid);
 //  glBindTexture (GL_TEXTURE_2D, vidroidsink->textid);
@@ -1044,9 +1055,11 @@ gst_vidroidsink_render_and_display (GstViDroidSink * vidroidsink,
   if (got_gl_error ("glGenTextures"))
     goto HANDLE_ERROR;
 
-  glEnable (GL_TEXTURE_2D);
-  if (got_gl_error ("glEnable"))
-    goto HANDLE_ERROR;
+  /* Invalid with GLESv2
+     glEnable (GL_TEXTURE_2D);
+     if (got_gl_error ("glEnable"))
+     goto HANDLE_ERROR;
+   */
 
   glBindTexture (GL_TEXTURE_2D, texture[0]);
   if (got_gl_error ("glBindTexture"))
@@ -1058,7 +1071,7 @@ gst_vidroidsink_render_and_display (GstViDroidSink * vidroidsink,
    * extension available. Harcoded right now at 256x256 for
    * testing purposes.
    */
-  glTexImage2D (GL_TEXTURE_2D, 0, GL_RGB, 256, 256, 0, GL_RGB,
+  glTexImage2D (GL_TEXTURE_2D, 0, GL_RGB, w, h, 0, GL_RGB,
       GL_UNSIGNED_SHORT_5_6_5, GST_BUFFER_DATA (buf));
   if (got_gl_error ("glTexImage2D"))
     goto HANDLE_ERROR;
@@ -1078,13 +1091,17 @@ gst_vidroidsink_render_and_display (GstViDroidSink * vidroidsink,
 
     vidroidsink->coordarray[0].x = 0;
     vidroidsink->coordarray[0].y = h;
+    //vidroidsink->coordarray[0].y = 1;
     vidroidsink->coordarray[0].z = 0;
 
     vidroidsink->coordarray[1].x = w;
+    //vidroidsink->coordarray[1].x = 1;
     vidroidsink->coordarray[1].y = h;
+    //vidroidsink->coordarray[1].y = 1;
     vidroidsink->coordarray[1].z = 0;
 
     vidroidsink->coordarray[2].x = w;
+    //vidroidsink->coordarray[2].x = 1;
     vidroidsink->coordarray[2].y = 0;
     vidroidsink->coordarray[2].z = 0;
 
@@ -1126,7 +1143,7 @@ gst_vidroidsink_render_and_display (GstViDroidSink * vidroidsink,
 
   glClearColor (1.0, 0.0, 0.0, 0.0);
   glClear (GL_COLOR_BUFFER_BIT);
-  glDrawElements (GL_TRIANGLES, 2, GL_UNSIGNED_SHORT, 0);
+  glDrawElements (GL_TRIANGLE_STRIP, 4, GL_UNSIGNED_SHORT, 0);
   if (got_gl_error ("glDrawElements"))
     goto HANDLE_ERROR;
 
