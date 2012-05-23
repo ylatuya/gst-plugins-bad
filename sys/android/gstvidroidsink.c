@@ -57,15 +57,12 @@
 
 /* Rationale on OpenGL ES version
  *
- * So we have a window/surface/display/context
- * now we need to render and display.
  * Android supports OpenGL ES 1.0 / 1.1 and since 2.2
  * (API level 8) it supports OpenGL ES 2.0. Most widely
  * supported version is OpenGL ES 1.1 according to
  * http://developer.android.com/resources/dashboard/opengl.html
- * and its both easier to use and more suitable for the
- * relative low complexity of what we are trying to achive,
- * so that's what we will use
+ *
+ * This Sink uses GLESv2
  */
 
 #ifdef HAVE_CONFIG_H
@@ -119,27 +116,6 @@ static const char *frag_prog = {
       "{"
       " vec4 t = texture2D(tex, opos);" " gl_FragColor = vec4(t.xyz, 0.5);" "}"
 };
-
-/*
-    static const Vertex3D vertices[] = {
-        {-1.0,  1.0, -0.0},
-        { 1.0,  1.0, -0.0},
-        {-1.0, -1.0, -0.0},
-        { 1.0, -1.0, -0.0}
-    };
-    static const Vector3D normals[] = {
-        {0.0, 0.0, 1.0},
-        {0.0, 0.0, 1.0},
-        {0.0, 0.0, 1.0},
-        {0.0, 0.0, 1.0}
-    };
-    static const GLfloat texCoords[] = {
-        0.0, 1.0,
-        1.0, 1.0,
-        0.0, 0.0,
-        1.0, 0.0
-    };
-*/
 
 /* Input capabilities.
  *
