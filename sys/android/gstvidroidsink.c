@@ -103,6 +103,42 @@ static PFNGLEGLIMAGETARGETTEXTURE2DOESPROC my_glEGLImageTargetTexture2DOES;
 static PFNEGLUNLOCKSURFACEKHRPROC my_eglUnlockSurfaceKHR;
 #endif
 
+static const char *vert_prog = {
+  "attribute vec4 position;"
+      "varying vec2 opos;"
+      "void main(void)"
+      "{" " opos = position.xy;" " gl_Position = position;" "}"
+};
+
+static const char *frag_prog = {
+  "varying vec2 opos;"
+      "uniform sampler2D tex;"
+      "void main(void)"
+      "{"
+      " vec4 t = texture2D(tex, opos);" " gl_FragColor = vec4(t.xyz, 0.5);" "}"
+};
+
+/*
+    static const Vertex3D vertices[] = {
+        {-1.0,  1.0, -0.0},
+        { 1.0,  1.0, -0.0},
+        {-1.0, -1.0, -0.0},
+        { 1.0, -1.0, -0.0}
+    };
+    static const Vector3D normals[] = {
+        {0.0, 0.0, 1.0},
+        {0.0, 0.0, 1.0},
+        {0.0, 0.0, 1.0},
+        {0.0, 0.0, 1.0}
+    };
+    static const GLfloat texCoords[] = {
+        0.0, 1.0,
+        1.0, 1.0,
+        0.0, 0.0,
+        1.0, 0.0
+    };
+*/
+
 /* Input capabilities.
  *
  * OpenGL ES Standard does not mandate YUV support
@@ -186,6 +222,7 @@ static gboolean gst_vidroidsink_init_egl_display (GstViDroidSink * vidroidsink);
 static gboolean gst_vidroidsink_init_egl_surface (GstViDroidSink * vidroidsink);
 static void gst_vidroidsink_render_and_display (GstViDroidSink * sink,
     GstBuffer * buf);
+static inline gboolean got_gl_error (const char *wtf);
 
 static GstBufferClass *gstvidroidsink_buffer_parent_class = NULL;
 #define GST_TYPE_VIDROIDBUFFER (gst_vidroidbuffer_get_type())
@@ -735,6 +772,19 @@ gst_vidroidsink_implements_init (GstImplementsInterfaceClass * klass)
   klass->supported = gst_vidroidsink_interface_supported;
 }
 
+static inline gboolean
+got_gl_error (const char *wtf)
+{
+  GLuint error = GL_NO_ERROR;
+
+  if ((error = glGetError ()) != GL_NO_ERROR) {
+    GST_CAT_ERROR (GST_CAT_DEFAULT, "GL ERROR: %s returned %x", wtf, error);
+    return TRUE;
+  }
+
+  return FALSE;
+}
+
 /* XXX: Review. Drafted */
 static EGLNativeWindowType
 gst_vidroidsink_create_window (GstViDroidSink * vidroidsink, gint width,
@@ -779,6 +829,10 @@ gst_vidroidsink_expose (GstXOverlay * overlay)
 static gboolean
 gst_vidroidsink_init_egl_surface (GstViDroidSink * vidroidsink)
 {
+  GLint test;
+  GLuint verthandle, fraghandle, prog;
+  const char *glexts;
+
   GST_DEBUG_OBJECT (vidroidsink, "Enter EGL surface setup");
 
   /* XXX: Impossible?. Check logic and remove if not needed */
@@ -802,8 +856,52 @@ gst_vidroidsink_init_egl_surface (GstViDroidSink * vidroidsink)
     goto HANDLE_EGL_ERROR;
   }
 
-  /* Ship it! */
+  /* Print available GL Extensions */
+  glexts = (const char *) glGetString (GL_EXTENSIONS);
+  GST_DEBUG_OBJECT (vidroidsink, "GL EXTS: %s\n", glexts);
+
+  /* We have a surface! */
   vidroidsink->surface_ready = TRUE;
+
+  /* Init vertex and fragment progs.
+   * need to be runtime conditional or ifdefed if I'm lazy
+   */
+
+  verthandle = glCreateShader (GL_VERTEX_SHADER);
+  GST_DEBUG_OBJECT (vidroidsink, "sending %s to handle %d", vert_prog,
+      verthandle);
+  glShaderSource (verthandle, 1, &vert_prog, NULL);
+  if (got_gl_error ("glShaderSource"))
+    goto HANDLE_ERROR;
+
+  glCompileShader (verthandle);
+  if (got_gl_error ("glCompuleShader"))
+    goto HANDLE_ERROR;
+
+  glGetShaderiv (verthandle, GL_COMPILE_STATUS, &test);
+  if (test != GL_FALSE)
+    GST_DEBUG_OBJECT (vidroidsink, "Successfully compiled vertex program");
+
+  fraghandle = glCreateShader (GL_FRAGMENT_SHADER);
+  glShaderSource (fraghandle, 1, &frag_prog, NULL);
+  glCompileShader (fraghandle);
+  glGetShaderiv (fraghandle, GL_COMPILE_STATUS, &test);
+  if (test != GL_FALSE)
+    GST_DEBUG_OBJECT (vidroidsink, "Successfully compiled fragment program");
+
+  prog = glCreateProgram ();
+  glAttachShader (prog, verthandle);
+  glAttachShader (prog, fraghandle);
+  glLinkProgram (prog);
+  glGetProgramiv (prog, GL_LINK_STATUS, &test);
+  if (test != GL_FALSE)
+    GST_DEBUG_OBJECT (vidroidsink, "GLES: Successfully linked program");
+
+  glUseProgram (prog);
+  if (got_gl_error ("glUseProgram"))
+    goto HANDLE_ERROR;
+
+  g_mutex_unlock (vidroidsink->flow_lock);
   return TRUE;
 
   /* Errors */
@@ -847,6 +945,8 @@ gst_vidroidsink_init_egl_display (GstViDroidSink * vidroidsink)
     goto HANDLE_ERROR;
   }
 
+  eglBindAPI (EGL_OPENGL_ES_API);
+
   /* XXX: Should really attempt tp create a new one or ...
    * vidroidsink->context = eglGetCurrentContext() ?
    */
@@ -861,8 +961,9 @@ gst_vidroidsink_init_egl_display (GstViDroidSink * vidroidsink)
   GST_DEBUG_OBJECT (vidroidsink, "EGL Context: %x", vidroidsink->context);
 
   glEnable (GL_TEXTURE_2D);
-  glGenTextures (1, &vidroidsink->textid);
-  glBindTexture (GL_TEXTURE_2D, vidroidsink->textid);
+
+//  glGenTextures (1, &vidroidsink->textid);
+//  glBindTexture (GL_TEXTURE_2D, vidroidsink->textid);
 
   return TRUE;
 
@@ -925,6 +1026,115 @@ static void
 gst_vidroidsink_render_and_display (GstViDroidSink * vidroidsink,
     GstBuffer * buf)
 {
+  GLuint texture[1];
+  gint w, h;
+
+  if (!buf) {
+    GST_ERROR_OBJECT (vidroidsink, "Null buffer, no past queue implemented");
+    goto HANDLE_ERROR;
+  }
+
+  w = GST_VIDEO_SINK_WIDTH (vidroidsink);
+  h = GST_VIDEO_SINK_HEIGHT (vidroidsink);
+  GST_DEBUG_OBJECT (vidroidsink,
+      "Got good buffer. Sink geometry is %dx%d size %d", w, h,
+      GST_BUFFER_SIZE (buf));
+
+  glGenTextures (1, &texture[0]);
+  if (got_gl_error ("glGenTextures"))
+    goto HANDLE_ERROR;
+
+  glEnable (GL_TEXTURE_2D);
+  if (got_gl_error ("glEnable"))
+    goto HANDLE_ERROR;
+
+  glBindTexture (GL_TEXTURE_2D, texture[0]);
+  if (got_gl_error ("glBindTexture"))
+    goto HANDLE_ERROR;
+
+  /* XXX: Test only but should work (tm) to show some garbled
+   * stuff at least. Need to find a way to pass real buffer
+   * with and height values when non power of two and no npot
+   * extension available. Harcoded right now at 256x256 for
+   * testing purposes.
+   */
+  glTexImage2D (GL_TEXTURE_2D, 0, GL_RGB, 256, 256, 0, GL_RGB,
+      GL_UNSIGNED_SHORT_5_6_5, GST_BUFFER_DATA (buf));
+  if (got_gl_error ("glTexImage2D"))
+    goto HANDLE_ERROR;
+
+  /* resizing shite */
+
+  glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  if (got_gl_error ("glTexParameteri"))
+    goto HANDLE_ERROR;
+
+  /* XXX: VBO stuff this actually makes more sense on the setcaps stub?
+   * The way it is right now makes this shit happen only for the first buffer
+   * though so I guess it should KINDA work */
+  if (!vidroidsink->have_vbo) {
+    GST_DEBUG_OBJECT (vidroidsink, "Doing initial VBO setup");
+
+    vidroidsink->coordarray[0].x = 0;
+    vidroidsink->coordarray[0].y = h;
+    vidroidsink->coordarray[0].z = 0;
+
+    vidroidsink->coordarray[1].x = w;
+    vidroidsink->coordarray[1].y = h;
+    vidroidsink->coordarray[1].z = 0;
+
+    vidroidsink->coordarray[2].x = w;
+    vidroidsink->coordarray[2].y = 0;
+    vidroidsink->coordarray[2].z = 0;
+
+    vidroidsink->coordarray[3].x = 0;
+    vidroidsink->coordarray[3].y = 0;
+    vidroidsink->coordarray[3].z = 0;
+
+    vidroidsink->indexarray[0] = 0;
+    vidroidsink->indexarray[1] = 1;
+    vidroidsink->indexarray[2] = 2;
+    vidroidsink->indexarray[3] = 3;
+    vidroidsink->indexarray[4] = 0;
+
+    glGenBuffers (1, &vidroidsink->vdata);
+    glGenBuffers (1, &vidroidsink->idata);
+    if (got_gl_error ("glGenBuffers"))
+      goto HANDLE_ERROR;
+
+    glBindBuffer (GL_ARRAY_BUFFER, vidroidsink->vdata);
+    if (got_gl_error ("glBindBuffer vdata"))
+      goto HANDLE_ERROR;
+
+    glBufferData (GL_ARRAY_BUFFER, sizeof (vidroidsink->coordarray),
+        vidroidsink->coordarray, GL_STATIC_DRAW);
+    if (got_gl_error ("glBufferData vdata"))
+      goto HANDLE_ERROR;
+
+    glBindBuffer (GL_ELEMENT_ARRAY_BUFFER, vidroidsink->idata);
+    if (got_gl_error ("glBindBuffer idata"))
+      goto HANDLE_ERROR;
+
+    glBufferData (GL_ELEMENT_ARRAY_BUFFER, sizeof (vidroidsink->indexarray),
+        vidroidsink->indexarray, GL_STATIC_DRAW);
+    if (got_gl_error ("glBufferData idata"))
+      goto HANDLE_ERROR;
+
+    vidroidsink->have_vbo = TRUE;
+  }
+
+  glClearColor (1.0, 0.0, 0.0, 0.0);
+  glClear (GL_COLOR_BUFFER_BIT);
+  glDrawElements (GL_TRIANGLES, 2, GL_UNSIGNED_SHORT, 0);
+  if (got_gl_error ("glDrawElements"))
+    goto HANDLE_ERROR;
+
+  eglSwapBuffers (vidroidsink->display, vidroidsink->surface);
+
+  return;
+
+/*
   EGLImageKHR img = EGL_NO_IMAGE_KHR;
   EGLint attrs[] = { EGL_IMAGE_PRESERVED_KHR,
     EGL_FALSE, EGL_NONE, EGL_NONE
@@ -947,6 +1157,8 @@ gst_vidroidsink_render_and_display (GstViDroidSink * vidroidsink,
 
 HANDLE_EGL_ERROR:
   GST_ERROR_OBJECT (vidroidsink, "EGL call returned error %x", eglGetError ());
+*/
+
 HANDLE_ERROR:
   GST_ERROR_OBJECT (vidroidsink, "Rendering disabled for this frame");
 }

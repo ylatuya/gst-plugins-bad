@@ -74,6 +74,13 @@ typedef struct _GstViDroidSinkClass GstViDroidSinkClass;
 
 typedef struct _GstViDroidImageFmt GstViDroidImageFmt;
 
+typedef struct _coord
+{
+  float x;
+  float y;
+  float z;
+} coord;
+
 struct _GstViDroidImageFmt
 {
   gint fmt;
@@ -121,6 +128,11 @@ struct _GstViDroidSink
   gboolean have_window;
   gboolean surface_ready;
   gboolean running;
+  gboolean have_vbo;
+
+  coord coordarray[4];
+  unsigned short indexarray[5];
+  unsigned int vdata, idata;
 
   /* props */
   gboolean silent;
