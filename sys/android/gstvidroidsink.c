@@ -836,13 +836,13 @@ gst_vidroidsink_init_egl_surface (GstViDroidSink * vidroidsink)
 
   /* Print available GL Extensions */
   glexts = (const char *) glGetString (GL_EXTENSIONS);
-  GST_DEBUG_OBJECT (vidroidsink, "GL EXTS: %s\n", glexts);
+  GST_DEBUG_OBJECT (vidroidsink, "Available GL extensions: %s\n", glexts);
 
   /* We have a surface! */
   vidroidsink->surface_ready = TRUE;
 
   /* Init vertex and fragment progs.
-   * need to be runtime conditional or ifdefed if I'm lazy
+   * XXX: Need to be runtime conditional or ifdefed
    */
 
   verthandle = glCreateShader (GL_VERTEX_SHADER);
@@ -951,9 +951,6 @@ gst_vidroidsink_init_egl_display (GstViDroidSink * vidroidsink)
 
   GST_DEBUG_OBJECT (vidroidsink, "EGL Context: %x", vidroidsink->context);
 
-//  glGenTextures (1, &vidroidsink->textid);
-//  glBindTexture (GL_TEXTURE_2D, vidroidsink->textid);
-
   return TRUE;
 
   /* Errors */
@@ -1045,26 +1042,24 @@ gst_vidroidsink_render_and_display (GstViDroidSink * vidroidsink,
     vidroidsink->have_texture = TRUE;
   }
 
-  /* XXX: Test only but should work (tm).
-   * Need to find a way to pass real buffer's
-   * width and height values when non power
-   * of two and no npot extension available.
+  /* XXX: Need to find a way to pass real buffer's
+   * width and height values when non power of two
+   * and no npot extension available.
    */
   glTexImage2D (GL_TEXTURE_2D, 0, GL_RGB, w, h, 0, GL_RGB,
       GL_UNSIGNED_SHORT_5_6_5, GST_BUFFER_DATA (buf));
   if (got_gl_error ("glTexImage2D"))
     goto HANDLE_ERROR;
 
-  /* resizing shite */
-
+  /* resizing params */
   glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
   glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
   if (got_gl_error ("glTexParameteri"))
     goto HANDLE_ERROR;
 
   /* XXX: VBO stuff this actually makes more sense on the setcaps stub?
-   * The way it is right now makes this shit happen only for the first buffer
-   * though so I guess it should KINDA work */
+   * The way it is right now makes this happen only for the first buffer
+   * though so I guess it should work */
   if (!vidroidsink->have_vbo) {
     GST_DEBUG_OBJECT (vidroidsink, "Doing initial VBO setup");
 
@@ -1204,8 +1199,6 @@ gst_vidroidsink_setcaps (GstBaseSink * bsink, GstCaps * caps)
   GST_DEBUG_OBJECT (vidroidsink,
       "In setcaps. Possible caps %" GST_PTR_FORMAT ", setting caps %"
       GST_PTR_FORMAT, vidroidsink->current_caps, caps);
-
-  /* Quick safe measures */
 
   if (!(ret = gst_video_format_parse_caps (caps, &vidroidsink->format, &width,
               &height))) {
