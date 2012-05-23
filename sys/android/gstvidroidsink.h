@@ -123,7 +123,7 @@ struct _GstViDroidSink
   EGLNativeWindowType window;
   EGLSurface surface;
 
-  GLuint texture[1]; /* should be part of the custom buffer mambo */
+  GLuint texture[1];            /* should be part of the custom buffer mambo */
 
   gboolean have_window;
   gboolean surface_ready;
@@ -132,7 +132,7 @@ struct _GstViDroidSink
   gboolean have_texture;
 
   coord coordarray[4];
-  unsigned short indexarray[5];
+  unsigned short indexarray[4];
   unsigned int vdata, idata;
 
   /* props */

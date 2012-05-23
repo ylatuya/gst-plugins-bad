@@ -104,10 +104,12 @@ static PFNEGLUNLOCKSURFACEKHRPROC my_eglUnlockSurfaceKHR;
 #endif
 
 static const char *vert_prog = {
-  "attribute vec4 position;"
+  "attribute vec3 position;"
       "varying vec2 opos;"
       "void main(void)"
-      "{" " opos = position.xy;" " gl_Position = position;" "}"
+      "{"
+      " opos = vec2((position.x + 1.0)/2.0, ((-1.0 * position.y) + 1.0)/2.0);"
+      " gl_Position = vec4(position, 1.0);" "}"
 };
 
 static const char *frag_prog = {
@@ -913,6 +915,9 @@ gst_vidroidsink_init_egl_surface (GstViDroidSink * vidroidsink)
   if (got_gl_error ("glUseProgram"))
     goto HANDLE_ERROR;
 
+  /* XXX: Move away */
+  glViewport (0, 0, 320, 240);
+
   g_mutex_unlock (vidroidsink->flow_lock);
   return TRUE;
 
@@ -1090,31 +1095,26 @@ gst_vidroidsink_render_and_display (GstViDroidSink * vidroidsink,
   if (!vidroidsink->have_vbo) {
     GST_DEBUG_OBJECT (vidroidsink, "Doing initial VBO setup");
 
-    vidroidsink->coordarray[0].x = 0;
-    vidroidsink->coordarray[0].y = h;
-    //vidroidsink->coordarray[0].y = 1;
+    vidroidsink->coordarray[0].x = -1;
+    vidroidsink->coordarray[0].y = 1;
     vidroidsink->coordarray[0].z = 0;
 
-    vidroidsink->coordarray[1].x = w;
-    //vidroidsink->coordarray[1].x = 1;
-    vidroidsink->coordarray[1].y = h;
-    //vidroidsink->coordarray[1].y = 1;
+    vidroidsink->coordarray[1].x = 1;
+    vidroidsink->coordarray[1].y = 1;
     vidroidsink->coordarray[1].z = 0;
 
-    vidroidsink->coordarray[2].x = w;
-    //vidroidsink->coordarray[2].x = 1;
-    vidroidsink->coordarray[2].y = 0;
+    vidroidsink->coordarray[2].x = 1;
+    vidroidsink->coordarray[2].y = -1;
     vidroidsink->coordarray[2].z = 0;
 
-    vidroidsink->coordarray[3].x = 0;
-    vidroidsink->coordarray[3].y = 0;
+    vidroidsink->coordarray[3].x = -1;
+    vidroidsink->coordarray[3].y = -1;
     vidroidsink->coordarray[3].z = 0;
 
-    vidroidsink->indexarray[0] = 0;
-    vidroidsink->indexarray[1] = 1;
-    vidroidsink->indexarray[2] = 2;
+    vidroidsink->indexarray[0] = 1;
+    vidroidsink->indexarray[1] = 2;
+    vidroidsink->indexarray[2] = 0;
     vidroidsink->indexarray[3] = 3;
-    vidroidsink->indexarray[4] = 0;
 
     glGenBuffers (1, &vidroidsink->vdata);
     glGenBuffers (1, &vidroidsink->idata);
@@ -1129,6 +1129,11 @@ gst_vidroidsink_render_and_display (GstViDroidSink * vidroidsink,
         vidroidsink->coordarray, GL_STATIC_DRAW);
     if (got_gl_error ("glBufferData vdata"))
       goto HANDLE_ERROR;
+
+    glVertexAttribPointer (0, 3, GL_FLOAT, GL_FALSE, 0, 0);
+    if (got_gl_error ("glVertexAttribPointer"))
+      goto HANDLE_ERROR;
+    glEnableVertexAttribArray (0);
 
     glBindBuffer (GL_ELEMENT_ARRAY_BUFFER, vidroidsink->idata);
     if (got_gl_error ("glBindBuffer idata"))
