@@ -891,9 +891,6 @@ gst_vidroidsink_init_egl_surface (GstViDroidSink * vidroidsink)
   if (got_gl_error ("glUseProgram"))
     goto HANDLE_ERROR;
 
-  /* XXX: Move away */
-  glViewport (0, 0, 320, 240);
-
   g_mutex_unlock (vidroidsink->flow_lock);
   return TRUE;
 
@@ -1119,6 +1116,8 @@ gst_vidroidsink_render_and_display (GstViDroidSink * vidroidsink,
         vidroidsink->indexarray, GL_STATIC_DRAW);
     if (got_gl_error ("glBufferData idata"))
       goto HANDLE_ERROR;
+
+    glViewport (0, 0, w, h);
 
     vidroidsink->have_vbo = TRUE;
   }
