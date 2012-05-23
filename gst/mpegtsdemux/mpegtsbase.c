@@ -1368,7 +1368,7 @@ mpegts_base_chain (GstPad * pad, GstBuffer * buf)
   MpegTSPacketizer2 *packetizer;
   MpegTSPacketizerPacket packet;
 
-  base = GST_MPEGTS_BASE (gst_object_get_parent (GST_OBJECT (pad)));
+  base = GST_MPEGTS_BASE (GST_OBJECT_PARENT (pad));
   packetizer = base->packetizer;
 
   if (G_UNLIKELY (base->queried_latency == FALSE)) {
@@ -1416,7 +1416,6 @@ mpegts_base_chain (GstPad * pad, GstBuffer * buf)
     mpegts_packetizer_clear_packet (base->packetizer, &packet);
   }
 
-  gst_object_unref (base);
   return res;
 }
 
@@ -1530,6 +1529,7 @@ static void
 mpegts_base_loop (MpegTSBase * base)
 {
   GstFlowReturn ret = GST_FLOW_ERROR;
+
   switch (base->mode) {
     case BASE_MODE_SCANNING:
       /* Find first sync point */
