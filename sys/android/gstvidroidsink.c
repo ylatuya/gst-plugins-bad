@@ -245,7 +245,7 @@ GST_BOILERPLATE_FULL (GstViDroidSink, gst_vidroidsink, GstVideoSink,
   vidroidbuffer->format =
       gst_vidroidsink_get_compat_format_from_caps (vidroidsink, caps);
 
-  if (vidroidbuffer->format == -1) {
+  if (vidroidbuffer->format == GST_VIDROIDSINK_IMAGE_NOFMT) {
     GST_WARNING_OBJECT (vidroidsink,
         "failed to get format from caps %" GST_PTR_FORMAT, caps);
     GST_ERROR_OBJECT (vidroidsink,
@@ -352,14 +352,17 @@ gst_vidroidbuffer_free (GstViDroidBuffer * vidroidbuffer)
    * as a reference */
   vidroidbuffer->width = -1;
   vidroidbuffer->height = -1;
-
   gst_buffer_unref (GST_BUFFER (vidroidbuffer));
 }
 
 static void
-gst_vidroidbuffer_init (GstViDroidBuffer * vidroidsink, gpointer g_class)
+gst_vidroidbuffer_init (GstViDroidBuffer * vidroidbuffer, gpointer g_class)
 {
-  return;
+  vidroidbuffer->width = 0;
+  vidroidbuffer->height = 0;
+  vidroidbuffer->size = 0;
+  vidroidbuffer->image = NULL;
+  vidroidbuffer->format = GST_VIDROIDSINK_IMAGE_NOFMT;
 }
 
 static void
