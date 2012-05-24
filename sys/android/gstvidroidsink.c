@@ -1037,15 +1037,18 @@ gst_vidroidsink_render_and_display (GstViDroidSink * vidroidsink,
   if (!vidroidsink->have_texture) {
     GST_INFO_OBJECT (vidroidsink, "Doing initial texture setup");
 
+    g_mutex_lock (vidroidsink->flow_lock);
+
     glGenTextures (1, &vidroidsink->texture[0]);
     if (got_gl_error ("glGenTextures"))
-      goto HANDLE_ERROR;
+      goto HANDLE_ERROR_LOCKED;
 
     glBindTexture (GL_TEXTURE_2D, vidroidsink->texture[0]);
     if (got_gl_error ("glBindTexture"))
-      goto HANDLE_ERROR;
+      goto HANDLE_ERROR_LOCKED;
 
     vidroidsink->have_texture = TRUE;
+    g_mutex_unlock (vidroidsink->flow_lock);
   }
 
   /* XXX: Need to find a way to pass real buffer's
@@ -1068,6 +1071,8 @@ gst_vidroidsink_render_and_display (GstViDroidSink * vidroidsink,
    * though so I guess it should work */
   if (!vidroidsink->have_vbo) {
     GST_DEBUG_OBJECT (vidroidsink, "Doing initial VBO setup");
+
+    g_mutex_lock (vidroidsink->flow_lock);
 
     vidroidsink->coordarray[0].x = -1;
     vidroidsink->coordarray[0].y = 1;
@@ -1093,34 +1098,35 @@ gst_vidroidsink_render_and_display (GstViDroidSink * vidroidsink,
     glGenBuffers (1, &vidroidsink->vdata);
     glGenBuffers (1, &vidroidsink->idata);
     if (got_gl_error ("glGenBuffers"))
-      goto HANDLE_ERROR;
+      goto HANDLE_ERROR_LOCKED;
 
     glBindBuffer (GL_ARRAY_BUFFER, vidroidsink->vdata);
     if (got_gl_error ("glBindBuffer vdata"))
-      goto HANDLE_ERROR;
+      goto HANDLE_ERROR_LOCKED;
 
     glBufferData (GL_ARRAY_BUFFER, sizeof (vidroidsink->coordarray),
         vidroidsink->coordarray, GL_STATIC_DRAW);
     if (got_gl_error ("glBufferData vdata"))
-      goto HANDLE_ERROR;
+      goto HANDLE_ERROR_LOCKED;
 
     glVertexAttribPointer (0, 3, GL_FLOAT, GL_FALSE, 0, 0);
     if (got_gl_error ("glVertexAttribPointer"))
-      goto HANDLE_ERROR;
+      goto HANDLE_ERROR_LOCKED;
     glEnableVertexAttribArray (0);
 
     glBindBuffer (GL_ELEMENT_ARRAY_BUFFER, vidroidsink->idata);
     if (got_gl_error ("glBindBuffer idata"))
-      goto HANDLE_ERROR;
+      goto HANDLE_ERROR_LOCKED;
 
     glBufferData (GL_ELEMENT_ARRAY_BUFFER, sizeof (vidroidsink->indexarray),
         vidroidsink->indexarray, GL_STATIC_DRAW);
     if (got_gl_error ("glBufferData idata"))
-      goto HANDLE_ERROR;
+      goto HANDLE_ERROR_LOCKED;
 
     glViewport (0, 0, w, h);
 
     vidroidsink->have_vbo = TRUE;
+    g_mutex_unlock (vidroidsink->flow_lock);
   }
 
   glClearColor (1.0, 0.0, 0.0, 0.0);
@@ -1157,7 +1163,8 @@ gst_vidroidsink_render_and_display (GstViDroidSink * vidroidsink,
 HANDLE_EGL_ERROR:
   GST_ERROR_OBJECT (vidroidsink, "EGL call returned error %x", eglGetError ());
 */
-
+HANDLE_ERROR_LOCKED:
+  g_mutex_unlock (vidroidsink->flow_lock);
 HANDLE_ERROR:
   GST_ERROR_OBJECT (vidroidsink, "Rendering disabled for this frame");
 }
@@ -1186,9 +1193,7 @@ gst_vidroidsink_show_frame (GstVideoSink * vsink, GstBuffer * buf)
       "available");
 #endif
 
-  g_mutex_lock (vidroidsink->flow_lock);
   gst_vidroidsink_render_and_display (vidroidsink, buf);
-  g_mutex_unlock (vidroidsink->flow_lock);
 
   return GST_FLOW_OK;
 }
