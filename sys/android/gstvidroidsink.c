@@ -839,7 +839,7 @@ gst_vidroidsink_init_egl_surface (GstViDroidSink * vidroidsink)
   GST_DEBUG_OBJECT (vidroidsink, "Available GL extensions: %s\n", glexts);
 
   /* We have a surface! */
-  vidroidsink->surface_ready = TRUE;
+  vidroidsink->have_surface = TRUE;
 
   /* Init vertex and fragment progs.
    * XXX: Need to be runtime conditional or ifdefed
@@ -1172,7 +1172,7 @@ gst_vidroidsink_show_frame (GstVideoSink * vsink, GstBuffer * buf)
     return GST_FLOW_ERROR;
   }
 
-  if (!vidroidsink->surface_ready) {
+  if (!vidroidsink->have_surface) {
     GST_ERROR_OBJECT (vidroidsink, "I don't have a surface to render to");
     return GST_FLOW_ERROR;
   }
@@ -1270,7 +1270,7 @@ gst_vidroidsink_setcaps (GstBaseSink * bsink, GstCaps * caps)
     return FALSE;
   }
 
-  vidroidsink->surface_ready = TRUE;
+  vidroidsink->have_surface = TRUE;
   g_mutex_unlock (vidroidsink->flow_lock);
 
   vidroidsink->current_caps = gst_caps_ref (caps);
@@ -1400,7 +1400,7 @@ gst_vidroidsink_init (GstViDroidSink * vidroidsink,
 {
   /* Init defaults */
   vidroidsink->have_window = FALSE;
-  vidroidsink->surface_ready = FALSE;
+  vidroidsink->have_surface = FALSE;
   vidroidsink->flow_lock = g_mutex_new ();
 }
 
