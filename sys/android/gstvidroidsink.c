@@ -711,12 +711,12 @@ gst_vidroidsink_start (GstBaseSink * sink)
    * or reglQueryString(display, EGL_EXTENSIONS) here too. 
    */
 
-  g_mutex_unlock (vidroidsink->flow_lock);
-
   if (!ret) {
     GST_ERROR_OBJECT (vidroidsink, "Couldn't init EGL display. Bailing out");
     goto HANDLE_ERROR;
   }
+
+  g_mutex_unlock (vidroidsink->flow_lock);
 
   return TRUE;
 
