@@ -45,24 +45,29 @@
 /**
  * SECTION:element-vidroidsink
  *
- * GStreamer vout sink using GLES/EGL
- *
+ * This is a vout sink for Android using GLESv2/EGL. It also
+ * works on a X11/Mesa environment provided it's base set of
+ * requirements are met.
+ * 
  * <refsect2>
- * <title>Example launch line</title>
- * |[
- * gst-launch -v -m fakesrc ! vidroidsink ! fakesink silent=TRUE
- * ]|
- * </refsect2>
- */
-
-/* Rationale on OpenGL ES version
- *
+ * <title>Rationale on OpenGL ES version</title>
+ * <para>
  * Android supports OpenGL ES 1.0 / 1.1 and since 2.2
  * (API level 8) it supports OpenGL ES 2.0. Most widely
  * supported version is OpenGL ES 1.1 according to
  * http://developer.android.com/resources/dashboard/opengl.html
- *
+ * </para>
+ * <para>
  * This Sink uses GLESv2
+ * </para>
+ * </refsect2>
+ *
+ * <refsect2>
+ * <title>Example launch line</title>
+ * |[
+ * gst-launch -v -m videotestsrc ! vidroidsink silent=TRUE
+ * ]|
+ * </refsect2>
  */
 
 #ifdef HAVE_CONFIG_H
@@ -86,8 +91,9 @@
 GST_DEBUG_CATEGORY_STATIC (gst_vidroidsink_debug);
 #define GST_CAT_DEFAULT gst_vidroidsink_debug
 
-/* These should be defined per model.
- * Galaxy Nexus:
+/* XXX: These should be defined per model someway
+ * but the Galaxy Nexus's were taken as a reference
+ * for now on:
  */
 #define VIDROIDSINK_MAX_FRAME_WIDTH 1280
 #define VIDROIDSINK_MAX_FRAME_HEIGHT 720
@@ -280,7 +286,7 @@ gst_vidroidbuffer_destroy (GstViDroidBuffer * vidroidbuffer)
 
   vidroidsink = vidroidbuffer->vidroidsink;
   if (G_UNLIKELY (vidroidsink == NULL))
-    goto no_sink;
+    goto NO_SINK;
 
   g_return_if_fail (GST_IS_VIDROIDSINK (vidroidsink));
 
@@ -306,11 +312,9 @@ gst_vidroidbuffer_destroy (GstViDroidBuffer * vidroidbuffer)
 
   return;
 
-no_sink:
-  {
-    GST_WARNING ("no sink found");
-    return;
-  }
+NO_SINK:
+  GST_WARNING ("no sink found");
+  return;
 }
 
 /* XXX: Missing implementation.
@@ -327,7 +331,7 @@ gst_vidroidbuffer_finalize (GstViDroidBuffer * vidroidbuffer)
 
   vidroidsink = vidroidbuffer->vidroidsink;
   if (G_UNLIKELY (vidroidsink == NULL))
-    goto no_sink;
+    goto NO_SINK;
 
   g_return_if_fail (GST_IS_VIDROIDSINK (vidroidsink));
 
@@ -335,11 +339,9 @@ gst_vidroidbuffer_finalize (GstViDroidBuffer * vidroidbuffer)
 
   return;
 
-no_sink:
-  {
-    GST_WARNING ("no sink found");
-    return;
-  }
+NO_SINK:
+  GST_WARNING ("no sink found");
+  return;
 }
 
 static void

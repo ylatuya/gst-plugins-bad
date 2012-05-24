@@ -87,6 +87,7 @@ struct _GstViDroidImageFmt
   GstCaps *caps;
 };
 
+/* XXX: Maybe use GstVideoRectangle for the image data? */
 struct _GstViDroidBuffer
 {
   GstBuffer buffer;
@@ -102,7 +103,6 @@ struct _GstViDroidBuffer
 struct _GstViDroidSink
 {
   GstVideoSink videosink;
-  GstVideoRectangle render_area;
   GstVideoFormat format;
   GstCaps *current_caps;
   GstPad *sink;
