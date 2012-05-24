@@ -1401,6 +1401,9 @@ gst_vidroidsink_init (GstViDroidSink * vidroidsink,
   /* Init defaults */
   vidroidsink->have_window = FALSE;
   vidroidsink->have_surface = FALSE;
+  vidroidsink->have_vbo = FALSE;
+  vidroidsink->have_texture = FALSE;
+  vidroidsink->running = FALSE; /* XXX: unused */
   vidroidsink->flow_lock = g_mutex_new ();
 }
 
