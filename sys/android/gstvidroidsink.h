@@ -119,7 +119,6 @@ struct _GstViDroidSink
   EGLConfig config;
   EGLContext context;
   EGLDisplay display;
-  EGLint majorVersion, minorVersion;
   EGLNativeWindowType window;
   EGLSurface surface;
 

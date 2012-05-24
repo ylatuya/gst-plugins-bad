@@ -907,6 +907,8 @@ static gboolean
 gst_vidroidsink_init_egl_display (GstViDroidSink * vidroidsink)
 {
   GLint egl_configs;
+  EGLint egl_major, egl_minor;
+
   EGLint con_attribs[] = { EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE };
 
   GST_DEBUG_OBJECT (vidroidsink, "Enter EGL initial configuration");
@@ -917,14 +919,13 @@ gst_vidroidsink_init_egl_display (GstViDroidSink * vidroidsink)
     goto HANDLE_ERROR;          /* No EGL error is set by eglGetDisplay() */
   }
 
-  if (eglInitialize (vidroidsink->display, &vidroidsink->majorVersion,
-          &vidroidsink->minorVersion) == EGL_FALSE) {
+  if (eglInitialize (vidroidsink->display, &egl_major, &egl_minor)
+      == EGL_FALSE) {
     GST_ERROR_OBJECT (vidroidsink, "Could not init EGL display connection");
     goto HANDLE_EGL_ERROR;
   }
 
-  GST_DEBUG_OBJECT (vidroidsink, "EGL version %d.%d", vidroidsink->majorVersion,
-      vidroidsink->minorVersion);
+  GST_DEBUG_OBJECT (vidroidsink, "EGL version %d.%d", egl_major, egl_minor);
   GST_DEBUG_OBJECT (vidroidsink, "Available EGL extensions: %s",
       eglQueryString (vidroidsink->display, EGL_EXTENSIONS));
 
