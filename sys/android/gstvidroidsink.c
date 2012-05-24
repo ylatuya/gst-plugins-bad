@@ -824,19 +824,21 @@ gst_vidroidsink_init_egl_surface (GstViDroidSink * vidroidsink)
     goto HANDLE_ERROR;
   }
 
+  g_mutex_lock (vidroidsink->flow_lock);
+
   vidroidsink->surface = eglCreateWindowSurface (vidroidsink->display,
       vidroidsink->config, vidroidsink->window, NULL);
 
   if (vidroidsink->surface == EGL_NO_SURFACE) {
     GST_ERROR_OBJECT (vidroidsink, "Can't create surface, eglCreateSurface");
-    goto HANDLE_EGL_ERROR;
+    goto HANDLE_EGL_ERROR_LOCKED;
   }
 
   if (!eglMakeCurrent (vidroidsink->display, vidroidsink->surface,
           vidroidsink->surface, vidroidsink->context)) {
     GST_ERROR_OBJECT (vidroidsink, "Couldn't bind surface/context, "
         "eglMakeCurrent");
-    goto HANDLE_EGL_ERROR;
+    goto HANDLE_EGL_ERROR_LOCKED;
   }
 
   /* Print available GL Extensions */
@@ -845,6 +847,7 @@ gst_vidroidsink_init_egl_surface (GstViDroidSink * vidroidsink)
 
   /* We have a surface! */
   vidroidsink->have_surface = TRUE;
+  g_mutex_unlock (vidroidsink->flow_lock);
 
   /* Init vertex and fragment progs.
    * XXX: Need to be runtime conditional or ifdefed
@@ -896,15 +899,33 @@ gst_vidroidsink_init_egl_surface (GstViDroidSink * vidroidsink)
   if (got_gl_error ("glUseProgram"))
     goto HANDLE_ERROR;
 
-  g_mutex_unlock (vidroidsink->flow_lock);
+  /* Generate and bind texture */
+  if (!vidroidsink->have_texture) {
+    GST_INFO_OBJECT (vidroidsink, "Doing initial texture setup");
+
+    g_mutex_lock (vidroidsink->flow_lock);
+
+    glGenTextures (1, &vidroidsink->texture[0]);
+    if (got_gl_error ("glGenTextures"))
+      goto HANDLE_ERROR_LOCKED;
+
+    glBindTexture (GL_TEXTURE_2D, vidroidsink->texture[0]);
+    if (got_gl_error ("glBindTexture"))
+      goto HANDLE_ERROR_LOCKED;
+
+    vidroidsink->have_texture = TRUE;
+    g_mutex_unlock (vidroidsink->flow_lock);
+  }
+
   return TRUE;
 
   /* Errors */
-HANDLE_EGL_ERROR:
+HANDLE_EGL_ERROR_LOCKED:
   GST_ERROR_OBJECT (vidroidsink, "EGL call returned error %x", eglGetError ());
+HANDLE_ERROR_LOCKED:
+  g_mutex_unlock (vidroidsink->flow_lock);
 HANDLE_ERROR:
   GST_ERROR_OBJECT (vidroidsink, "Couldn't setup EGL surface");
-  g_mutex_unlock (vidroidsink->flow_lock);
   return FALSE;
 }
 
@@ -976,16 +997,16 @@ gst_vidroidsink_set_window_handle (GstXOverlay * overlay, guintptr id)
   g_return_if_fail (GST_IS_VIDROIDSINK (vidroidsink));
   GST_DEBUG_OBJECT (vidroidsink, "We got a window handle!");
 
-  g_mutex_lock (vidroidsink->flow_lock);
-
   if (!id) {
-    /* We are being requested to create our own window */
+    /* We are being requested to create our own window 
+     * 0x0 fires default size creation 
+     */
     GST_WARNING_OBJECT (vidroidsink, "OH NOES they want a new window");
-    /* 0x0 fires default size creation */
+    g_mutex_lock (vidroidsink->flow_lock);
     vidroidsink->window = gst_vidroidsink_create_window (vidroidsink, 0, 0);
     if (!vidroidsink->window) {
       GST_ERROR_OBJECT (vidroidsink, "Got a NULL window");
-      goto HANDLE_ERROR;
+      goto HANDLE_ERROR_LOCKED;
     }
   } else if (vidroidsink->window == id) {       /* Already used window */
     GST_WARNING_OBJECT (vidroidsink,
@@ -993,23 +1014,26 @@ gst_vidroidsink_set_window_handle (GstXOverlay * overlay, guintptr id)
     GST_INFO_OBJECT (vidroidsink, "Skipping surface setup");
     goto HANDLE_ERROR;
   } else {
+    g_mutex_lock (vidroidsink->flow_lock);
     vidroidsink->window = (EGLNativeWindowType) id;
   }
 
   /* OK, we have a new window */
   vidroidsink->have_window = TRUE;
+  g_mutex_unlock (vidroidsink->flow_lock);
+
   if (!gst_vidroidsink_init_egl_surface (vidroidsink)) {
     GST_ERROR_OBJECT (vidroidsink, "Couldn't init EGL surface!");
     goto HANDLE_ERROR;
   }
 
-  g_mutex_unlock (vidroidsink->flow_lock);
   return;
 
   /* Errors */
+HANDLE_ERROR_LOCKED:
+  g_mutex_unlock (vidroidsink->flow_lock);
 HANDLE_ERROR:
   GST_ERROR_OBJECT (vidroidsink, "Couldn't setup window/surface from handle");
-  g_mutex_unlock (vidroidsink->flow_lock);
   return;
 }
 
@@ -1033,25 +1057,7 @@ gst_vidroidsink_render_and_display (GstViDroidSink * vidroidsink,
 
   /* XXX: This should actually happen each time
    * frame/window dimension changes.
-   */
-  if (!vidroidsink->have_texture) {
-    GST_INFO_OBJECT (vidroidsink, "Doing initial texture setup");
-
-    g_mutex_lock (vidroidsink->flow_lock);
-
-    glGenTextures (1, &vidroidsink->texture[0]);
-    if (got_gl_error ("glGenTextures"))
-      goto HANDLE_ERROR_LOCKED;
-
-    glBindTexture (GL_TEXTURE_2D, vidroidsink->texture[0]);
-    if (got_gl_error ("glBindTexture"))
-      goto HANDLE_ERROR_LOCKED;
-
-    vidroidsink->have_texture = TRUE;
-    g_mutex_unlock (vidroidsink->flow_lock);
-  }
-
-  /* XXX: Need to find a way to pass real buffer's
+   * Also might want to find a way to pass buffer's
    * width and height values when non power of two
    * and no npot extension available.
    */
@@ -1069,10 +1075,9 @@ gst_vidroidsink_render_and_display (GstViDroidSink * vidroidsink,
   /* XXX: VBO stuff this actually makes more sense on the setcaps stub?
    * The way it is right now makes this happen only for the first buffer
    * though so I guess it should work */
+  g_mutex_lock (vidroidsink->flow_lock);
   if (!vidroidsink->have_vbo) {
     GST_DEBUG_OBJECT (vidroidsink, "Doing initial VBO setup");
-
-    g_mutex_lock (vidroidsink->flow_lock);
 
     vidroidsink->coordarray[0].x = -1;
     vidroidsink->coordarray[0].y = 1;
@@ -1126,8 +1131,8 @@ gst_vidroidsink_render_and_display (GstViDroidSink * vidroidsink,
     glViewport (0, 0, w, h);
 
     vidroidsink->have_vbo = TRUE;
-    g_mutex_unlock (vidroidsink->flow_lock);
   }
+  g_mutex_unlock (vidroidsink->flow_lock);
 
   glClearColor (1.0, 0.0, 0.0, 0.0);
   glClear (GL_COLOR_BUFFER_BIT);
@@ -1214,18 +1219,18 @@ gst_vidroidsink_setcaps (GstBaseSink * bsink, GstCaps * caps)
   if (!(ret = gst_video_format_parse_caps (caps, &vidroidsink->format, &width,
               &height))) {
     GST_ERROR_OBJECT (vidroidsink, "Got weird and/or incomplete caps");
-    return FALSE;
+    goto HANDLE_ERROR;
   }
 
   if (vidroidsink->format == GST_VIDEO_FORMAT_UNKNOWN) {
     GST_ERROR_OBJECT (vidroidsink, "Got unknown video format caps");
-    return FALSE;
+    goto HANDLE_ERROR;
   }
 
   if (gst_vidroidsink_get_compat_format_from_caps (vidroidsink, caps) ==
       GST_VIDROIDSINK_IMAGE_NOFMT) {
     GST_ERROR_OBJECT (vidroidsink, "Unsupported format");
-    return FALSE;
+    goto HANDLE_ERROR;
   }
 
   /* XXX: Renegotiation not implemented yet */
@@ -1233,13 +1238,13 @@ gst_vidroidsink_setcaps (GstBaseSink * bsink, GstCaps * caps)
     GST_ERROR_OBJECT (vidroidsink, "Caps already set. Won't do it again");
     if (gst_caps_is_always_compatible (caps, vidroidsink->current_caps)) {
       GST_INFO_OBJECT (vidroidsink, "Caps are compatible anyway");
-      return TRUE;
+      goto SUCCEED;
     } else {
       GST_INFO_OBJECT (vidroidsink,
           "Caps %" GST_PTR_FORMAT "Not always compatible with current-caps %"
           GST_PTR_FORMAT, caps, vidroidsink->current_caps);
       GST_WARNING_OBJECT (vidroidsink, "Renegotiation not implemented");
-      return FALSE;
+      goto HANDLE_ERROR;
     }
   }
 
@@ -1248,43 +1253,43 @@ gst_vidroidsink_setcaps (GstBaseSink * bsink, GstCaps * caps)
    * application to prety please give us a window while we
    * are at it.
    */
-  g_mutex_lock (vidroidsink->flow_lock);
   if (!vidroidsink->have_window) {
-    g_mutex_unlock (vidroidsink->flow_lock);
     gst_x_overlay_prepare_xwindow_id (GST_X_OVERLAY (vidroidsink));
-  } else {
-    g_mutex_unlock (vidroidsink->flow_lock);
   }
 
+  g_mutex_lock (vidroidsink->flow_lock);
   GST_VIDEO_SINK_WIDTH (vidroidsink) = width;
   GST_VIDEO_SINK_HEIGHT (vidroidsink) = height;
 
-  g_mutex_lock (vidroidsink->flow_lock);
   if (!vidroidsink->have_window) {
     GST_INFO_OBJECT (vidroidsink,
         "No window. Will attempt internal window creation");
     if (!(vidroidsink->window = gst_vidroidsink_create_window (vidroidsink,
                 width, height))) {
       GST_ERROR_OBJECT (vidroidsink, "Internal window creation failed!");
-      g_mutex_unlock (vidroidsink->flow_lock);
-      return FALSE;
+      goto HANDLE_ERROR_LOCKED;
     }
   }
 
   vidroidsink->have_window = TRUE;
   vidroidsink->current_caps = gst_caps_ref (caps);
-
-  if (!gst_vidroidsink_init_egl_surface (vidroidsink)) {
-    g_mutex_unlock (vidroidsink->flow_lock);
-    GST_ERROR_OBJECT (vidroidsink, "Couldn't init EGL surface from window");
-    return FALSE;
-  }
-
-  vidroidsink->have_surface = TRUE;
   g_mutex_unlock (vidroidsink->flow_lock);
 
-  vidroidsink->current_caps = gst_caps_ref (caps);
+  if (!gst_vidroidsink_init_egl_surface (vidroidsink)) {
+    GST_ERROR_OBJECT (vidroidsink, "Couldn't init EGL surface from window");
+    goto HANDLE_ERROR;
+  }
+
+SUCCEED:
+  GST_INFO_OBJECT (vidroidsink, "Setcaps succeed");
   return TRUE;
+
+/* Errors */
+HANDLE_ERROR_LOCKED:
+  g_mutex_unlock (vidroidsink->flow_lock);
+HANDLE_ERROR:
+  GST_ERROR_OBJECT (vidroidsink, "Setcaps failed");
+  return FALSE;
 }
 
 static void
