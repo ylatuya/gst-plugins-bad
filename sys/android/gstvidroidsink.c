@@ -658,6 +658,7 @@ gst_vidroidsink_start (GstBaseSink * sink)
   GstViDroidImageFmt *format;
 
   platform_wrapper_init ();
+  vidroidsink->flow_lock = g_mutex_new ();
   g_mutex_lock (vidroidsink->flow_lock);
 
   /* Init supported caps list (Right now we just harcode the only one we support)
@@ -728,6 +729,10 @@ HANDLE_ERROR:
 gboolean
 gst_vidroidsink_stop (GstBaseSink * sink)
 {
+  GstViDroidSink *vidroidsink = GST_VIDROIDSINK (sink);
+
+  g_mutex_free (vidroidsink->flow_lock);
+  vidroidsink->flow_lock = NULL;
   return TRUE;
 }
 
@@ -1404,7 +1409,6 @@ gst_vidroidsink_init (GstViDroidSink * vidroidsink,
   vidroidsink->have_vbo = FALSE;
   vidroidsink->have_texture = FALSE;
   vidroidsink->running = FALSE; /* XXX: unused */
-  vidroidsink->flow_lock = g_mutex_new ();
 }
 
 /* Interface initializations. Used here for initializing the XOverlay
