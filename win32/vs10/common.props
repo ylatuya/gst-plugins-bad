@@ -16,23 +16,21 @@
     <CharacterSet>Unicode</CharacterSet>
     <PlatformToolset>Windows7.1SDK</PlatformToolset>
   </PropertyGroup>
-  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
-    <Import Project="$(GstProps)props\x86.props" />
-  </ImportGroup>
-  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="PropertySheets">
-    <Import Project="$(GstProps)props\x86_64.props" />
+  <ImportGroup Label="PropertySheets">
+    <Import Project="msvcrt.props" />
   </ImportGroup>
   <ItemDefinitionGroup>
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
-      <PreprocessorDefinitions>WIN32;NDEBUG;HAVE_CONFIG_H;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WINVER=0x0501;_WINDOWS;_USRDLL;HAVE_WIN32;WIN32;NDEBUG;HAVE_CONFIG_H;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
-      <AdditionalIncludeDirectories>$(GstSource)win32\common;$(DshowBaseClasses);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(GstSdkPrefix)\include\gstreamer-0.10;$(GstSdkPrefix)\include\libxml2;$(GstSdkPrefix)\include\glib-2.0;$(GstSdkPrefix)\lib\glib-2.0\include;$(GstSdkPrefix)\include;$(GstSource)win32\common;$(DshowBaseClasses);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>strmbase.lib;strmiids.lib;winmm.lib;dmoguids.lib;wmcodecdspuuid.lib;rpcrt4.lib;Mfuuid.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>glib-2.0.lib;gobject-2.0.lib;gstreamer-0.10.lib;gstinterfaces-0.10.lib;gstvideo-0.10.lib;strmbase.lib;strmiids.lib;winmm.lib;dmoguids.lib;wmcodecdspuuid.lib;rpcrt4.lib;Mfuuid.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(GstSdkPrefix)\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <OptimizeReferences>false</OptimizeReferences>
     </Link>
   </ItemDefinitionGroup>
 </Project>

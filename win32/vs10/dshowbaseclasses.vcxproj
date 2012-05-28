@@ -21,7 +21,7 @@
     <TargetFrameworkVersion>v4.0</TargetFrameworkVersion>
     <Keyword>ManagedCProj</Keyword>
     <RootNamespace>baseclasses</RootNamespace>
-    <GstSdkPrefix>c:\gst-sdk\$(Arch)\</GstSdkPrefix>
+    <GstSdkPrefix>$(GSTREAMER_SDK_ROOT)\$(Arch)\</GstSdkPrefix>
     <GstProps>$(GstSdkPrefix)\share\vs\2010\</GstProps>
     <WindowsSdkDir>C:\Program Files\Microsoft SDKs\Windows\v7.1\</WindowsSdkDir>
     <DshowBaseClasses>$(WindowsSdkDir)\Samples\Multimedia\directshow\baseclasses\</DshowBaseClasses>

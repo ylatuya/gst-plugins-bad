@@ -22,7 +22,7 @@
     <Keyword>ManagedCProj</Keyword>
     <RootNamespace>libgstdshowvideosrc</RootNamespace>
     <GstSource>..\..\</GstSource>
-    <GstSdkPrefix>c:\gst-sdk\$(Arch)</GstSdkPrefix>
+    <GstSdkPrefix>$(GSTREAMER_SDK_ROOT)\$(Arch)</GstSdkPrefix>
     <GstProps>$(GstSdkPrefix)\share\vs\2010\</GstProps>
     <WindowsSdkDir>C:\Program Files\Microsoft SDKs\Windows\v7.1\</WindowsSdkDir>
     <DshowBaseClasses>$(WindowsSdkDir)\Samples\Multimedia\directshow\baseclasses\</DshowBaseClasses>
@@ -43,9 +43,6 @@
   </ImportGroup>
   <ImportGroup Label="PropertySheets">
     <Import Project="common.props" />
-    <Import Project="$(GstProps)libs\gstreamer-0.10.props" />
-    <Import Project="$(GstProps)libs\gstreamer-interfaces-0.10.props" />
-    <Import Project="$(GstProps)libs\gstreamer-video-0.10.props" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <ItemDefinitionGroup>
@@ -53,7 +50,7 @@
       <AdditionalIncludeDirectories>$(DshowBaseClasses);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
-      <AdditionalDependencies>strmbase.lib;winmm.lib;dmoguids.lib;wmcodecdspuuid.lib;rpcrt4.lib;Mfuuid.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>wmcodecdspuuid.lib;rpcrt4.lib;Mfuuid.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(GstSdkPrefix)lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
