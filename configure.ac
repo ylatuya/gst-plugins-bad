@@ -313,7 +313,7 @@ AG_GST_SET_ERROR_CXXFLAGS($GST_GIT, [
     -Winit-self -Wmissing-include-dirs -Waddress -Wno-multichar ])
 
 dnl define an ERROR_OBJCFLAGS Makefile variable
-AG_GST_SET_ERROR_OBJCFLAGS($FATAL_WARNINGS, [
+AG_GST_SET_ERROR_OBJCFLAGS($GST_GIT, [
     -Wmissing-declarations -Wredundant-decls
     -Wwrite-strings -Wformat-nonliteral -Wformat-security
     -Winit-self -Wmissing-include-dirs -Wno-multichar])
