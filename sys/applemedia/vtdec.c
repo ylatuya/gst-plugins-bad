@@ -332,7 +332,7 @@ gst_vtdec_create_format_description_from_codec_data (GstVTDec * self,
       self->ctx->cm->
       FigVideoFormatDescriptionCreateWithSampleDescriptionExtensionAtom (NULL,
       self->details->format_id, self->negotiated_width, self->negotiated_height,
-      'avcC', GST_BUFFER_DATA (codec_data), GST_BUFFER_SIZE (codec_data), NULL,
+      'avcC', GST_BUFFER_DATA (codec_data), GST_BUFFER_SIZE (codec_data),
       &fmt_desc);
   if (status == noErr)
     return fmt_desc;
