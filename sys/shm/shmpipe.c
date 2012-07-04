@@ -850,8 +850,8 @@ again:
           goto again;
         break;
       }
-      prev_buf = buffer;
     }
+    prev_buf = buffer;
   }
 
   for (item = self->clients; item; item = item->next) {
