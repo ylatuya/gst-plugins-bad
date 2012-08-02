@@ -149,7 +149,7 @@ static void gst_d3dvideosink_stretch (GstD3DVideoSink * sink,
     LPDIRECT3DSURFACE9 backBuffer);
 
 /* Misc methods */
-BOOL WINAPI DllMain (HINSTANCE hinstDll, DWORD fdwReason, PVOID fImpLoad);
+BOOL WINAPI D3dDllMain (HINSTANCE hinstDll, DWORD fdwReason, PVOID fImpLoad);
 static void gst_d3dvideosink_remove_window_for_renderer (GstD3DVideoSink *
     sink);
 static gboolean gst_d3dvideosink_initialize_direct3d (GstD3DVideoSink * sink);
@@ -190,7 +190,7 @@ static DirectXInitParams directx_init_params = {
  */
 
 BOOL WINAPI
-DllMain (HINSTANCE hinstDll, DWORD fdwReason, PVOID fImpLoad)
+D3dDllMain (HINSTANCE hinstDll, DWORD fdwReason, PVOID fImpLoad)
 {
   switch (fdwReason) {
     case DLL_PROCESS_ATTACH:
