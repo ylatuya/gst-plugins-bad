@@ -17,10 +17,10 @@
     <Arch>x86_64</Arch>
   </PropertyGroup>
   <PropertyGroup Label="Globals">
-    <ProjectGuid>{D4B1CD06-E4EF-4404-8680-9CA49CB998B1}</ProjectGuid>
+    <ProjectGuid>{274CBC95-22DC-4CD8-A451-E641FA685594}</ProjectGuid>
     <TargetFrameworkVersion>v4.0</TargetFrameworkVersion>
     <Keyword>ManagedCProj</Keyword>
-    <RootNamespace>libgstdshowdecwrapper</RootNamespace>
+    <RootNamespace>libgstdshowsrcwrapper</RootNamespace>
     <GstSource>..\..\</GstSource>
     <GstSdkPrefix>$(GSTREAMER_SDK_ROOT)\$(Arch)\</GstSdkPrefix>
     <GstProps>$(GstSdkPrefix)\share\vs\2010\</GstProps>
@@ -52,24 +52,23 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="$(GstSource)sys\dshowdecwrapper\gstdshowaudiodec.h" />
-    <ClInclude Include="$(GstSource)sys\dshowdecwrapper\gstdshowdecwrapper.h" />
-    <ClInclude Include="$(GstSource)sys\dshowdecwrapper\gstdshowfakesrc.h" />
-    <ClInclude Include="$(GstSource)sys\dshowdecwrapper\gstdshowutil.h" />
-    <ClInclude Include="$(GstSource)sys\dshowdecwrapper\gstdshowvideodec.h" />
     <ClInclude Include="$(GstSource)win32\common\config.h" />
-  </ItemGroup>
-  <ItemGroup>
-    <ClCompile Include="$(GstSource)sys\dshowdecwrapper\gstdshowaudiodec.cpp" />
-    <ClCompile Include="$(GstSource)sys\dshowdecwrapper\gstdshowdecwrapper.cpp" />
-    <ClCompile Include="$(GstSource)sys\dshowdecwrapper\gstdshowfakesrc.cpp" />
-    <ClCompile Include="$(GstSource)sys\dshowdecwrapper\gstdshowutil.cpp" />
-    <ClCompile Include="$(GstSource)sys\dshowdecwrapper\gstdshowvideodec.cpp" />
+    <ClInclude Include="..\..\sys\dshowsrcwrapper\gstdshow.h" />
+    <ClInclude Include="..\..\sys\dshowsrcwrapper\gstdshowaudiosrc.h" />
+    <ClInclude Include="..\..\sys\dshowsrcwrapper\gstdshowfakesink.h" />
+    <ClInclude Include="..\..\sys\dshowsrcwrapper\gstdshowvideosrc.h" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="dshowbaseclasses.vcxproj">
       <Project>{1804645b-539a-4688-ac7c-e60c124f8788}</Project>
     </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\sys\dshowsrcwrapper\gstdshow.cpp" />
+    <ClCompile Include="..\..\sys\dshowsrcwrapper\gstdshowaudiosrc.cpp" />
+    <ClCompile Include="..\..\sys\dshowsrcwrapper\gstdshowfakesink.cpp" />
+    <ClCompile Include="..\..\sys\dshowsrcwrapper\gstdshowsrcwrapper.cpp" />
+    <ClCompile Include="..\..\sys\dshowsrcwrapper\gstdshowvideosrc.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

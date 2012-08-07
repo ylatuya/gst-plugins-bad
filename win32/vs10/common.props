@@ -16,9 +16,20 @@
     <CharacterSet>Unicode</CharacterSet>
     <PlatformToolset>Windows7.1SDK</PlatformToolset>
   </PropertyGroup>
+  <ItemGroup>
+    <BuildMacro Include="GstSdkPrefix">
+      <Value>$(GstSdkPrefix)</Value>
+    </BuildMacro>
+  </ItemGroup>
   <ImportGroup Label="PropertySheets">
     <Import Project="msvcrt.props" />
   </ImportGroup>
+  <PropertyGroup Label="UserMacros" Condition=" '$(PlatformName)' == 'Win32' ">
+    <GstSdkPrefix>$(GSTREAMER_SDK_ROOT_X86)</GstSdkPrefix>
+  </PropertyGroup>
+  <PropertyGroup Label="UserMacros" Condition=" '$(PlatformName)' == 'x64' ">
+    <GstSdkPrefix>$(GSTREAMER_SDK_ROOT_X86_64)</GstSdkPrefix>
+  </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
@@ -28,7 +39,7 @@
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>glib-2.0.lib;gobject-2.0.lib;gstreamer-0.10.lib;gstinterfaces-0.10.lib;gstvideo-0.10.lib;strmbase.lib;strmiids.lib;winmm.lib;dmoguids.lib;wmcodecdspuuid.lib;rpcrt4.lib;Mfuuid.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>glib-2.0.lib;gobject-2.0.lib;gstreamer-0.10.lib;gstbase-0.10.lib;gstinterfaces-0.10.lib;gstvideo-0.10.lib;gstaudio-0.10.lib;strmbase.lib;strmiids.lib;winmm.lib;dmoguids.lib;wmcodecdspuuid.lib;rpcrt4.lib;Mfuuid.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(GstSdkPrefix)\lib;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <OptimizeReferences>false</OptimizeReferences>
     </Link>
