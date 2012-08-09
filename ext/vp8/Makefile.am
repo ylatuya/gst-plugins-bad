@@ -12,6 +12,7 @@ libgstvp8_la_CFLAGS = \
 	$(GST_PLUGINS_BASE_CFLAGS) \
 	$(GST_BASE_CFLAGS) \
 	$(GST_CFLAGS) \
+	$(VPX_CFLAGS) \
 	-DGST_USE_UNSTABLE_API
 libgstvp8_la_LIBADD = \
 	$(top_builddir)/gst-libs/gst/video/libgstbasevideo-@GST_MAJORMINOR@.la \
