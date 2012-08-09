@@ -1776,6 +1776,12 @@ AG_GST_CHECK_FEATURE(VP8, [VP8 decoder], vp8, [
   PKG_CHECK_MODULES(VPX, vpx, [HAVE_VPX="yes"], [HAVE_VPX="no"])
 
   if test $HAVE_VPX = "yes"; then
+    dnl on windows platforms libvpx can only be compiled statically
+    case "$host" in
+      *ming*|*cygwin*)
+        VPX_LIBS=`$PKG_CONFIG --static --libs vpx`
+        ;;
+    esac
     HAVE_VP8_ENCODER=no
     HAVE_VP8_DECODER=no
 
