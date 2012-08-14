@@ -736,8 +736,10 @@ gst_vidroidsink_stop (GstBaseSink * sink)
 {
   GstViDroidSink *vidroidsink = GST_VIDROIDSINK (sink);
 
+  platform_destroy_native_window (vidroidsink->display, vidroidsink->window);
   g_mutex_free (vidroidsink->flow_lock);
   vidroidsink->flow_lock = NULL;
+
   return TRUE;
 }
 
@@ -1059,6 +1061,14 @@ gst_vidroidsink_render_and_display (GstViDroidSink * vidroidsink,
   GST_DEBUG_OBJECT (vidroidsink,
       "Got good buffer %x. Sink geometry is %dx%d size %d", buf, w, h,
       GST_BUFFER_SIZE (buf));
+
+  /* Make sure we stay on our context to avoid threading nightmares */
+  if (!eglMakeCurrent (vidroidsink->display, vidroidsink->surface,
+          vidroidsink->surface, vidroidsink->context)) {
+    GST_ERROR_OBJECT (vidroidsink, "Couldn't bind surface/context, "
+        "eglMakeCurrent");
+    goto HANDLE_ERROR;
+  }
 
   /* XXX: This should actually happen each time
    * frame/window dimension changes.
