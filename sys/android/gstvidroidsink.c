@@ -347,9 +347,9 @@ NO_SINK:
 static void
 gst_vidroidbuffer_free (GstViDroidBuffer * vidroidbuffer)
 {
-  /* make sure it is not recycled
-   * This is meaningless without a pool but was left here
-   * as a reference */
+  /* Make sure it is not recycled. This is meaningless without
+   * a pool but was left here as a reference
+   */
   vidroidbuffer->width = -1;
   vidroidbuffer->height = -1;
   gst_buffer_unref (GST_BUFFER (vidroidbuffer));
@@ -626,16 +626,15 @@ beach:
   /* ERRORS */
 invalid:
   {
-    GST_DEBUG_OBJECT (vidroidsink, "No width/hegight on caps!?");
+    GST_DEBUG_OBJECT (vidroidsink, "No width/height on caps!?");
     ret = GST_FLOW_WRONG_STATE;
     goto beach;
   }
 incompatible:
   {
-    GST_WARNING_OBJECT (vidroidsink, "we were requested a buffer with "
+    GST_WARNING_OBJECT (vidroidsink, "We were requested a buffer with "
         "caps %" GST_PTR_FORMAT ", but our current caps %" GST_PTR_FORMAT
-        " are completely incompatible with those caps", caps,
-        vidroidsink->current_caps);
+        " are completely incompatible!", caps, vidroidsink->current_caps);
     ret = GST_FLOW_NOT_NEGOTIATED;
     goto beach;
   }
@@ -702,6 +701,12 @@ gst_vidroidsink_start (GstBaseSink * sink)
       (PFNGLEGLIMAGETARGETTEXTURE2DOESPROC) eglGetProcAddress
       ("glEGLImageTargetTexture2DOES");
 
+  /* XXX: non-NULL from getprocaddress doesn't
+   * imply func is supported at runtime. Should check
+   * for needed extensions with  glGetString(GL_EXTENSIONS)
+   * or reglQueryString(display, EGL_EXTENSIONS) here too. 
+   */
+
   if (!my_glEGLImageTargetTexture2DOES) {
     GST_ERROR_OBJECT (vidroidsink,
         "glEGLImageTargetTexture2DOES not available");
@@ -709,12 +714,6 @@ gst_vidroidsink_start (GstBaseSink * sink)
   }
 
   ret = gst_vidroidsink_init_egl_display (vidroidsink);
-
-  /* XXX: non-NULL from getprocaddress doesn't
-   * imply func is supported at runtime. Should check
-   * for needed extensions with  glGetString(GL_EXTENSIONS)
-   * or reglQueryString(display, EGL_EXTENSIONS) here too. 
-   */
 
   if (!ret) {
     GST_ERROR_OBJECT (vidroidsink, "Couldn't init EGL display. Bailing out");
@@ -972,7 +971,7 @@ gst_vidroidsink_init_egl_display (GstViDroidSink * vidroidsink)
 
   eglBindAPI (EGL_OPENGL_ES_API);
 
-  /* XXX: Should really attempt tp create a new one or ...
+  /* XXX: Should really attempt to create a new one or ...
    * vidroidsink->context = eglGetCurrentContext() ?
    */
   vidroidsink->context = eglCreateContext (vidroidsink->display,
@@ -1005,7 +1004,7 @@ gst_vidroidsink_set_window_handle (GstXOverlay * overlay, guintptr id)
   GST_DEBUG_OBJECT (vidroidsink, "We got a window handle!");
 
   if (!id) {
-    /* We are being requested to create our own window 
+    /* We are being requested to create our own window. 
      * 0x0 fires default size creation 
      */
     GST_WARNING_OBJECT (vidroidsink, "OH NOES they want a new window");
@@ -1263,11 +1262,7 @@ gst_vidroidsink_setcaps (GstBaseSink * bsink, GstCaps * caps)
     }
   }
 
-  /* OK, got caps and have none. Should be the first time!
-   * Write on our diary! A time to remember!.. And ask
-   * application to prety please give us a window while we
-   * are at it.
-   */
+  /* OK, got caps and had none. Ask application to give us a window */
   if (!vidroidsink->have_window) {
     gst_x_overlay_prepare_xwindow_id (GST_X_OVERLAY (vidroidsink));
   }
@@ -1277,6 +1272,7 @@ gst_vidroidsink_setcaps (GstBaseSink * bsink, GstCaps * caps)
   GST_VIDEO_SINK_HEIGHT (vidroidsink) = height;
 
   if (!vidroidsink->have_window) {
+    /* This is a no-go on Android but should work on x11/mesa */
     GST_INFO_OBJECT (vidroidsink,
         "No window. Will attempt internal window creation");
     if (!(vidroidsink->window = gst_vidroidsink_create_window (vidroidsink,
@@ -1484,10 +1480,7 @@ vidroidsink_plugin_init (GstPlugin * plugin)
 #define VERSION "0.911"
 #endif
 
-/* gstreamer looks for this structure to register vidroidsinks
- *
- * exchange the string 'Template vidroidsink' with your vidroidsink description
- */
+/* gstreamer looks for this structure to register vidroidsinks */
 GST_PLUGIN_DEFINE (GST_VERSION_MAJOR,
     GST_VERSION_MINOR,
     "vidroidsink",

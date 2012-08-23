@@ -159,7 +159,7 @@ platform_destroy_native_window (EGLNativeDisplayType display,
   return TRUE;
 }
 
-/* XXX: Missing implementation */
+/* XXX: Drafted implementation */
 EGLClientBuffer
 platform_crate_native_image_buffer (void)
 {
