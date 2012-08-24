@@ -158,21 +158,18 @@ platform_destroy_native_window (EGLNativeDisplayType display,
 }
 
 /* XXX: Drafted implementation */
-EGLClientBuffer
-platform_crate_native_image_buffer (void)
+EGLint *
+platform_crate_native_image_buffer (EGLNativeWindowType win, EGLConfig config,
+    EGLNativeDisplayType display, const EGLint * egl_attribs)
 {
-  XWindowAttributes xattribs;
-  EGLNativePixmapType pix;
+  EGLNativePixmapType pix = NULL;
   EGLSurface pix_surface;
   EGLint *buffer = NULL;
 
-  if (!XGetWindowAttributes (display, win, &xattribs)) {
-    GST_CAT_ERROR (GST_CAT_DEFAULT, "Unable to get window attributes");
-    goto ERROR;
-  }
-
-  pix = XCreatePixmap (display, win, xattribs.width, xattribs.height,
-      xattribs.depth);
+  /* XXX: Need to figure out how to create an egl_native_pixmap_t to
+   * feed to eglCreatePixmapSurface. Another option: create an
+   * android_native_buffer_t to pass straight to eglCreateImageKHR.
+   */
 
   pix_surface = eglCreatePixmapSurface (display, config, pix, egl_attribs);
 
@@ -197,7 +194,7 @@ platform_crate_native_image_buffer (void)
 
 EGL_ERROR:
   GST_CAT_ERROR (GST_CAT_DEFAULT, "EGL call returned error %x", eglGetError ());
-  XFreePixmap (display, pix);
+  /* XXX: Free native pixmap here */
 ERROR:
   GST_CAT_ERROR (GST_CAT_DEFAULT, "Can't create native buffer. Bailing out");
   return NULL;
