@@ -55,15 +55,14 @@
 #include <gst/gst.h>
 #include "video_platform_wrapper.h"
 
-/* XXX: need a proper macro to choose between android and x11/mesa */
-#ifdef HAVE_X11
+#ifndef __BIONIC__
 #include <X11/Xlib.h>
 #endif
 
 GST_DEBUG_CATEGORY_STATIC (vidroid_platform_wrapper);
 #define GST_CAT_DEFAULT vidroid_platform_wrapper
 
-#ifndef HAVE_X11
+#ifdef __BIONIC__
 static PFNEGLLOCKSURFACEKHRPROC my_eglLockSurfaceKHR;
 
 static EGLint lock_attribs[] = {
@@ -80,7 +79,7 @@ platform_wrapper_init (void)
       "ViDroid Platform Wrapper", 0,
       "Platform dependent native-window utility routines for ViDroid");
 
-#ifndef HAVE_X11
+#ifdef __BIONIC__
   my_eglLockSurfaceKHR =
       (PFNEGLLOCKSURFACEKHRPROC) eglGetProcAddress ("eglLockSurfaceKHR");
 
@@ -91,8 +90,7 @@ platform_wrapper_init (void)
   return;
 }
 
-#ifdef HAVE_X11
-
+#ifndef __BIONIC__
 EGLNativeWindowType
 platform_create_native_window (gint width, gint height)
 {

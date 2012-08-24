@@ -102,7 +102,7 @@ GST_DEBUG_CATEGORY_STATIC (gst_vidroidsink_debug);
 static PFNEGLCREATEIMAGEKHRPROC my_eglCreateImageKHR;
 static PFNEGLDESTROYIMAGEKHRPROC my_eglDestroyImageKHR;
 static PFNGLEGLIMAGETARGETTEXTURE2DOESPROC my_glEGLImageTargetTexture2DOES;
-#ifndef HAVE_X11
+#ifdef __BIONIC__
 static PFNEGLUNLOCKSURFACEKHRPROC my_eglUnlockSurfaceKHR;
 #endif
 
@@ -497,7 +497,7 @@ gst_vidroidsink_buffer_alloc (GstBaseSink * bsink, guint64 offset,
   gint width, height;
 
   vidroidsink = GST_VIDROIDSINK (bsink);
-#ifdef HAVE_X11
+#ifndef __BIONIC__
   /* no custom alloc for X11 */
   GST_WARNING_OBJECT (vidroidsink, "No custom alloc for x11/mesa");
   *buf = NULL;
@@ -686,7 +686,7 @@ gst_vidroidsink_start (GstBaseSink * sink)
     GST_ERROR_OBJECT (vidroidsink, "Extension EGL_KHR_IMAGE not available");
     goto HANDLE_ERROR;
   }
-#ifndef HAVE_X11
+#ifdef __BIONIC__
   my_eglUnlockSurfaceKHR =
       (PFNEGLUNLOCKSURFACEKHRPROC) eglGetProcAddress ("eglUnlockSurfaceKHR");
 
