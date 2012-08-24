@@ -774,14 +774,13 @@ got_gl_error (const char *wtf)
   return FALSE;
 }
 
-/* XXX: Review. Drafted */
 static EGLNativeWindowType
 gst_vidroidsink_create_window (GstViDroidSink * vidroidsink, gint width,
     gint height)
 {
   EGLNativeWindowType window;
 
-  if (!width || !height) {      /* Create a default size window */
+  if (!width && !height) {      /* Create a default size window */
     width = vidroidsink->window_default_width;
     height = vidroidsink->window_default_height;
   }
