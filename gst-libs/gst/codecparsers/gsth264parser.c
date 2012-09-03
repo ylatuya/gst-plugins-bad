@@ -1546,7 +1546,7 @@ gst_h264_parse_sps (GstH264NalUnit * nalu, GstH264SPS * sps,
 
 error:
   GST_WARNING ("error parsing \"Sequence parameter set\"");
-
+  sps->valid = FALSE;
   return GST_H264_PARSER_ERROR;
 }
 
@@ -1676,6 +1676,7 @@ done:
 
 error:
   GST_WARNING ("error parsing \"Picture parameter set\"");
+  pps->valid = FALSE;
   return GST_H264_PARSER_ERROR;
 }
 
