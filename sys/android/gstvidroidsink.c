@@ -970,9 +970,6 @@ gst_vidroidsink_init_egl_display (GstViDroidSink * vidroidsink)
 
   eglBindAPI (EGL_OPENGL_ES_API);
 
-  /* XXX: Should really attempt to create a new one or ...
-   * vidroidsink->context = eglGetCurrentContext() ?
-   */
   vidroidsink->context = eglCreateContext (vidroidsink->display,
       vidroidsink->config, EGL_NO_CONTEXT, con_attribs);
 
