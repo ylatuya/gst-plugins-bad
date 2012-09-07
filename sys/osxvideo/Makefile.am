@@ -9,7 +9,7 @@ libgstosxvideosrc_la_LIBADD =  \
 	-lgstinterfaces-$(GST_MAJORMINOR)
 
 if !GST_PLUGIN_BUILD_STATIC
-libgstosxvideosrc_la_LIBTOOLFLAGS = --tag=disable-static
+libgstosxvideosrc_la_LIBTOOLFLAGS = --tag=disable-static --tag=CC
 endif
 
 libgstosxvideosrc_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS) \
