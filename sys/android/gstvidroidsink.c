@@ -233,7 +233,7 @@ GST_BOILERPLATE_FULL (GstViDroidSink, gst_vidroidsink, GstVideoSink,
 
   if (!gst_structure_get_int (structure, "width", &vidroidbuffer->width) ||
       !gst_structure_get_int (structure, "height", &vidroidbuffer->height)) {
-    GST_WARNING ("failed getting geometry from caps %" GST_PTR_FORMAT, caps);
+    GST_WARNING ("Failed getting geometry from caps %" GST_PTR_FORMAT, caps);
   }
 
   GST_LOG_OBJECT (vidroidsink, "creating %dx%d", vidroidbuffer->width,
@@ -244,7 +244,7 @@ GST_BOILERPLATE_FULL (GstViDroidSink, gst_vidroidsink, GstVideoSink,
 
   if (vidroidbuffer->format == GST_VIDROIDSINK_IMAGE_NOFMT) {
     GST_WARNING_OBJECT (vidroidsink,
-        "failed to get format from caps %" GST_PTR_FORMAT, caps);
+        "Failed to get format from caps %" GST_PTR_FORMAT, caps);
     GST_ERROR_OBJECT (vidroidsink,
         "Invalid input caps. Failed to create  %dx%d buffer",
         vidroidbuffer->width, vidroidbuffer->height);
@@ -295,7 +295,7 @@ gst_vidroidbuffer_destroy (GstViDroidBuffer * vidroidbuffer)
       g_free (GST_BUFFER_DATA (vidroidbuffer));
     }
     vidroidbuffer->image = NULL;
-    /* Unallocate EGL/GL especific resources asociated with this
+    /* XXX: Unallocate EGL/GL especific resources asociated with this
      * Image here
      */
   }
@@ -578,7 +578,7 @@ gst_vidroidsink_buffer_alloc (GstBaseSink * bsink, guint64 offset,
   /* Ensure the returned caps are fixed */
   gst_caps_truncate (intersection);
 
-  GST_DEBUG_OBJECT (vidroidsink, "allocating a buffer with caps %"
+  GST_DEBUG_OBJECT (vidroidsink, "Allocating a buffer with caps %"
       GST_PTR_FORMAT, intersection);
   if (gst_caps_is_equal (intersection, caps)) {
     /* Things work better if we return a buffer with the same caps ptr
@@ -637,14 +637,14 @@ incompatible:
   }
 invalid_caps:
   {
-    GST_WARNING_OBJECT (vidroidsink, "invalid caps for buffer allocation %"
+    GST_WARNING_OBJECT (vidroidsink, "Invalid caps for buffer allocation %"
         GST_PTR_FORMAT, intersection);
     ret = GST_FLOW_NOT_NEGOTIATED;
     goto beach;
   }
 no_caps:
   {
-    GST_WARNING_OBJECT (vidroidsink, "have no caps, doing fallback allocation");
+    GST_WARNING_OBJECT (vidroidsink, "Have no caps, doing fallback allocation");
     *buf = NULL;
     ret = GST_FLOW_OK;
     goto beach;
@@ -687,6 +687,12 @@ gst_vidroidsink_start (GstBaseSink * sink)
         (vidroidsink->supported_fmts, format);
   }
 
+  /* XXX: non-NULL from getprocaddress doesn't
+   * imply func is supported at runtime. Should check
+   * for needed extensions with  glGetString(GL_EXTENSIONS)
+   * or reglQueryString(display, EGL_EXTENSIONS) here too. 
+   */
+
   my_eglCreateImageKHR =
       (PFNEGLCREATEIMAGEKHRPROC) eglGetProcAddress ("eglCreateImageKHR");
   my_eglDestroyImageKHR =
@@ -700,12 +706,6 @@ gst_vidroidsink_start (GstBaseSink * sink)
   my_glEGLImageTargetTexture2DOES =
       (PFNGLEGLIMAGETARGETTEXTURE2DOESPROC) eglGetProcAddress
       ("glEGLImageTargetTexture2DOES");
-
-  /* XXX: non-NULL from getprocaddress doesn't
-   * imply func is supported at runtime. Should check
-   * for needed extensions with  glGetString(GL_EXTENSIONS)
-   * or reglQueryString(display, EGL_EXTENSIONS) here too. 
-   */
 
   if (!my_glEGLImageTargetTexture2DOES) {
     GST_ERROR_OBJECT (vidroidsink,
