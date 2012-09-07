@@ -449,6 +449,16 @@ if test "x$HAVE_PTHREAD_H" != "xyes"; then
   AG_GST_DISABLE_PLUGIN(dccp)
 fi
 
+dnl link to -lm in android for isfinite() in HLS
+case "$host" in
+  *-*android*)
+    HLS_LIBS="$HLS_LIBS -lm"
+    AC_SUBST(HLS_LIBS)
+    ;;
+  *)
+    ;;
+esac
+
 dnl *** sys plug-ins ***
 
 dnl DirectSound
