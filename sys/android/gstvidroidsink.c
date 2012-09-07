@@ -956,16 +956,22 @@ gst_vidroidsink_init_egl_display (GstViDroidSink * vidroidsink)
     goto HANDLE_EGL_ERROR;
   }
 
-  GST_DEBUG_OBJECT (vidroidsink, "EGL version %d.%d", egl_major, egl_minor);
+  /* Check against required EGL version */
+  if (egl_major < GST_VIDROIDSINK_EGL_MIN_VERSION) {
+    GST_ERROR_OBJECT (vidroidsink, "EGL v%d\n needed, but you only have v%d.%d",
+        GST_VIDROIDSINK_EGL_MIN_VERSION, egl_major, egl_minor);
+    goto HANDLE_ERROR;
+  }
+
+  GST_INFO_OBJECT (vidroidsink, "System reports EGL version v%d.%d",
+      egl_major, egl_minor);
   GST_DEBUG_OBJECT (vidroidsink, "Available EGL extensions: %s",
       eglQueryString (vidroidsink->display, EGL_EXTENSIONS));
 
-  /* XXX: Check for vidroidsink's EGL needed versions */
-
   if (!eglChooseConfig (vidroidsink->display, vidroidsink_RGB16_config,
           &vidroidsink->config, 1, &egl_configs)) {
-    GST_ERROR_OBJECT (vidroidsink, "eglChooseConfig failed\n");
-    goto HANDLE_ERROR;
+    GST_ERROR_OBJECT (vidroidsink, "eglChooseConfig failed");
+    goto HANDLE_EGL_ERROR;
   }
 
   eglBindAPI (EGL_OPENGL_ES_API);
