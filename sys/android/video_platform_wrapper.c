@@ -64,6 +64,7 @@ GST_DEBUG_CATEGORY_STATIC (vidroid_platform_wrapper);
 
 #ifdef __BIONIC__
 static PFNEGLLOCKSURFACEKHRPROC my_eglLockSurfaceKHR;
+static PFNEGLUNLOCKSURFACEKHRPROC my_eglUnlockSurfaceKHR;
 
 static EGLint lock_attribs[] = {
   EGL_MAP_PRESERVE_PIXELS_KHR, EGL_TRUE,
@@ -72,7 +73,7 @@ static EGLint lock_attribs[] = {
 };
 #endif
 
-void
+gboolean
 platform_wrapper_init (void)
 {
   GST_DEBUG_CATEGORY_INIT (vidroid_platform_wrapper,
@@ -82,12 +83,21 @@ platform_wrapper_init (void)
 #ifdef __BIONIC__
   my_eglLockSurfaceKHR =
       (PFNEGLLOCKSURFACEKHRPROC) eglGetProcAddress ("eglLockSurfaceKHR");
+  my_eglUnlockSurfaceKHR =
+      (PFNEGLUNLOCKSURFACEKHRPROC) eglGetProcAddress ("eglUnlockSurfaceKHR");
 
-  if (!my_eglLockSurfaceKHR)
+  if (!my_eglLockSurfaceKHR) {
     GST_CAT_ERROR (GST_CAT_DEFAULT, "Extension missing: eglLockSurfaceKHR");
+    return FALSE;
+  }
+
+  if (!my_eglUnlockSurfaceKHR) {
+    GST_CAT_ERROR (GST_CAT_DEFAULT, "Extension missing: eglUnlockSurfaceKHR");
+    return FALSE;
+  }
 #endif
 
-  return;
+  return TRUE;
 }
 
 #ifndef __BIONIC__

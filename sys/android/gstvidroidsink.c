@@ -102,9 +102,6 @@ GST_DEBUG_CATEGORY_STATIC (gst_vidroidsink_debug);
 static PFNEGLCREATEIMAGEKHRPROC my_eglCreateImageKHR;
 static PFNEGLDESTROYIMAGEKHRPROC my_eglDestroyImageKHR;
 static PFNGLEGLIMAGETARGETTEXTURE2DOESPROC my_glEGLImageTargetTexture2DOES;
-#ifdef __BIONIC__
-static PFNEGLUNLOCKSURFACEKHRPROC my_eglUnlockSurfaceKHR;
-#endif
 
 static const char *vert_prog = {
   "attribute vec3 position;"
@@ -667,11 +664,16 @@ gst_vidroidsink_start (GstBaseSink * sink)
   ret = gst_vidroidsink_init_egl_display (vidroidsink);
 
   if (!ret) {
-    GST_ERROR_OBJECT (vidroidsink, "Couldn't init EGL display. Bailing out");
+    GST_ERROR_OBJECT (vidroidsink, "Couldn't init EGL display");
     goto HANDLE_ERROR;
   }
 
-  platform_wrapper_init ();
+  ret = platform_wrapper_init ();
+
+  if (!ret) {
+    GST_ERROR_OBJECT (vidroidsink, "Couldn't init EGL platform wrapper");
+    goto HANDLE_ERROR;
+  }
 
   /* Init supported caps list (Right now we just harcode the only one we support)
    * XXX: Not sure this is the right place to do it.
@@ -694,16 +696,6 @@ gst_vidroidsink_start (GstBaseSink * sink)
     GST_ERROR_OBJECT (vidroidsink, "Extension EGL_KHR_IMAGE not available");
     goto HANDLE_ERROR;
   }
-#ifdef __BIONIC__
-  my_eglUnlockSurfaceKHR =
-      (PFNEGLUNLOCKSURFACEKHRPROC) eglGetProcAddress ("eglUnlockSurfaceKHR");
-
-  if (!my_eglUnlockSurfaceKHR) {
-    GST_ERROR_OBJECT (vidroidsink,
-        "Extension eglUnlockSurfaceKHR not available");
-    goto HANDLE_ERROR;
-  }
-#endif
 
   my_glEGLImageTargetTexture2DOES =
       (PFNGLEGLIMAGETARGETTEXTURE2DOESPROC) eglGetProcAddress
