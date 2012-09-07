@@ -74,6 +74,7 @@
 #  include <config.h>
 #endif
 
+#include <string.h>
 #include <gst/gst.h>
 #include <gst/video/video.h>
 #include <gst/video/gstvideosink.h>
@@ -98,10 +99,26 @@ GST_DEBUG_CATEGORY_STATIC (gst_vidroidsink_debug);
 #define VIDROIDSINK_MAX_FRAME_WIDTH 1280
 #define VIDROIDSINK_MAX_FRAME_HEIGHT 720
 
-/* XXX: proly  needs ifdef against EGL_KHR_image */
+#ifdef EGL_KHR_image
 static PFNEGLCREATEIMAGEKHRPROC my_eglCreateImageKHR;
 static PFNEGLDESTROYIMAGEKHRPROC my_eglDestroyImageKHR;
+
+#ifdef EGL_KHR_lock_surface
+static PFNEGLLOCKSURFACEKHRPROC my_eglLockSurfaceKHR;
+static PFNEGLUNLOCKSURFACEKHRPROC my_eglUnlockSurfaceKHR;
+
+static EGLint lock_attribs[] = {
+  EGL_MAP_PRESERVE_PIXELS_KHR, EGL_TRUE,
+  EGL_LOCK_USAGE_HINT_KHR, EGL_READ_SURFACE_BIT_KHR | EGL_WRITE_SURFACE_BIT_KHR,
+  EGL_NONE
+};
+
+#ifdef GL_OES_EGL_image
 static PFNGLEGLIMAGETARGETTEXTURE2DOESPROC my_glEGLImageTargetTexture2DOES;
+#define EGL_FAST_RENDERING_POSSIBLE 1
+#endif
+#endif
+#endif
 
 static const char *vert_prog = {
   "attribute vec3 position;"
@@ -195,12 +212,15 @@ static void gst_vidroidbuffer_class_init (gpointer g_class,
 static void gst_vidroidbuffer_free (GstViDroidBuffer * vidroidbuffer);
 static GstViDroidBuffer *gst_vidroidbuffer_new (GstViDroidSink * vidroidsink,
     GstCaps * caps);
+static EGLint *gst_vidroidbuffer_create_native (EGLNativeWindowType win,
+    EGLConfig config, EGLNativeDisplayType display, const EGLint * egl_attribs);
 
 /* Utility */
 static EGLNativeWindowType gst_vidroidsink_create_window (GstViDroidSink *
     vidroidsink, gint width, gint height);
 static gboolean gst_vidroidsink_init_egl_display (GstViDroidSink * vidroidsink);
 static gboolean gst_vidroidsink_init_egl_surface (GstViDroidSink * vidroidsink);
+static void gst_vidroidsink_init_egl_exts (GstViDroidSink * vidroidsink);
 static void gst_vidroidsink_render_and_display (GstViDroidSink * sink,
     GstBuffer * buf);
 static inline gboolean got_gl_error (const char *wtf);
@@ -216,8 +236,48 @@ GST_BOILERPLATE_FULL (GstViDroidSink, gst_vidroidsink, GstVideoSink,
     GST_TYPE_VIDEO_SINK, gst_vidroidsink_init_interfaces)
 
 /* Custom Buffer Funcs */
-     static GstViDroidBuffer *gst_vidroidbuffer_new (GstViDroidSink *
-    vidroidsink, GstCaps * caps)
+/* XXX: Drafted implementation */
+     static EGLint *gst_vidroidbuffer_create_native (EGLNativeWindowType win,
+    EGLConfig config, EGLNativeDisplayType display, const EGLint * egl_attribs)
+{
+  EGLNativePixmapType pix;
+  EGLSurface pix_surface;
+  EGLint *buffer = NULL;
+
+  /* XXX: Need to figure out how to create an egl_native_pixmap_t to
+   * feed to eglCreatePixmapSurface. Another option: create an
+   * android_native_buffer_t to pass straight to eglCreateImageKHR.
+   */
+
+  pix_surface = eglCreatePixmapSurface (display, config, pix, egl_attribs);
+
+  if (pix_surface == EGL_NO_SURFACE) {
+    GST_CAT_ERROR (GST_CAT_DEFAULT, "Unable to create pixmap surface");
+    goto EGL_ERROR;
+  }
+
+  if (my_eglLockSurfaceKHR (display, pix_surface, lock_attribs) == EGL_FALSE) {
+    GST_CAT_ERROR (GST_CAT_DEFAULT, "Unable to lock surface");
+    goto EGL_ERROR;
+  }
+
+  if (eglQuerySurface (display, pix_surface, EGL_BITMAP_POINTER_KHR, buffer)
+      == EGL_FALSE) {
+    GST_CAT_ERROR (GST_CAT_DEFAULT,
+        "Unable to query surface for bitmap pointer");
+    goto EGL_ERROR;
+  }
+
+  return buffer;
+
+EGL_ERROR:
+  GST_CAT_ERROR (GST_CAT_DEFAULT, "EGL call returned error %x", eglGetError ());
+  /* XXX: Free native pixmap here */
+  return NULL;
+}
+
+static GstViDroidBuffer *
+gst_vidroidbuffer_new (GstViDroidSink * vidroidsink, GstCaps * caps)
 {
   GstViDroidBuffer *vidroidbuffer = NULL;
   GstStructure *structure = NULL;
@@ -253,7 +313,7 @@ GST_BOILERPLATE_FULL (GstViDroidSink, gst_vidroidsink, GstVideoSink,
 
   vidroidbuffer->vidroidsink = gst_object_ref (vidroidsink);
 
-  vidroidbuffer->image = platform_crate_native_image_buffer
+  vidroidbuffer->image = gst_vidroidbuffer_create_native
       (vidroidsink->window, vidroidsink->config, vidroidsink->display, NULL);
   if (!vidroidbuffer->image) {
     GST_ERROR_OBJECT (vidroidsink,
@@ -494,12 +554,13 @@ gst_vidroidsink_buffer_alloc (GstBaseSink * bsink, guint64 offset,
   gint width, height;
 
   vidroidsink = GST_VIDROIDSINK (bsink);
-#ifndef __BIONIC__
-  /* no custom alloc for X11 */
-  GST_WARNING_OBJECT (vidroidsink, "No custom alloc for x11/mesa");
-  *buf = NULL;
-  return GST_FLOW_OK;
-#endif
+
+  /* No custom alloc for the slow rendering path */
+  if (vidroidsink->rendering_path == GST_VIDROIDSINK_RENDER_SLOW) {
+    GST_INFO_OBJECT (vidroidsink, "No custom alloc for slow rendering path");
+    *buf = NULL;
+    return GST_FLOW_OK;
+  }
 
   if (G_UNLIKELY (!caps))
     goto no_caps;
@@ -687,32 +748,6 @@ gst_vidroidsink_start (GstBaseSink * sink)
         (vidroidsink->supported_fmts, format);
   }
 
-  /* XXX: non-NULL from getprocaddress doesn't
-   * imply func is supported at runtime. Should check
-   * for needed extensions with  glGetString(GL_EXTENSIONS)
-   * or reglQueryString(display, EGL_EXTENSIONS) here too. 
-   */
-
-  my_eglCreateImageKHR =
-      (PFNEGLCREATEIMAGEKHRPROC) eglGetProcAddress ("eglCreateImageKHR");
-  my_eglDestroyImageKHR =
-      (PFNEGLDESTROYIMAGEKHRPROC) eglGetProcAddress ("eglDestroyImageKHR");
-
-  if (!my_eglCreateImageKHR || !my_eglDestroyImageKHR) {
-    GST_ERROR_OBJECT (vidroidsink, "Extension EGL_KHR_IMAGE not available");
-    goto HANDLE_ERROR;
-  }
-
-  my_glEGLImageTargetTexture2DOES =
-      (PFNGLEGLIMAGETARGETTEXTURE2DOESPROC) eglGetProcAddress
-      ("glEGLImageTargetTexture2DOES");
-
-  if (!my_glEGLImageTargetTexture2DOES) {
-    GST_ERROR_OBJECT (vidroidsink,
-        "glEGLImageTargetTexture2DOES not available");
-    goto HANDLE_ERROR;
-  }
-
   g_mutex_unlock (vidroidsink->flow_lock);
 
   return TRUE;
@@ -804,6 +839,82 @@ gst_vidroidsink_expose (GstXOverlay * overlay)
   gst_vidroidsink_render_and_display (vidroidsink, NULL);
   g_mutex_unlock (vidroidsink->flow_lock);
 
+  return;
+}
+
+/* Checks available egl extensions and chooses
+ * a suitable rendering path from GstVidroidSinkRenderingPath
+ * according to what's available on this platform.
+ * This function can only be called after an EGL context
+ * has been made 'current'.
+ */
+static void
+gst_vidroidsink_init_egl_exts (GstViDroidSink * vidroidsink)
+{
+#ifdef EGL_FAST_RENDERING_POSSIBLE
+  const char *eglexts;
+  unsigned const char *glexts;
+
+  /* OK Fast rendering should be possible from the declared
+   * extensions on the header
+   */
+
+  /* Check for claimed support from reported EGL/GLES extensions */
+
+  eglexts = eglQueryString (vidroidsink->display, EGL_EXTENSIONS);
+  glexts = glGetString (GL_EXTENSIONS);
+
+  if (!strstr (eglexts, "EGL_KHR_image"))
+    goto KHR_IMAGE_NA;
+  if (!strstr (eglexts, "EGL_KHR_lock_surface"))
+    goto SURFACE_LOCK_NA;
+  if (!strstr (glexts, "GL_OES_EGL_image"))
+    goto TEXTURE_2DOES_NA;
+
+  /* Check for actual proc addresses */
+
+  my_eglCreateImageKHR =
+      (PFNEGLCREATEIMAGEKHRPROC) eglGetProcAddress ("eglCreateImageKHR");
+  my_eglDestroyImageKHR =
+      (PFNEGLDESTROYIMAGEKHRPROC) eglGetProcAddress ("eglDestroyImageKHR");
+
+  if (!my_eglCreateImageKHR || !my_eglDestroyImageKHR) {
+  KHR_IMAGE_NA:
+    GST_INFO_OBJECT (vidroidsink, "Extension missing: EGL_KHR_image");
+    goto MISSING_EXTS;
+  }
+
+  my_eglLockSurfaceKHR =
+      (PFNEGLLOCKSURFACEKHRPROC) eglGetProcAddress ("eglLockSurfaceKHR");
+  my_eglUnlockSurfaceKHR =
+      (PFNEGLUNLOCKSURFACEKHRPROC) eglGetProcAddress ("eglUnlockSurfaceKHR");
+
+  if (!my_eglLockSurfaceKHR || !my_eglUnlockSurfaceKHR) {
+  SURFACE_LOCK_NA:
+    GST_INFO_OBJECT (vidroidsink, "Extension missing: EGL_KHR_lock_surface");
+    goto MISSING_EXTS;
+  }
+
+  my_glEGLImageTargetTexture2DOES =
+      (PFNGLEGLIMAGETARGETTEXTURE2DOESPROC) eglGetProcAddress
+      ("glEGLImageTargetTexture2DOES");
+
+  if (!my_glEGLImageTargetTexture2DOES) {
+  TEXTURE_2DOES_NA:
+    GST_INFO_OBJECT (vidroidsink, "Extension missing: GL_OES_EGL_image");
+    goto MISSING_EXTS;
+  }
+
+  /* Default is the copy-over GST_VIDROIDSINK_RENDER_SLOW path */
+  vidroidsink->rendering_path = GST_VIDROIDSINK_RENDER_FAST;
+  GST_INFO_OBJECT (vidroidsink,
+      "Have needed exts. Enabling fast rendering path");
+  return;
+#endif
+
+MISSING_EXTS:
+  GST_WARNING_OBJECT (vidroidsink,
+      "Extensions missing. Using slow rendering path");
   return;
 }
 
@@ -1027,6 +1138,9 @@ gst_vidroidsink_set_window_handle (GstXOverlay * overlay, guintptr id)
     GST_ERROR_OBJECT (vidroidsink, "Couldn't init EGL surface!");
     goto HANDLE_ERROR;
   }
+
+  /* Init extensions */
+  gst_vidroidsink_init_egl_exts (vidroidsink);
 
   return;
 
@@ -1286,6 +1400,8 @@ gst_vidroidsink_setcaps (GstBaseSink * bsink, GstCaps * caps)
     goto HANDLE_ERROR;
   }
 
+  gst_vidroidsink_init_egl_exts (vidroidsink);
+
 SUCCEED:
   GST_INFO_OBJECT (vidroidsink, "Setcaps succeed");
   return TRUE;
@@ -1425,6 +1541,7 @@ gst_vidroidsink_init (GstViDroidSink * vidroidsink,
   vidroidsink->have_vbo = FALSE;
   vidroidsink->have_texture = FALSE;
   vidroidsink->running = FALSE; /* XXX: unused */
+  vidroidsink->rendering_path = GST_VIDROIDSINK_RENDER_SLOW;    /* default */
 }
 
 /* Interface initializations. Used here for initializing the XOverlay

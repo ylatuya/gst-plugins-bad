@@ -62,41 +62,13 @@
 GST_DEBUG_CATEGORY_STATIC (vidroid_platform_wrapper);
 #define GST_CAT_DEFAULT vidroid_platform_wrapper
 
-#ifdef __BIONIC__
-static PFNEGLLOCKSURFACEKHRPROC my_eglLockSurfaceKHR;
-static PFNEGLUNLOCKSURFACEKHRPROC my_eglUnlockSurfaceKHR;
-
-static EGLint lock_attribs[] = {
-  EGL_MAP_PRESERVE_PIXELS_KHR, EGL_TRUE,
-  EGL_LOCK_USAGE_HINT_KHR, EGL_READ_SURFACE_BIT_KHR | EGL_WRITE_SURFACE_BIT_KHR,
-  EGL_NONE
-};
-#endif
-
+/* XXX: Likely to be removed */
 gboolean
 platform_wrapper_init (void)
 {
   GST_DEBUG_CATEGORY_INIT (vidroid_platform_wrapper,
       "ViDroid Platform Wrapper", 0,
       "Platform dependent native-window utility routines for ViDroid");
-
-#ifdef __BIONIC__
-  my_eglLockSurfaceKHR =
-      (PFNEGLLOCKSURFACEKHRPROC) eglGetProcAddress ("eglLockSurfaceKHR");
-  my_eglUnlockSurfaceKHR =
-      (PFNEGLUNLOCKSURFACEKHRPROC) eglGetProcAddress ("eglUnlockSurfaceKHR");
-
-  if (!my_eglLockSurfaceKHR) {
-    GST_CAT_ERROR (GST_CAT_DEFAULT, "Extension missing: eglLockSurfaceKHR");
-    return FALSE;
-  }
-
-  if (!my_eglUnlockSurfaceKHR) {
-    GST_CAT_ERROR (GST_CAT_DEFAULT, "Extension missing: eglUnlockSurfaceKHR");
-    return FALSE;
-  }
-#endif
-
   return TRUE;
 }
 
@@ -167,46 +139,4 @@ platform_destroy_native_window (EGLNativeDisplayType display,
   return TRUE;
 }
 
-/* XXX: Drafted implementation */
-EGLint *
-platform_crate_native_image_buffer (EGLNativeWindowType win, EGLConfig config,
-    EGLNativeDisplayType display, const EGLint * egl_attribs)
-{
-  EGLNativePixmapType pix = NULL;
-  EGLSurface pix_surface;
-  EGLint *buffer = NULL;
-
-  /* XXX: Need to figure out how to create an egl_native_pixmap_t to
-   * feed to eglCreatePixmapSurface. Another option: create an
-   * android_native_buffer_t to pass straight to eglCreateImageKHR.
-   */
-
-  pix_surface = eglCreatePixmapSurface (display, config, pix, egl_attribs);
-
-  if (pix_surface == EGL_NO_SURFACE) {
-    GST_CAT_ERROR (GST_CAT_DEFAULT, "Unable to create pixmap surface");
-    goto EGL_ERROR;
-  }
-
-  if (my_eglLockSurfaceKHR (display, pix_surface, lock_attribs) == EGL_FALSE) {
-    GST_CAT_ERROR (GST_CAT_DEFAULT, "Unable to lock surface");
-    goto EGL_ERROR;
-  }
-
-  if (eglQuerySurface (display, pix_surface, EGL_BITMAP_POINTER_KHR, buffer)
-      == EGL_FALSE) {
-    GST_CAT_ERROR (GST_CAT_DEFAULT,
-        "Unable to query surface for bitmap pointer");
-    goto EGL_ERROR;
-  }
-
-  return buffer;
-
-EGL_ERROR:
-  GST_CAT_ERROR (GST_CAT_DEFAULT, "EGL call returned error %x", eglGetError ());
-  /* XXX: Free native pixmap here */
-ERROR:
-  GST_CAT_ERROR (GST_CAT_DEFAULT, "Can't create native buffer. Bailing out");
-  return NULL;
-}
 #endif

@@ -77,6 +77,14 @@ typedef struct _GstViDroidSinkClass GstViDroidSinkClass;
 
 typedef struct _GstViDroidImageFmt GstViDroidImageFmt;
 
+/* Should be extended when new rendering methods
+ *   get implemented.
+ */
+typedef enum {
+    GST_VIDROIDSINK_RENDER_SLOW,
+    GST_VIDROIDSINK_RENDER_FAST
+} GstVidroidSinkRenderingPath;
+
 typedef struct _coord
 {
   float x;
@@ -132,6 +140,8 @@ struct _GstViDroidSink
   gboolean have_vbo;
   gboolean have_texture;
   gboolean running;
+
+  GstVidroidSinkRenderingPath rendering_path;
 
   /* shader vars */
   coord coordarray[4];
