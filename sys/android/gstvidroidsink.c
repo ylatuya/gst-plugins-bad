@@ -661,9 +661,17 @@ gst_vidroidsink_start (GstBaseSink * sink)
   GstViDroidSink *vidroidsink = GST_VIDROIDSINK (sink);
   GstViDroidImageFmt *format;
 
-  platform_wrapper_init ();
   vidroidsink->flow_lock = g_mutex_new ();
   g_mutex_lock (vidroidsink->flow_lock);
+
+  ret = gst_vidroidsink_init_egl_display (vidroidsink);
+
+  if (!ret) {
+    GST_ERROR_OBJECT (vidroidsink, "Couldn't init EGL display. Bailing out");
+    goto HANDLE_ERROR;
+  }
+
+  platform_wrapper_init ();
 
   /* Init supported caps list (Right now we just harcode the only one we support)
    * XXX: Not sure this is the right place to do it.
@@ -710,13 +718,6 @@ gst_vidroidsink_start (GstBaseSink * sink)
   if (!my_glEGLImageTargetTexture2DOES) {
     GST_ERROR_OBJECT (vidroidsink,
         "glEGLImageTargetTexture2DOES not available");
-    goto HANDLE_ERROR;
-  }
-
-  ret = gst_vidroidsink_init_egl_display (vidroidsink);
-
-  if (!ret) {
-    GST_ERROR_OBJECT (vidroidsink, "Couldn't init EGL display. Bailing out");
     goto HANDLE_ERROR;
   }
 
