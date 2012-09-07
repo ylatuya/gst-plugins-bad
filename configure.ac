@@ -435,8 +435,14 @@ if test "x$HAVE_WINSOCK2_H" = "xyes"; then
 fi
 
 if test "x$HAVE_PTHREAD_H" = "xyes"; then
-  DCCP_LIBS="$DCCP_LIBS -lpthread"
-  AC_SUBST(DCCP_LIBS)
+  case "$host" in
+    *-*android*)
+      ;; # pthread is included in bionic
+    *)
+      DCCP_LIBS="$DCCP_LIBS -lpthread"
+      AC_SUBST(DCCP_LIBS)
+      ;;
+  esac
 fi
 
 if test "x$HAVE_PTHREAD_H" != "xyes"; then
