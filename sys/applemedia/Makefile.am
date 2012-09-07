@@ -33,7 +33,7 @@ libgstapplemedia_la_LIBADD =			\
 	-lgstvideo-$(GST_MAJORMINOR)
 
 if !GST_PLUGIN_BUILD_STATIC
-libgstapplemedia_la_LIBTOOLFLAGS = --tag=disable-static
+libgstapplemedia_la_LIBTOOLFLAGS = --tag=disable-static --tag=CC
 endif
 
 libgstapplemedia_la_LDFLAGS =			\
