@@ -378,7 +378,7 @@ gst_vidroidbuffer_destroy (GstViDroidBuffer * vidroidbuffer)
   return;
 
 NO_SINK:
-  GST_WARNING ("no sink found");
+  GST_WARNING ("No sink found");
   return;
 }
 
@@ -405,7 +405,7 @@ gst_vidroidbuffer_finalize (GstViDroidBuffer * vidroidbuffer)
   return;
 
 NO_SINK:
-  GST_WARNING ("no sink found");
+  GST_WARNING ("No sink found");
   return;
 }
 
@@ -575,7 +575,7 @@ gst_vidroidsink_buffer_alloc (GstBaseSink * bsink, guint64 offset,
 
   if (G_LIKELY (gst_caps_is_equal (caps, vidroidsink->current_caps))) {
     GST_LOG_OBJECT (vidroidsink,
-        "buffer alloc for same last_caps, reusing caps");
+        "Buffer alloc for same last_caps, reusing caps");
     intersection = gst_caps_ref (caps);
     image_format = vidroidsink->format;
     width = GST_VIDEO_SINK_WIDTH (vidroidsink);
@@ -584,14 +584,14 @@ gst_vidroidsink_buffer_alloc (GstBaseSink * bsink, guint64 offset,
     goto REUSE_LAST_CAPS;
   }
 
-  GST_DEBUG_OBJECT (vidroidsink, "buffer alloc requested size %d with caps %"
+  GST_DEBUG_OBJECT (vidroidsink, "Buffer alloc requested size %d with caps %"
       GST_PTR_FORMAT ", intersecting with our caps %" GST_PTR_FORMAT, size,
       caps, vidroidsink->current_caps);
 
   /* Check the caps against our current caps */
   intersection = gst_caps_intersect (vidroidsink->current_caps, caps);
 
-  GST_DEBUG_OBJECT (vidroidsink, "intersection in buffer alloc returned %"
+  GST_DEBUG_OBJECT (vidroidsink, "Intersection in buffer alloc returned %"
       GST_PTR_FORMAT, intersection);
 
   if (gst_caps_is_empty (intersection)) {
@@ -929,16 +929,20 @@ gst_vidroidsink_init_egl_exts (GstViDroidSink * vidroidsink)
      */
     vidroidsink->rendering_path = GST_VIDROIDSINK_RENDER_FAST;
     GST_INFO_OBJECT (vidroidsink,
-        "Have needed exts. Enabling fast rendering path");
+        "Have needed extensions. Enabling fast rendering path");
     return;
-  } else
+  } else {
     GST_WARNING_OBJECT (vidroidsink,
         "Extension check passed but slow rendering path being forced");
+    goto SLOW_PATH_SELECTED;
+  }
 #endif
 
 MISSING_EXTS:
   GST_WARNING_OBJECT (vidroidsink,
-      "Extensions missing. Using slow rendering path");
+      "Extensions missing. Can't use fast rendering path");
+SLOW_PATH_SELECTED:
+  GST_INFO_OBJECT (vidroidsink, "Using slow rendering path");
   return;
 }
 
