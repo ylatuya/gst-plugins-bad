@@ -1563,6 +1563,7 @@ gst_vidroidsink_init (GstViDroidSink * vidroidsink,
   vidroidsink->running = FALSE; /* XXX: unused */
   vidroidsink->rendering_path = GST_VIDROIDSINK_RENDER_SLOW;
   vidroidsink->can_create_window = TRUE;
+  vidroidsink->force_rendering_slow = FALSE;
 }
 
 /* Interface initializations. Used here for initializing the XOverlay
