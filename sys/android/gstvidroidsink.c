@@ -858,9 +858,8 @@ gst_vidroidsink_expose (GstXOverlay * overlay)
 
 /* Checks available egl/gles extensions and chooses
  * a suitable rendering path from GstVidroidSinkRenderingPath
- * according to what's available on this platform.
- * This function can only be called after an EGL context
- * has been made 'current'.
+ * accordingly. This function can only be called after an
+ * EGL context has been made current.
  */
 static void
 gst_vidroidsink_init_egl_exts (GstViDroidSink * vidroidsink)
@@ -922,26 +921,26 @@ gst_vidroidsink_init_egl_exts (GstViDroidSink * vidroidsink)
     goto MISSING_EXTS;
   }
 
-  /* Default is the copy-over GST_VIDROIDSINK_RENDER_SLOW path */
   if (!vidroidsink->force_rendering_slow) {
-    /* Check should be moved up. Right now we have it here
-     * just for ext-checking debuging purposes
-     */
-    vidroidsink->rendering_path = GST_VIDROIDSINK_RENDER_FAST;
     GST_INFO_OBJECT (vidroidsink,
-        "Have needed extensions. Enabling fast rendering path");
-    return;
+        "Have needed extensions for fast rendering path");
   } else {
     GST_WARNING_OBJECT (vidroidsink,
         "Extension check passed but slow rendering path being forced");
     goto SLOW_PATH_SELECTED;
   }
+
+  /* Extension check passed. Enable fast rendering path */
+  vidroidsink->rendering_path = GST_VIDROIDSINK_RENDER_FAST;
+  GST_INFO_OBJECT (vidroidsink, "Using fast rendering path");
+  return;
 #endif
 
 MISSING_EXTS:
   GST_WARNING_OBJECT (vidroidsink,
       "Extensions missing. Can't use fast rendering path");
 SLOW_PATH_SELECTED:
+  vidroidsink->rendering_path = GST_VIDROIDSINK_RENDER_SLOW;
   GST_INFO_OBJECT (vidroidsink, "Using slow rendering path");
   return;
 }
@@ -1565,7 +1564,6 @@ gst_vidroidsink_init (GstViDroidSink * vidroidsink,
   vidroidsink->have_vbo = FALSE;
   vidroidsink->have_texture = FALSE;
   vidroidsink->running = FALSE; /* XXX: unused */
-  vidroidsink->rendering_path = GST_VIDROIDSINK_RENDER_SLOW;
   vidroidsink->can_create_window = TRUE;
   vidroidsink->force_rendering_slow = FALSE;
 }
