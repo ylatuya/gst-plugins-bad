@@ -266,14 +266,20 @@ GST_BOILERPLATE_FULL (GstViDroidSink, gst_vidroidsink, GstVideoSink,
       == EGL_FALSE) {
     GST_CAT_ERROR (GST_CAT_DEFAULT,
         "Unable to query surface for bitmap pointer");
-    goto EGL_ERROR;
+    goto EGL_ERROR_LOCKED;
   }
 
   return buffer;
 
+EGL_ERROR_LOCKED:
+  my_eglUnlockSurfaceKHR (display, pix_surface);
 EGL_ERROR:
   GST_CAT_ERROR (GST_CAT_DEFAULT, "EGL call returned error %x", eglGetError ());
-  /* XXX: Free native pixmap here */
+  if (!eglDestroySurface (display, pix_surface)) {
+    GST_CAT_ERROR (GST_CAT_DEFAULT, "Couldn't destroy surface");
+    GST_CAT_ERROR (GST_CAT_DEFAULT, "EGL call returned error %x",
+        eglGetError ());
+  }
   return NULL;
 }
 
