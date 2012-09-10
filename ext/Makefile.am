@@ -410,6 +410,7 @@ SUBDIRS=\
 	$(DIRECTFB_DIR) \
 	$(DIVX_DIR) \
 	$(DTS_DIR) \
+	$(EGLGLES_DIR) \
 	$(RESINDVD_DIR) \
 	$(FAAC_DIR) \
 	$(FAAD_DIR) \

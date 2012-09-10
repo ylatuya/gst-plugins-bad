@@ -1434,9 +1434,9 @@ AG_GST_CHECK_FEATURE(RSVG, [rsvg decoder], rsvg, [
   AC_SUBST(RSVG_LIBS)
 ])
 
-dnl *** android ***
+dnl *** eglgles ***
 translit(dnm, m, l) AM_CONDITIONAL(USE_EGLGLES, true)
-AG_GST_CHECK_FEATURE(EGLGLES, [EglGles, Generic EGL/GLES sink], eglgles, [
+AG_GST_CHECK_FEATURE(EGLGLES, [eglgles sink], eglgles, [
   PKG_CHECK_MODULES(EGLGLES, egl glesv2, HAVE_EGLGLES="yes", [
     HAVE_EGLGLES="no"
   ])
