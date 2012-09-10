@@ -151,6 +151,7 @@ struct _GstViDroidSink
   /* props */
   gboolean silent;
   gboolean can_create_window;
+  gboolean force_rendering_slow;
   gint window_default_width;
   gint window_default_height;
 };

@@ -164,7 +164,8 @@ enum
   PROP_SILENT,
   PROP_CAN_CREATE_WINDOW,
   PROP_DEFAULT_HEIGHT,
-  PROP_DEFAULT_WIDTH
+  PROP_DEFAULT_WIDTH,
+  PROP_FORCE_RENDERING_SLOW
 };
 
 /* XXX: Harcoded for now */
@@ -916,10 +917,17 @@ gst_vidroidsink_init_egl_exts (GstViDroidSink * vidroidsink)
   }
 
   /* Default is the copy-over GST_VIDROIDSINK_RENDER_SLOW path */
-  vidroidsink->rendering_path = GST_VIDROIDSINK_RENDER_FAST;
-  GST_INFO_OBJECT (vidroidsink,
-      "Have needed exts. Enabling fast rendering path");
-  return;
+  if (!vidroidsink->force_rendering_slow) {
+    /* Check should be moved up. Right now we have it here
+     * just for ext-checking debuging purposes
+     */
+    vidroidsink->rendering_path = GST_VIDROIDSINK_RENDER_FAST;
+    GST_INFO_OBJECT (vidroidsink,
+        "Have needed exts. Enabling fast rendering path");
+    return;
+  } else
+    GST_WARNING_OBJECT (vidroidsink,
+        "Extension check passed but slow rendering path being forced");
 #endif
 
 MISSING_EXTS:
@@ -1439,6 +1447,9 @@ gst_vidroidsink_set_property (GObject * object, guint prop_id,
     case PROP_DEFAULT_WIDTH:
       vidroidsink->window_default_width = g_value_get_int (value);
       break;
+    case PROP_FORCE_RENDERING_SLOW:
+      vidroidsink->force_rendering_slow = g_value_get_boolean (value);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -1467,6 +1478,9 @@ gst_vidroidsink_get_property (GObject * object, guint prop_id,
       break;
     case PROP_DEFAULT_WIDTH:
       g_value_set_int (value, vidroidsink->window_default_width);
+      break;
+    case PROP_FORCE_RENDERING_SLOW:
+      g_value_set_boolean (value, vidroidsink->force_rendering_slow);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -1519,6 +1533,9 @@ gst_vidroidsink_class_init (GstViDroidSinkClass * klass)
   g_object_class_install_property (gobject_class, PROP_CAN_CREATE_WINDOW,
       g_param_spec_boolean ("can_create_window", "CanCreateWindow",
           "Attempt to create a window?", FALSE, G_PARAM_READWRITE));
+  g_object_class_install_property (gobject_class, PROP_FORCE_RENDERING_SLOW,
+      g_param_spec_boolean ("force_rendering_slow", "ForceRenderingSlow",
+          "Force slow rendering path?", FALSE, G_PARAM_READWRITE));
 
   g_object_class_install_property (gobject_class, PROP_DEFAULT_WIDTH,
       g_param_spec_int ("window_default_width", "DefaultWidth",
