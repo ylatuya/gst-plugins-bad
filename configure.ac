@@ -1435,13 +1435,13 @@ AG_GST_CHECK_FEATURE(RSVG, [rsvg decoder], rsvg, [
 ])
 
 dnl *** android ***
-translit(dnm, m, l) AM_CONDITIONAL(USE_DROIDSINKS, true)
-AG_GST_CHECK_FEATURE(DROIDSINKS, [Vidroid, Android EGL/GLES sink], android, [
-  PKG_CHECK_MODULES(DROIDSINKS, egl glesv2, HAVE_DROIDSINKS="yes", [
-    HAVE_DROIDSINKS="no"
+translit(dnm, m, l) AM_CONDITIONAL(USE_EGLGLES, true)
+AG_GST_CHECK_FEATURE(EGLGLES, [EglGles, Generic EGL/GLES sink], eglgles, [
+  PKG_CHECK_MODULES(EGLGLES, egl glesv2, HAVE_EGLGLES="yes", [
+    HAVE_EGLGLES="no"
   ])
-  AC_SUBST(DROIDSINKS_CFLAGS)
-  AC_SUBST(DROIDSINKS_LIBS)
+  AC_SUBST(EGLGLES_CFLAGS)
+  AC_SUBST(EGLGLES_LIBS)
 ])
 
 dnl *** timidity ***
@@ -1798,7 +1798,7 @@ AM_CONDITIONAL(USE_CURL, false)
 AM_CONDITIONAL(USE_DC1394, false)
 AM_CONDITIONAL(USE_DECKLINK, false)
 AM_CONDITIONAL(USE_DIRECTFB, false)
-AM_CONDITIONAL(USE_DROIDSINKS, false)
+AM_CONDITIONAL(USE_EGLGLES, false)
 AM_CONDITIONAL(USE_DIRAC, false)
 AM_CONDITIONAL(USE_DTS, false)
 AM_CONDITIONAL(USE_DIVX, false)
@@ -2010,7 +2010,6 @@ sys/Makefile
 sys/dshowdecwrapper/Makefile
 sys/acmenc/Makefile
 sys/acmmp3dec/Makefile
-sys/android/Makefile
 sys/applemedia/Makefile
 sys/avc/Makefile
 sys/d3dvideosink/Makefile
@@ -2059,6 +2058,7 @@ ext/dirac/Makefile
 ext/directfb/Makefile
 ext/divx/Makefile
 ext/dts/Makefile
+ext/eglgles/Makefile
 ext/faac/Makefile
 ext/faad/Makefile
 ext/flite/Makefile

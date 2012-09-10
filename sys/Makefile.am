@@ -46,12 +46,6 @@ else
 DIRECTSOUND_DIR=
 endif
 
-if USE_DROIDSINKS
-DROIDSINKS_DIR=android
-else
-DROIDSINKS_DIR=
-endif
-
 if USE_FBDEV
 FBDEV_DIR=fbdev
 else
@@ -128,7 +122,7 @@ endif
 
 SUBDIRS = $(ACM_DIR) $(APPLE_MEDIA_DIR) $(AVC_DIR) $(D3DVIDEOSINK_DIR) $(DECKLINK_DIR) $(DIRECTDRAW_DIR) $(DIRECTSOUND_DIR) $(DVB_DIR) $(DROIDSINKS_DIR) $(FBDEV_DIR) $(LINSYS_DIR) $(OSX_VIDEO_DIR) $(QT_DIR) $(SHM_DIR) $(VCD_DIR) $(VDPAU_DIR) $(WININET_DIR) $(PVR_DIR)
 
-DIST_SUBDIRS = acmenc acmmp3dec android applemedia avc d3dvideosink decklink directdraw directsound dvb linsys fbdev dshowdecwrapper dshowsrcwrapper dshowvideosink \
+DIST_SUBDIRS = acmenc acmmp3dec applemedia avc d3dvideosink decklink directdraw directsound dvb linsys fbdev dshowdecwrapper dshowsrcwrapper dshowvideosink \
 		osxvideo qtwrapper shm vcd vdpau wasapi wininet winks winscreencap pvr2d
 
 include $(top_srcdir)/common/parallel-subdirs.mak

@@ -100,6 +100,12 @@ else
 DTS_DIR=
 endif
 
+if USE_EGLGLES
+EGLGLES_DIR=eglgles
+else
+EGLGLES_DIR=
+endif
+
 if USE_RESINDVD
  RESINDVD_DIR = resindvd
 else
@@ -461,6 +467,7 @@ DIST_SUBDIRS = \
 	dc1394 \
 	dirac \
 	directfb \
+	eglgles \
 	faac \
 	faad \
 	flite \
