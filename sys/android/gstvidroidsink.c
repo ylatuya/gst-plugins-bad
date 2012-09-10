@@ -814,7 +814,13 @@ static EGLNativeWindowType
 gst_vidroidsink_create_window (GstViDroidSink * vidroidsink, gint width,
     gint height)
 {
-  EGLNativeWindowType window;
+  EGLNativeWindowType window = 0;
+
+  if (!vidroidsink->can_create_window) {
+    GST_ERROR_OBJECT (vidroidsink, "This sink can't create a window by itself");
+    return window;
+  } else
+    GST_INFO_OBJECT (vidroidsink, "Attempting internal window creation");
 
   if (!width && !height) {      /* Create a default size window */
     width = vidroidsink->window_default_width;
@@ -1386,7 +1392,7 @@ gst_vidroidsink_setcaps (GstBaseSink * bsink, GstCaps * caps)
   GST_VIDEO_SINK_HEIGHT (vidroidsink) = height;
 
   if (!vidroidsink->have_window) {
-    /* This is a no-go on Android but should work on x11/mesa */
+    /* Window creation for no x11/mesa hasn't been implemented yet */
     GST_INFO_OBJECT (vidroidsink,
         "No window. Will attempt internal window creation");
     if (!(vidroidsink->window = gst_vidroidsink_create_window (vidroidsink,
@@ -1527,7 +1533,7 @@ gst_vidroidsink_class_init (GstViDroidSinkClass * klass)
           FALSE, G_PARAM_READWRITE));
   g_object_class_install_property (gobject_class, PROP_CAN_CREATE_WINDOW,
       g_param_spec_boolean ("can_create_window", "CanCreateWindow",
-          "Attempt to create a window?", FALSE, G_PARAM_READWRITE));
+          "Attempt to create a window?", TRUE, G_PARAM_READWRITE));
   g_object_class_install_property (gobject_class, PROP_FORCE_RENDERING_SLOW,
       g_param_spec_boolean ("force_rendering_slow", "ForceRenderingSlow",
           "Force slow rendering path?", FALSE, G_PARAM_READWRITE));
@@ -1555,7 +1561,8 @@ gst_vidroidsink_init (GstViDroidSink * vidroidsink,
   vidroidsink->have_vbo = FALSE;
   vidroidsink->have_texture = FALSE;
   vidroidsink->running = FALSE; /* XXX: unused */
-  vidroidsink->rendering_path = GST_VIDROIDSINK_RENDER_SLOW;    /* default */
+  vidroidsink->rendering_path = GST_VIDROIDSINK_RENDER_SLOW;
+  vidroidsink->can_create_window = TRUE;
 }
 
 /* Interface initializations. Used here for initializing the XOverlay
