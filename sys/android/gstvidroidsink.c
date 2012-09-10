@@ -99,6 +99,7 @@ GST_DEBUG_CATEGORY_STATIC (gst_vidroidsink_debug);
 #define VIDROIDSINK_MAX_FRAME_WIDTH 1280
 #define VIDROIDSINK_MAX_FRAME_HEIGHT 720
 
+/* These are needed for our fast rendering path */
 #ifdef EGL_KHR_image
 static PFNEGLCREATEIMAGEKHRPROC my_eglCreateImageKHR;
 static PFNEGLDESTROYIMAGEKHRPROC my_eglDestroyImageKHR;
@@ -308,7 +309,7 @@ gst_vidroidbuffer_new (GstViDroidSink * vidroidsink, GstCaps * caps)
     GST_ERROR_OBJECT (vidroidsink,
         "Invalid input caps. Failed to create  %dx%d buffer",
         vidroidbuffer->width, vidroidbuffer->height);
-    goto beach_unlocked;
+    goto BEACH_UNLOCKED;
   }
 
   vidroidbuffer->vidroidsink = gst_object_ref (vidroidsink);
@@ -319,7 +320,7 @@ gst_vidroidbuffer_new (GstViDroidSink * vidroidsink, GstCaps * caps)
     GST_ERROR_OBJECT (vidroidsink,
         "Failed to create native %sx%d image buffer", vidroidbuffer->width,
         vidroidbuffer->height);
-    goto beach_unlocked;
+    goto BEACH_UNLOCKED;
   }
 
   GST_BUFFER_DATA (vidroidbuffer) = (guchar *) vidroidbuffer->image;
@@ -327,7 +328,7 @@ gst_vidroidbuffer_new (GstViDroidSink * vidroidsink, GstCaps * caps)
 
   return vidroidbuffer;
 
-beach_unlocked:
+BEACH_UNLOCKED:
   gst_vidroidbuffer_free (vidroidbuffer);
   vidroidbuffer = NULL;
   return NULL;
@@ -563,7 +564,7 @@ gst_vidroidsink_buffer_alloc (GstBaseSink * bsink, guint64 offset,
   }
 
   if (G_UNLIKELY (!caps))
-    goto no_caps;
+    goto NO_CAPS;
 
   if (G_LIKELY (gst_caps_is_equal (caps, vidroidsink->current_caps))) {
     GST_LOG_OBJECT (vidroidsink,
@@ -573,7 +574,7 @@ gst_vidroidsink_buffer_alloc (GstBaseSink * bsink, guint64 offset,
     width = GST_VIDEO_SINK_WIDTH (vidroidsink);
     height = GST_VIDEO_SINK_HEIGHT (vidroidsink);
 
-    goto reuse_last_caps;
+    goto REUSE_LAST_CAPS;
   }
 
   GST_DEBUG_OBJECT (vidroidsink, "buffer alloc requested size %d with caps %"
@@ -598,7 +599,7 @@ gst_vidroidsink_buffer_alloc (GstBaseSink * bsink, guint64 offset,
     if (!gst_structure_has_field (structure, "width") ||
         !gst_structure_has_field (structure, "height")) {
       gst_caps_unref (new_caps);
-      goto invalid;
+      goto INVALID;
     }
 
     /* Try different dimensions */
@@ -633,7 +634,7 @@ gst_vidroidsink_buffer_alloc (GstBaseSink * bsink, guint64 offset,
     gst_caps_unref (new_caps);
 
     if (gst_caps_is_empty (intersection))
-      goto incompatible;
+      goto INCOMPATIBLE;
   }
 
   /* Ensure the returned caps are fixed */
@@ -659,9 +660,9 @@ gst_vidroidsink_buffer_alloc (GstBaseSink * bsink, guint64 offset,
   if (!gst_structure_get_int (structure, "width", &width) ||
       !gst_structure_get_int (structure, "height", &height) ||
       image_format == GST_VIDROIDSINK_IMAGE_NOFMT)
-    goto invalid_caps;
+    goto INVALID_CAPS;
 
-reuse_last_caps:
+REUSE_LAST_CAPS:
 
   GST_DEBUG_OBJECT (vidroidsink, "Creating vidroidbuffer");
   vidroidbuffer = gst_vidroidbuffer_new (vidroidsink, intersection);
@@ -674,7 +675,7 @@ reuse_last_caps:
 
   *buf = GST_BUFFER_CAST (vidroidbuffer);
 
-beach:
+BEACH:
   if (intersection) {
     gst_caps_unref (intersection);
   }
@@ -682,33 +683,33 @@ beach:
   return ret;
 
   /* ERRORS */
-invalid:
+INVALID:
   {
     GST_DEBUG_OBJECT (vidroidsink, "No width/height on caps!?");
     ret = GST_FLOW_WRONG_STATE;
-    goto beach;
+    goto BEACH;
   }
-incompatible:
+INCOMPATIBLE:
   {
     GST_WARNING_OBJECT (vidroidsink, "We were requested a buffer with "
         "caps %" GST_PTR_FORMAT ", but our current caps %" GST_PTR_FORMAT
         " are completely incompatible!", caps, vidroidsink->current_caps);
     ret = GST_FLOW_NOT_NEGOTIATED;
-    goto beach;
+    goto BEACH;
   }
-invalid_caps:
+INVALID_CAPS:
   {
     GST_WARNING_OBJECT (vidroidsink, "Invalid caps for buffer allocation %"
         GST_PTR_FORMAT, intersection);
     ret = GST_FLOW_NOT_NEGOTIATED;
-    goto beach;
+    goto BEACH;
   }
-no_caps:
+NO_CAPS:
   {
     GST_WARNING_OBJECT (vidroidsink, "Have no caps, doing fallback allocation");
     *buf = NULL;
     ret = GST_FLOW_OK;
-    goto beach;
+    goto BEACH;
   }
 }
 
