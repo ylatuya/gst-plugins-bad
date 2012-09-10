@@ -852,18 +852,21 @@ gst_vidroidsink_expose (GstXOverlay * overlay)
 static void
 gst_vidroidsink_init_egl_exts (GstViDroidSink * vidroidsink)
 {
-#ifdef EGL_FAST_RENDERING_POSSIBLE
   const char *eglexts;
   unsigned const char *glexts;
 
-  /* OK Fast rendering should be possible from the declared
-   * extensions on the header
-   */
-
-  /* Check for claimed support from reported EGL/GLES extensions */
-
   eglexts = eglQueryString (vidroidsink->display, EGL_EXTENSIONS);
   glexts = glGetString (GL_EXTENSIONS);
+
+  GST_DEBUG_OBJECT (vidroidsink, "Available EGL extensions: %s\n", eglexts);
+  GST_DEBUG_OBJECT (vidroidsink, "Available GLES extensions: %s\n", glexts);
+
+#ifdef EGL_FAST_RENDERING_POSSIBLE
+  /* OK Fast rendering should be possible from the declared
+   * extensions on the eglexts/glexts.h headers
+   */
+
+  /* Check for support from claimed EGL/GLES extensions */
 
   if (!strstr (eglexts, "EGL_KHR_image"))
     goto KHR_IMAGE_NA;
@@ -872,7 +875,7 @@ gst_vidroidsink_init_egl_exts (GstViDroidSink * vidroidsink)
   if (!strstr (glexts, "GL_OES_EGL_image"))
     goto TEXTURE_2DOES_NA;
 
-  /* Check for actual proc addresses */
+  /* Check for actual extension proc addresses */
 
   my_eglCreateImageKHR =
       (PFNEGLCREATEIMAGEKHRPROC) eglGetProcAddress ("eglCreateImageKHR");
@@ -1068,10 +1071,8 @@ gst_vidroidsink_init_egl_display (GstViDroidSink * vidroidsink)
     goto HANDLE_ERROR;
   }
 
-  GST_INFO_OBJECT (vidroidsink, "System reports EGL version v%d.%d",
+  GST_INFO_OBJECT (vidroidsink, "System reports supported EGL version v%d.%d",
       egl_major, egl_minor);
-  GST_DEBUG_OBJECT (vidroidsink, "Available EGL extensions: %s",
-      eglQueryString (vidroidsink->display, EGL_EXTENSIONS));
 
   if (!eglChooseConfig (vidroidsink->display, vidroidsink_RGB16_config,
           &vidroidsink->config, 1, &egl_configs)) {
