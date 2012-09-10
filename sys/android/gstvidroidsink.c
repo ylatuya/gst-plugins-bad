@@ -941,7 +941,6 @@ gst_vidroidsink_init_egl_surface (GstViDroidSink * vidroidsink)
 {
   GLint test;
   GLuint verthandle, fraghandle, prog;
-  const char *glexts;
 
   GST_DEBUG_OBJECT (vidroidsink, "Enter EGL surface setup");
 
@@ -961,10 +960,6 @@ gst_vidroidsink_init_egl_surface (GstViDroidSink * vidroidsink)
         "eglMakeCurrent");
     goto HANDLE_EGL_ERROR_LOCKED;
   }
-
-  /* Print available GL Extensions */
-  glexts = (const char *) glGetString (GL_EXTENSIONS);
-  GST_DEBUG_OBJECT (vidroidsink, "Available GL extensions: %s\n", glexts);
 
   /* We have a surface! */
   vidroidsink->have_surface = TRUE;
