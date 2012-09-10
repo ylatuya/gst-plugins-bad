@@ -59,16 +59,16 @@
 #include <X11/Xlib.h>
 #endif
 
-GST_DEBUG_CATEGORY_STATIC (vidroid_platform_wrapper);
-#define GST_CAT_DEFAULT vidroid_platform_wrapper
+GST_DEBUG_CATEGORY_STATIC (eglgles_platform_wrapper);
+#define GST_CAT_DEFAULT eglgles_platform_wrapper
 
 /* XXX: Likely to be removed */
 gboolean
 platform_wrapper_init (void)
 {
-  GST_DEBUG_CATEGORY_INIT (vidroid_platform_wrapper,
-      "ViDroid Platform Wrapper", 0,
-      "Platform dependent native-window utility routines for ViDroid");
+  GST_DEBUG_CATEGORY_INIT (eglgles_platform_wrapper,
+      "EglGles Platform Wrapper", 0,
+      "Platform dependent native-window utility routines for EglGles");
   return TRUE;
 }
 
@@ -90,7 +90,7 @@ platform_create_native_window (gint width, gint height)
   s = DefaultScreen (d);
   w = XCreateSimpleWindow (d, RootWindow (d, s), 10, 10, width, height, 1,
       BlackPixel (d, s), WhitePixel (d, s));
-  XStoreName (d, w, "vidroidsink");
+  XStoreName (d, w, "eglglessink");
   XMapWindow (d, w);
   XFlush (d);
   return (EGLNativeWindowType) w;

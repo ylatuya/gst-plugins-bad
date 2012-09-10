@@ -1,15 +1,15 @@
 LOCAL_PATH := $(call my-dir)
 
 # -------------------------------------
-# gstvidroidsink library
+# gsteglglessink library
 #
 include $(CLEAR_VARS)
 
 LOCAL_ARM_MODE := arm
 
-gstvidroidsink_FILES := gstvidroidsink.c
+gsteglglessink_FILES := gsteglglessink.c
 
-LOCAL_SRC_FILES := $(gstvidroidsink_FILES)
+LOCAL_SRC_FILES := $(gsteglglessink_FILES)
 LOCAL_C_INCLUDES = $(LOCAL_PATH) \
     $(LOCAL_PATH)/include
 
@@ -57,7 +57,7 @@ LOCAL_SHARED_LIBRARIES += \
     libmedia
 
 
-LOCAL_MODULE:= libgstvidroidsink
+LOCAL_MODULE:= libgsteglglessink
 LOCAL_MODULE_PATH := $(TARGET_OUT)/lib/gstreamer-0.10
 
 #

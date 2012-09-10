@@ -42,8 +42,8 @@
  * Boston, MA 02111-1307, USA.
  */
 
-#ifndef __GST_VIDROIDSINK_H__
-#define __GST_VIDROIDSINK_H__
+#ifndef __GST_EGLGLESSINK_H__
+#define __GST_EGLGLESSINK_H__
 
 #include <gst/gst.h>
 
@@ -53,36 +53,36 @@
 #include <GLES2/gl2ext.h>
 
 G_BEGIN_DECLS
-#define GST_TYPE_VIDROIDSINK \
-  (gst_vidroidsink_get_type())
-#define GST_VIDROIDSINK(obj) \
-  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_VIDROIDSINK,GstViDroidSink))
-#define GST_VIDROIDSINK_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_VIDROIDSINK,GstViDroidSinkClass))
-#define GST_IS_VIDROIDSINK(obj) \
-  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_VIDROIDSINK))
-#define GST_IS_VIDROIDSINK_CLASS(klass) \
-  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_VIDROIDSINK))
+#define GST_TYPE_EGLGLESSINK \
+  (gst_eglglessink_get_type())
+#define GST_EGLGLESSINK(obj) \
+  (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_EGLGLESSINK,GstEglGlesSink))
+#define GST_EGLGLESSINK_CLASS(klass) \
+  (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_EGLGLESSINK,GstEglGlesSinkClass))
+#define GST_IS_EGLGLESSINK(obj) \
+  (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_EGLGLESSINK))
+#define GST_IS_EGLGLESSINK_CLASS(klass) \
+  (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_EGLGLESSINK))
 /* XXX: Harcoded format. Should be runtime built latter on. */
-#define GST_VIDROIDSINK_IMAGE_RGB565 1
-#define GST_VIDROIDSINK_IMAGE_NOFMT -1
+#define GST_EGLGLESSINK_IMAGE_RGB565 1
+#define GST_EGLGLESSINK_IMAGE_NOFMT -1
 
-#define GST_VIDROIDSINK_EGL_MIN_VERSION 1 
+#define GST_EGLGLESSINK_EGL_MIN_VERSION 1 
 
-typedef struct _GstViDroidBuffer GstViDroidBuffer;
-typedef struct _GstViDroidBufferClass GstViDroidBufferClass;
+typedef struct _GstEglGlesBuffer GstEglGlesBuffer;
+typedef struct _GstEglGlesBufferClass GstEglGlesBufferClass;
 
-typedef struct _GstViDroidSink GstViDroidSink;
-typedef struct _GstViDroidSinkClass GstViDroidSinkClass;
+typedef struct _GstEglGlesSink GstEglGlesSink;
+typedef struct _GstEglGlesSinkClass GstEglGlesSinkClass;
 
-typedef struct _GstViDroidImageFmt GstViDroidImageFmt;
+typedef struct _GstEglGlesImageFmt GstEglGlesImageFmt;
 
 /* Should be extended when new rendering methods
  *   get implemented.
  */
 typedef enum {
-    GST_VIDROIDSINK_RENDER_SLOW,
-    GST_VIDROIDSINK_RENDER_FAST
+    GST_EGLGLESSINK_RENDER_SLOW,
+    GST_EGLGLESSINK_RENDER_FAST
 } GstVidroidSinkRenderingPath;
 
 typedef struct _coord
@@ -92,17 +92,17 @@ typedef struct _coord
   float z;
 } coord;
 
-struct _GstViDroidImageFmt
+struct _GstEglGlesImageFmt
 {
   gint fmt;
   GstCaps *caps;
 };
 
 /* XXX: Maybe use GstVideoRectangle for the image data? */
-struct _GstViDroidBuffer
+struct _GstEglGlesBuffer
 {
   GstBuffer buffer;
-  GstViDroidSink *vidroidsink;
+  GstEglGlesSink *eglglessink;
 
   EGLint *image;
   gint format;
@@ -111,7 +111,7 @@ struct _GstViDroidBuffer
   size_t size;
 };
 
-struct _GstViDroidSink
+struct _GstEglGlesSink
 {
   GstVideoSink videosink;
   GstVideoFormat format;
@@ -156,12 +156,12 @@ struct _GstViDroidSink
   gint window_default_height;
 };
 
-struct _GstViDroidSinkClass
+struct _GstEglGlesSinkClass
 {
   GstVideoSinkClass parent_class;
 };
 
-GType gst_vidroidsink_get_type (void);
+GType gst_eglglessink_get_type (void);
 
 G_END_DECLS
-#endif /* __GST_VIDROIDSINK_H__ */
+#endif /* __GST_EGLGLESSINK_H__ */

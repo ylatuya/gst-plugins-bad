@@ -43,7 +43,7 @@
  */
 
 /**
- * SECTION:element-vidroidsink
+ * SECTION:element-eglglessink
  *
  * This is a vout sink using EGL/GLES. 
  * 
@@ -57,7 +57,7 @@
  * <refsect2>
  * <title>Example launch line</title>
  * |[
- * gst-launch -v -m videotestsrc ! vidroidsink
+ * gst-launch -v -m videotestsrc ! eglglessink
  * ]|
  * </refsect2>
  *
@@ -69,7 +69,7 @@
  * available.
  * </para>
  * |[
- * gst-launch -v -m videotestsrc ! vidroidsink force_rendering_slow=TRUE 
+ * gst-launch -v -m videotestsrc ! eglglessink force_rendering_slow=TRUE 
  * ]|
  * </refsect2>
  *
@@ -81,7 +81,7 @@
  * implemented.
  * </para>
  * |[
- * gst-launch -v -m videotestsrc ! vidroidsink force_rendering_slow=TRUE 
+ * gst-launch -v -m videotestsrc ! eglglessink force_rendering_slow=TRUE 
  * ]|
  * </refsect2>
  */
@@ -103,17 +103,17 @@
 
 #include "video_platform_wrapper.h"
 
-#include "gstvidroidsink.h"
+#include "gsteglglessink.h"
 
-GST_DEBUG_CATEGORY_STATIC (gst_vidroidsink_debug);
-#define GST_CAT_DEFAULT gst_vidroidsink_debug
+GST_DEBUG_CATEGORY_STATIC (gst_eglglessink_debug);
+#define GST_CAT_DEFAULT gst_eglglessink_debug
 
 /* XXX: These should be defined per model someway
  * but the Galaxy Nexus's were taken as a reference
  * for now on:
  */
-#define VIDROIDSINK_MAX_FRAME_WIDTH 1280
-#define VIDROIDSINK_MAX_FRAME_HEIGHT 720
+#define EGLGLESSINK_MAX_FRAME_WIDTH 1280
+#define EGLGLESSINK_MAX_FRAME_HEIGHT 720
 
 /* These are only needed for the fast rendering path */
 #ifdef EGL_KHR_image
@@ -160,7 +160,7 @@ static const char *frag_prog = {
  *
  * XXX: Extend RGB support to a set. Maybe implement YUV too.
  */
-static GstStaticPadTemplate gst_vidroidsink_sink_template_factory =
+static GstStaticPadTemplate gst_eglglessink_sink_template_factory =
 GST_STATIC_PAD_TEMPLATE ("sink",
     GST_PAD_SINK,
     GST_PAD_ALWAYS,
@@ -184,77 +184,77 @@ enum
 };
 
 /* XXX: Harcoded for now */
-static EGLint vidroidsink_RGB16_config[] = {
+static EGLint eglglessink_RGB16_config[] = {
   EGL_RED_SIZE, 5,
   EGL_GREEN_SIZE, 6,
   EGL_BLUE_SIZE, 5,
   EGL_NONE
 };
 
-static void gst_vidroidsink_get_property (GObject * object, guint prop_id,
+static void gst_eglglessink_get_property (GObject * object, guint prop_id,
     GValue * value, GParamSpec * pspec);
-static void gst_vidroidsink_set_property (GObject * object, guint prop_id,
+static void gst_eglglessink_set_property (GObject * object, guint prop_id,
     const GValue * value, GParamSpec * pspec);
-static GstFlowReturn gst_vidroidsink_show_frame (GstVideoSink * vsink,
+static GstFlowReturn gst_eglglessink_show_frame (GstVideoSink * vsink,
     GstBuffer * buf);
-static gboolean gst_vidroidsink_setcaps (GstBaseSink * bsink, GstCaps * caps);
-static gboolean gst_vidroidsink_start (GstBaseSink * sink);
-static gboolean gst_vidroidsink_stop (GstBaseSink * sink);
-static GstFlowReturn gst_vidroidsink_buffer_alloc (GstBaseSink * sink,
+static gboolean gst_eglglessink_setcaps (GstBaseSink * bsink, GstCaps * caps);
+static gboolean gst_eglglessink_start (GstBaseSink * sink);
+static gboolean gst_eglglessink_stop (GstBaseSink * sink);
+static GstFlowReturn gst_eglglessink_buffer_alloc (GstBaseSink * sink,
     guint64 offset, guint size, GstCaps * caps, GstBuffer ** buf);
 
 /* XOverlay interface cruft */
-static gboolean gst_vidroidsink_interface_supported
+static gboolean gst_eglglessink_interface_supported
     (GstImplementsInterface * iface, GType type);
-static void gst_vidroidsink_implements_init
+static void gst_eglglessink_implements_init
     (GstImplementsInterfaceClass * klass);
-static void gst_vidroidsink_xoverlay_init (GstXOverlayClass * iface);
-static void gst_vidroidsink_init_interfaces (GType type);
+static void gst_eglglessink_xoverlay_init (GstXOverlayClass * iface);
+static void gst_eglglessink_init_interfaces (GType type);
 
 /* Actual XOverlay interface funcs */
-static void gst_vidroidsink_expose (GstXOverlay * overlay);
-static void gst_vidroidsink_set_window_handle (GstXOverlay * overlay,
+static void gst_eglglessink_expose (GstXOverlay * overlay);
+static void gst_eglglessink_set_window_handle (GstXOverlay * overlay,
     guintptr id);
 
 /* Custom Buffer funcs */
-static void gst_vidroidbuffer_destroy (GstViDroidBuffer * vidroidsink);
-static void gst_vidroidbuffer_init (GstViDroidBuffer * vidroidsink,
+static void gst_eglglesbuffer_destroy (GstEglGlesBuffer * eglglessink);
+static void gst_eglglesbuffer_init (GstEglGlesBuffer * eglglessink,
     gpointer g_class);
-static GType gst_vidroidbuffer_get_type (void);
-static gint gst_vidroidsink_get_compat_format_from_caps
-    (GstViDroidSink * vidroidsink, GstCaps * caps);
-static void gst_vidroidbuffer_finalize (GstViDroidBuffer * vidroidsink);
-static void gst_vidroidbuffer_class_init (gpointer g_class,
+static GType gst_eglglesbuffer_get_type (void);
+static gint gst_eglglessink_get_compat_format_from_caps
+    (GstEglGlesSink * eglglessink, GstCaps * caps);
+static void gst_eglglesbuffer_finalize (GstEglGlesBuffer * eglglessink);
+static void gst_eglglesbuffer_class_init (gpointer g_class,
     gpointer class_data);
-static void gst_vidroidbuffer_free (GstViDroidBuffer * vidroidbuffer);
-static GstViDroidBuffer *gst_vidroidbuffer_new (GstViDroidSink * vidroidsink,
+static void gst_eglglesbuffer_free (GstEglGlesBuffer * eglglesbuffer);
+static GstEglGlesBuffer *gst_eglglesbuffer_new (GstEglGlesSink * eglglessink,
     GstCaps * caps);
-static EGLint *gst_vidroidbuffer_create_native (EGLNativeWindowType win,
+static EGLint *gst_eglglesbuffer_create_native (EGLNativeWindowType win,
     EGLConfig config, EGLNativeDisplayType display, const EGLint * egl_attribs);
 
 /* Utility */
-static EGLNativeWindowType gst_vidroidsink_create_window (GstViDroidSink *
-    vidroidsink, gint width, gint height);
-static gboolean gst_vidroidsink_init_egl_display (GstViDroidSink * vidroidsink);
-static gboolean gst_vidroidsink_init_egl_surface (GstViDroidSink * vidroidsink);
-static void gst_vidroidsink_init_egl_exts (GstViDroidSink * vidroidsink);
-static void gst_vidroidsink_render_and_display (GstViDroidSink * sink,
+static EGLNativeWindowType gst_eglglessink_create_window (GstEglGlesSink *
+    eglglessink, gint width, gint height);
+static gboolean gst_eglglessink_init_egl_display (GstEglGlesSink * eglglessink);
+static gboolean gst_eglglessink_init_egl_surface (GstEglGlesSink * eglglessink);
+static void gst_eglglessink_init_egl_exts (GstEglGlesSink * eglglessink);
+static void gst_eglglessink_render_and_display (GstEglGlesSink * sink,
     GstBuffer * buf);
 static inline gboolean got_gl_error (const char *wtf);
 
-static GstBufferClass *gstvidroidsink_buffer_parent_class = NULL;
-#define GST_TYPE_VIDROIDBUFFER (gst_vidroidbuffer_get_type())
-#define GST_IS_VIDROIDBUFFER(obj) (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GST_TYPE_VIDROIDBUFFER))
-#define GST_VIDROIDBUFFER(obj) (G_TYPE_CHECK_INSTANCE_CAST ((obj), GST_TYPE_VIDROIDBUFFER, GstViDroidBuffer))
-#define GST_VIDROIDBUFFER_CAST(obj) ((GstViDroidBuffer *)(obj))
+static GstBufferClass *gsteglglessink_buffer_parent_class = NULL;
+#define GST_TYPE_EGLGLESBUFFER (gst_eglglesbuffer_get_type())
+#define GST_IS_EGLGLESBUFFER(obj) (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GST_TYPE_EGLGLESBUFFER))
+#define GST_EGLGLESBUFFER(obj) (G_TYPE_CHECK_INSTANCE_CAST ((obj), GST_TYPE_EGLGLESBUFFER, GstEglGlesBuffer))
+#define GST_EGLGLESBUFFER_CAST(obj) ((GstEglGlesBuffer *)(obj))
 
 
-GST_BOILERPLATE_FULL (GstViDroidSink, gst_vidroidsink, GstVideoSink,
-    GST_TYPE_VIDEO_SINK, gst_vidroidsink_init_interfaces)
+GST_BOILERPLATE_FULL (GstEglGlesSink, gst_eglglessink, GstVideoSink,
+    GST_TYPE_VIDEO_SINK, gst_eglglessink_init_interfaces)
 
 /* Custom Buffer Funcs */
 /* XXX: Drafted implementation */
-     static EGLint *gst_vidroidbuffer_create_native (EGLNativeWindowType win,
+     static EGLint *gst_eglglesbuffer_create_native (EGLNativeWindowType win,
     EGLConfig config, EGLNativeDisplayType display, const EGLint * egl_attribs)
 {
   EGLNativePixmapType pix;
@@ -299,96 +299,96 @@ EGL_ERROR:
   return NULL;
 }
 
-static GstViDroidBuffer *
-gst_vidroidbuffer_new (GstViDroidSink * vidroidsink, GstCaps * caps)
+static GstEglGlesBuffer *
+gst_eglglesbuffer_new (GstEglGlesSink * eglglessink, GstCaps * caps)
 {
-  GstViDroidBuffer *vidroidbuffer = NULL;
+  GstEglGlesBuffer *eglglesbuffer = NULL;
   GstStructure *structure = NULL;
 
-  g_return_val_if_fail (GST_IS_VIDROIDSINK (vidroidsink), NULL);
+  g_return_val_if_fail (GST_IS_EGLGLESSINK (eglglessink), NULL);
   g_return_val_if_fail (caps, NULL);
 
-  vidroidbuffer =
-      (GstViDroidBuffer *) gst_mini_object_new (GST_TYPE_VIDROIDBUFFER);
-  GST_DEBUG_OBJECT (vidroidbuffer, "Creating new GstViDroidBuffer");
+  eglglesbuffer =
+      (GstEglGlesBuffer *) gst_mini_object_new (GST_TYPE_EGLGLESBUFFER);
+  GST_DEBUG_OBJECT (eglglesbuffer, "Creating new GstEglGlesBuffer");
 
   structure = gst_caps_get_structure (caps, 0);
 
-  if (!gst_structure_get_int (structure, "width", &vidroidbuffer->width) ||
-      !gst_structure_get_int (structure, "height", &vidroidbuffer->height)) {
+  if (!gst_structure_get_int (structure, "width", &eglglesbuffer->width) ||
+      !gst_structure_get_int (structure, "height", &eglglesbuffer->height)) {
     GST_WARNING ("Failed getting geometry from caps %" GST_PTR_FORMAT, caps);
   }
 
-  GST_LOG_OBJECT (vidroidsink, "creating %dx%d", vidroidbuffer->width,
-      vidroidbuffer->height);
+  GST_LOG_OBJECT (eglglessink, "creating %dx%d", eglglesbuffer->width,
+      eglglesbuffer->height);
 
-  vidroidbuffer->format =
-      gst_vidroidsink_get_compat_format_from_caps (vidroidsink, caps);
+  eglglesbuffer->format =
+      gst_eglglessink_get_compat_format_from_caps (eglglessink, caps);
 
-  if (vidroidbuffer->format == GST_VIDROIDSINK_IMAGE_NOFMT) {
-    GST_WARNING_OBJECT (vidroidsink,
+  if (eglglesbuffer->format == GST_EGLGLESSINK_IMAGE_NOFMT) {
+    GST_WARNING_OBJECT (eglglessink,
         "Failed to get format from caps %" GST_PTR_FORMAT, caps);
-    GST_ERROR_OBJECT (vidroidsink,
+    GST_ERROR_OBJECT (eglglessink,
         "Invalid input caps. Failed to create  %dx%d buffer",
-        vidroidbuffer->width, vidroidbuffer->height);
+        eglglesbuffer->width, eglglesbuffer->height);
     goto BEACH_UNLOCKED;
   }
 
-  vidroidbuffer->vidroidsink = gst_object_ref (vidroidsink);
+  eglglesbuffer->eglglessink = gst_object_ref (eglglessink);
 
-  vidroidbuffer->image = gst_vidroidbuffer_create_native
-      (vidroidsink->window, vidroidsink->config, vidroidsink->display, NULL);
-  if (!vidroidbuffer->image) {
-    GST_ERROR_OBJECT (vidroidsink,
-        "Failed to create native %sx%d image buffer", vidroidbuffer->width,
-        vidroidbuffer->height);
+  eglglesbuffer->image = gst_eglglesbuffer_create_native
+      (eglglessink->window, eglglessink->config, eglglessink->display, NULL);
+  if (!eglglesbuffer->image) {
+    GST_ERROR_OBJECT (eglglessink,
+        "Failed to create native %sx%d image buffer", eglglesbuffer->width,
+        eglglesbuffer->height);
     goto BEACH_UNLOCKED;
   }
 
-  GST_BUFFER_DATA (vidroidbuffer) = (guchar *) vidroidbuffer->image;
-  GST_BUFFER_SIZE (vidroidbuffer) = vidroidbuffer->size;
+  GST_BUFFER_DATA (eglglesbuffer) = (guchar *) eglglesbuffer->image;
+  GST_BUFFER_SIZE (eglglesbuffer) = eglglesbuffer->size;
 
-  return vidroidbuffer;
+  return eglglesbuffer;
 
 BEACH_UNLOCKED:
-  gst_vidroidbuffer_free (vidroidbuffer);
-  vidroidbuffer = NULL;
+  gst_eglglesbuffer_free (eglglesbuffer);
+  eglglesbuffer = NULL;
   return NULL;
 }
 
 static void
-gst_vidroidbuffer_destroy (GstViDroidBuffer * vidroidbuffer)
+gst_eglglesbuffer_destroy (GstEglGlesBuffer * eglglesbuffer)
 {
 
-  GstViDroidSink *vidroidsink;
+  GstEglGlesSink *eglglessink;
 
-  GST_DEBUG_OBJECT (vidroidbuffer, "Destroying buffer");
+  GST_DEBUG_OBJECT (eglglesbuffer, "Destroying buffer");
 
-  vidroidsink = vidroidbuffer->vidroidsink;
-  if (G_UNLIKELY (vidroidsink == NULL))
+  eglglessink = eglglesbuffer->eglglessink;
+  if (G_UNLIKELY (eglglessink == NULL))
     goto NO_SINK;
 
-  g_return_if_fail (GST_IS_VIDROIDSINK (vidroidsink));
+  g_return_if_fail (GST_IS_EGLGLESSINK (eglglessink));
 
-  GST_OBJECT_LOCK (vidroidsink);
-  GST_DEBUG_OBJECT (vidroidsink, "Destroying image");
+  GST_OBJECT_LOCK (eglglessink);
+  GST_DEBUG_OBJECT (eglglessink, "Destroying image");
 
-  if (vidroidbuffer->image) {
-    if (GST_BUFFER_DATA (vidroidbuffer)) {
-      g_free (GST_BUFFER_DATA (vidroidbuffer));
+  if (eglglesbuffer->image) {
+    if (GST_BUFFER_DATA (eglglesbuffer)) {
+      g_free (GST_BUFFER_DATA (eglglesbuffer));
     }
-    vidroidbuffer->image = NULL;
+    eglglesbuffer->image = NULL;
     /* XXX: Unallocate EGL/GL especific resources asociated with this
      * Image here
      */
   }
 
-  GST_OBJECT_UNLOCK (vidroidsink);
-  vidroidbuffer->vidroidsink = NULL;
-  gst_object_unref (vidroidsink);
+  GST_OBJECT_UNLOCK (eglglessink);
+  eglglesbuffer->eglglessink = NULL;
+  gst_object_unref (eglglessink);
 
-  GST_MINI_OBJECT_CLASS (gstvidroidsink_buffer_parent_class)->finalize
-      (GST_MINI_OBJECT (vidroidbuffer));
+  GST_MINI_OBJECT_CLASS (gsteglglessink_buffer_parent_class)->finalize
+      (GST_MINI_OBJECT (eglglesbuffer));
 
   return;
 
@@ -405,17 +405,17 @@ NO_SINK:
  * destroy func.
  */
 static void
-gst_vidroidbuffer_finalize (GstViDroidBuffer * vidroidbuffer)
+gst_eglglesbuffer_finalize (GstEglGlesBuffer * eglglesbuffer)
 {
-  GstViDroidSink *vidroidsink;
+  GstEglGlesSink *eglglessink;
 
-  vidroidsink = vidroidbuffer->vidroidsink;
-  if (G_UNLIKELY (vidroidsink == NULL))
+  eglglessink = eglglesbuffer->eglglessink;
+  if (G_UNLIKELY (eglglessink == NULL))
     goto NO_SINK;
 
-  g_return_if_fail (GST_IS_VIDROIDSINK (vidroidsink));
+  g_return_if_fail (GST_IS_EGLGLESSINK (eglglessink));
 
-  gst_vidroidbuffer_destroy (vidroidbuffer);
+  gst_eglglesbuffer_destroy (eglglesbuffer);
 
   return;
 
@@ -425,59 +425,59 @@ NO_SINK:
 }
 
 static void
-gst_vidroidbuffer_free (GstViDroidBuffer * vidroidbuffer)
+gst_eglglesbuffer_free (GstEglGlesBuffer * eglglesbuffer)
 {
   /* Make sure it is not recycled. This is meaningless without
    * a pool but was left here as a reference
    */
-  vidroidbuffer->width = -1;
-  vidroidbuffer->height = -1;
-  gst_buffer_unref (GST_BUFFER (vidroidbuffer));
+  eglglesbuffer->width = -1;
+  eglglesbuffer->height = -1;
+  gst_buffer_unref (GST_BUFFER (eglglesbuffer));
 }
 
 static void
-gst_vidroidbuffer_init (GstViDroidBuffer * vidroidbuffer, gpointer g_class)
+gst_eglglesbuffer_init (GstEglGlesBuffer * eglglesbuffer, gpointer g_class)
 {
-  vidroidbuffer->width = 0;
-  vidroidbuffer->height = 0;
-  vidroidbuffer->size = 0;
-  vidroidbuffer->image = NULL;
-  vidroidbuffer->format = GST_VIDROIDSINK_IMAGE_NOFMT;
+  eglglesbuffer->width = 0;
+  eglglesbuffer->height = 0;
+  eglglesbuffer->size = 0;
+  eglglesbuffer->image = NULL;
+  eglglesbuffer->format = GST_EGLGLESSINK_IMAGE_NOFMT;
 }
 
 static void
-gst_vidroidbuffer_class_init (gpointer g_class, gpointer class_data)
+gst_eglglesbuffer_class_init (gpointer g_class, gpointer class_data)
 {
   GstMiniObjectClass *mini_object_class = GST_MINI_OBJECT_CLASS (g_class);
 
-  gstvidroidsink_buffer_parent_class = g_type_class_peek_parent (g_class);
+  gsteglglessink_buffer_parent_class = g_type_class_peek_parent (g_class);
 
   mini_object_class->finalize = (GstMiniObjectFinalizeFunction)
-      gst_vidroidbuffer_finalize;
+      gst_eglglesbuffer_finalize;
 }
 
 static GType
-gst_vidroidbuffer_get_type (void)
+gst_eglglesbuffer_get_type (void)
 {
-  static GType _gst_vidroidsink_buffer_type;
+  static GType _gst_eglglessink_buffer_type;
 
-  if (G_UNLIKELY (_gst_vidroidsink_buffer_type == 0)) {
-    static const GTypeInfo vidroidsink_buffer_info = {
+  if (G_UNLIKELY (_gst_eglglessink_buffer_type == 0)) {
+    static const GTypeInfo eglglessink_buffer_info = {
       sizeof (GstBufferClass),
       NULL,
       NULL,
-      gst_vidroidbuffer_class_init,
+      gst_eglglesbuffer_class_init,
       NULL,
       NULL,
-      sizeof (GstViDroidBuffer),
+      sizeof (GstEglGlesBuffer),
       0,
-      (GInstanceInitFunc) gst_vidroidbuffer_init,
+      (GInstanceInitFunc) gst_eglglesbuffer_init,
       NULL
     };
-    _gst_vidroidsink_buffer_type = g_type_register_static (GST_TYPE_BUFFER,
-        "GstViDroidBuffer", &vidroidsink_buffer_info, 0);
+    _gst_eglglessink_buffer_type = g_type_register_static (GST_TYPE_BUFFER,
+        "GstEglGlesBuffer", &eglglessink_buffer_info, 0);
   }
-  return _gst_vidroidsink_buffer_type;
+  return _gst_eglglessink_buffer_type;
 }
 
 
@@ -486,21 +486,21 @@ gst_vidroidbuffer_get_type (void)
  * as a reference for future improvements. 
  */
 static gint
-gst_vidroidsink_get_compat_format_from_caps (GstViDroidSink * vidroidsink,
+gst_eglglessink_get_compat_format_from_caps (GstEglGlesSink * eglglessink,
     GstCaps * caps)
 {
 
   GList *list = NULL;
-  GstViDroidImageFmt *format;
+  GstEglGlesImageFmt *format;
 
-  g_return_val_if_fail (GST_IS_VIDROIDSINK (vidroidsink), 0);
+  g_return_val_if_fail (GST_IS_EGLGLESSINK (eglglessink), 0);
 
-  list = vidroidsink->supported_fmts;
+  list = eglglessink->supported_fmts;
 
   /* Traverse the list trying to find a compatible format */
   while (list) {
     format = list->data;
-    GST_DEBUG_OBJECT (vidroidsink, "Checking compatibility between listed %"
+    GST_DEBUG_OBJECT (eglglessink, "Checking compatibility between listed %"
         GST_PTR_FORMAT " and %" GST_PTR_FORMAT, format->caps, caps);
     if (format) {
       if (gst_caps_can_intersect (caps, format->caps)) {
@@ -510,11 +510,11 @@ gst_vidroidsink_get_compat_format_from_caps (GstViDroidSink * vidroidsink,
     list = g_list_next (list);
   }
 
-  return GST_VIDROIDSINK_IMAGE_NOFMT;
+  return GST_EGLGLESSINK_IMAGE_NOFMT;
 }
 
 static GstCaps *
-gst_vidroidsink_different_size_suggestion (GstViDroidSink * vidroidsink,
+gst_eglglessink_different_size_suggestion (GstEglGlesSink * eglglessink,
     GstCaps * caps)
 {
   GstCaps *intersection;
@@ -537,7 +537,7 @@ gst_vidroidsink_different_size_suggestion (GstViDroidSink * vidroidsink,
   gst_structure_remove_field (s, "height");
   gst_structure_remove_field (s, "pixel-aspect-ratio");
 
-  intersection = gst_caps_intersect (vidroidsink->current_caps, new_caps);
+  intersection = gst_caps_intersect (eglglessink->current_caps, new_caps);
   gst_caps_unref (new_caps);
 
   if (gst_caps_is_empty (intersection))
@@ -547,7 +547,7 @@ gst_vidroidsink_different_size_suggestion (GstViDroidSink * vidroidsink,
 
   gst_util_fraction_multiply (width, height, par_n, par_d, &dar_n, &dar_d);
 
-  /* XXX: xvimagesink supports all PARs not sure about our vidroidsink
+  /* XXX: xvimagesink supports all PARs not sure about our eglglessink
    * though, need to review this afterwards.
    */
 
@@ -564,23 +564,23 @@ gst_vidroidsink_different_size_suggestion (GstViDroidSink * vidroidsink,
 }
 
 static GstFlowReturn
-gst_vidroidsink_buffer_alloc (GstBaseSink * bsink, guint64 offset,
+gst_eglglessink_buffer_alloc (GstBaseSink * bsink, guint64 offset,
     guint size, GstCaps * caps, GstBuffer ** buf)
 {
 
-  GstViDroidSink *vidroidsink;
+  GstEglGlesSink *eglglessink;
   GstFlowReturn ret = GST_FLOW_OK;
-  GstViDroidBuffer *vidroidbuffer = NULL;
+  GstEglGlesBuffer *eglglesbuffer = NULL;
   GstCaps *intersection = NULL;
   GstStructure *structure = NULL;
   GstVideoFormat image_format;
   gint width, height;
 
-  vidroidsink = GST_VIDROIDSINK (bsink);
+  eglglessink = GST_EGLGLESSINK (bsink);
 
   /* No custom alloc for the slow rendering path */
-  if (vidroidsink->rendering_path == GST_VIDROIDSINK_RENDER_SLOW) {
-    GST_INFO_OBJECT (vidroidsink, "No custom alloc for slow rendering path");
+  if (eglglessink->rendering_path == GST_EGLGLESSINK_RENDER_SLOW) {
+    GST_INFO_OBJECT (eglglessink, "No custom alloc for slow rendering path");
     *buf = NULL;
     return GST_FLOW_OK;
   }
@@ -588,25 +588,25 @@ gst_vidroidsink_buffer_alloc (GstBaseSink * bsink, guint64 offset,
   if (G_UNLIKELY (!caps))
     goto NO_CAPS;
 
-  if (G_LIKELY (gst_caps_is_equal (caps, vidroidsink->current_caps))) {
-    GST_LOG_OBJECT (vidroidsink,
+  if (G_LIKELY (gst_caps_is_equal (caps, eglglessink->current_caps))) {
+    GST_LOG_OBJECT (eglglessink,
         "Buffer alloc for same last_caps, reusing caps");
     intersection = gst_caps_ref (caps);
-    image_format = vidroidsink->format;
-    width = GST_VIDEO_SINK_WIDTH (vidroidsink);
-    height = GST_VIDEO_SINK_HEIGHT (vidroidsink);
+    image_format = eglglessink->format;
+    width = GST_VIDEO_SINK_WIDTH (eglglessink);
+    height = GST_VIDEO_SINK_HEIGHT (eglglessink);
 
     goto REUSE_LAST_CAPS;
   }
 
-  GST_DEBUG_OBJECT (vidroidsink, "Buffer alloc requested size %d with caps %"
+  GST_DEBUG_OBJECT (eglglessink, "Buffer alloc requested size %d with caps %"
       GST_PTR_FORMAT ", intersecting with our caps %" GST_PTR_FORMAT, size,
-      caps, vidroidsink->current_caps);
+      caps, eglglessink->current_caps);
 
   /* Check the caps against our current caps */
-  intersection = gst_caps_intersect (vidroidsink->current_caps, caps);
+  intersection = gst_caps_intersect (eglglessink->current_caps, caps);
 
-  GST_DEBUG_OBJECT (vidroidsink, "Intersection in buffer alloc returned %"
+  GST_DEBUG_OBJECT (eglglessink, "Intersection in buffer alloc returned %"
       GST_PTR_FORMAT, intersection);
 
   if (gst_caps_is_empty (intersection)) {
@@ -626,7 +626,7 @@ gst_vidroidsink_buffer_alloc (GstBaseSink * bsink, guint64 offset,
 
     /* Try different dimensions */
     intersection =
-        gst_vidroidsink_different_size_suggestion (vidroidsink, new_caps);
+        gst_eglglessink_different_size_suggestion (eglglessink, new_caps);
 
     /* YUV not implemented yet */
     if (gst_caps_is_empty (intersection)) {
@@ -644,13 +644,13 @@ gst_vidroidsink_buffer_alloc (GstBaseSink * bsink, guint64 offset,
       gst_structure_remove_field (structure, "alpha_mask");
 
       /* Reuse intersection with current_caps */
-      intersection = gst_caps_intersect (vidroidsink->current_caps, new_caps);
+      intersection = gst_caps_intersect (eglglessink->current_caps, new_caps);
     }
 
     /* Try with different dimensions */
     if (gst_caps_is_empty (intersection))
       intersection =
-          gst_vidroidsink_different_size_suggestion (vidroidsink, new_caps);
+          gst_eglglessink_different_size_suggestion (eglglessink, new_caps);
 
     /* Clean this copy */
     gst_caps_unref (new_caps);
@@ -662,7 +662,7 @@ gst_vidroidsink_buffer_alloc (GstBaseSink * bsink, guint64 offset,
   /* Ensure the returned caps are fixed */
   gst_caps_truncate (intersection);
 
-  GST_DEBUG_OBJECT (vidroidsink, "Allocating a buffer with caps %"
+  GST_DEBUG_OBJECT (eglglessink, "Allocating a buffer with caps %"
       GST_PTR_FORMAT, intersection);
   if (gst_caps_is_equal (intersection, caps)) {
     /* Things work better if we return a buffer with the same caps ptr
@@ -671,31 +671,31 @@ gst_vidroidsink_buffer_alloc (GstBaseSink * bsink, guint64 offset,
   }
 
   /* Get image format from caps */
-  image_format = gst_vidroidsink_get_compat_format_from_caps (vidroidsink,
+  image_format = gst_eglglessink_get_compat_format_from_caps (eglglessink,
       intersection);
 
-  if (image_format == GST_VIDROIDSINK_IMAGE_NOFMT)
-    GST_WARNING_OBJECT (vidroidsink, "Can't get a compatible format from caps");
+  if (image_format == GST_EGLGLESSINK_IMAGE_NOFMT)
+    GST_WARNING_OBJECT (eglglessink, "Can't get a compatible format from caps");
 
   /* Get geometry from caps */
   structure = gst_caps_get_structure (intersection, 0);
   if (!gst_structure_get_int (structure, "width", &width) ||
       !gst_structure_get_int (structure, "height", &height) ||
-      image_format == GST_VIDROIDSINK_IMAGE_NOFMT)
+      image_format == GST_EGLGLESSINK_IMAGE_NOFMT)
     goto INVALID_CAPS;
 
 REUSE_LAST_CAPS:
 
-  GST_DEBUG_OBJECT (vidroidsink, "Creating vidroidbuffer");
-  vidroidbuffer = gst_vidroidbuffer_new (vidroidsink, intersection);
+  GST_DEBUG_OBJECT (eglglessink, "Creating eglglesbuffer");
+  eglglesbuffer = gst_eglglesbuffer_new (eglglessink, intersection);
 
-  if (vidroidbuffer) {
+  if (eglglesbuffer) {
     /* Make sure the buffer is cleared of any previously used flags */
-    GST_MINI_OBJECT_CAST (vidroidbuffer)->flags = 0;
-    gst_buffer_set_caps (GST_BUFFER_CAST (vidroidbuffer), intersection);
+    GST_MINI_OBJECT_CAST (eglglesbuffer)->flags = 0;
+    gst_buffer_set_caps (GST_BUFFER_CAST (eglglesbuffer), intersection);
   }
 
-  *buf = GST_BUFFER_CAST (vidroidbuffer);
+  *buf = GST_BUFFER_CAST (eglglesbuffer);
 
 BEACH:
   if (intersection) {
@@ -707,28 +707,28 @@ BEACH:
   /* ERRORS */
 INVALID:
   {
-    GST_DEBUG_OBJECT (vidroidsink, "No width/height on caps!?");
+    GST_DEBUG_OBJECT (eglglessink, "No width/height on caps!?");
     ret = GST_FLOW_WRONG_STATE;
     goto BEACH;
   }
 INCOMPATIBLE:
   {
-    GST_WARNING_OBJECT (vidroidsink, "We were requested a buffer with "
+    GST_WARNING_OBJECT (eglglessink, "We were requested a buffer with "
         "caps %" GST_PTR_FORMAT ", but our current caps %" GST_PTR_FORMAT
-        " are completely incompatible!", caps, vidroidsink->current_caps);
+        " are completely incompatible!", caps, eglglessink->current_caps);
     ret = GST_FLOW_NOT_NEGOTIATED;
     goto BEACH;
   }
 INVALID_CAPS:
   {
-    GST_WARNING_OBJECT (vidroidsink, "Invalid caps for buffer allocation %"
+    GST_WARNING_OBJECT (eglglessink, "Invalid caps for buffer allocation %"
         GST_PTR_FORMAT, intersection);
     ret = GST_FLOW_NOT_NEGOTIATED;
     goto BEACH;
   }
 NO_CAPS:
   {
-    GST_WARNING_OBJECT (vidroidsink, "Have no caps, doing fallback allocation");
+    GST_WARNING_OBJECT (eglglessink, "Have no caps, doing fallback allocation");
     *buf = NULL;
     ret = GST_FLOW_OK;
     goto BEACH;
@@ -736,80 +736,80 @@ NO_CAPS:
 }
 
 gboolean
-gst_vidroidsink_start (GstBaseSink * sink)
+gst_eglglessink_start (GstBaseSink * sink)
 {
   gboolean ret;
-  GstViDroidSink *vidroidsink = GST_VIDROIDSINK (sink);
-  GstViDroidImageFmt *format;
+  GstEglGlesSink *eglglessink = GST_EGLGLESSINK (sink);
+  GstEglGlesImageFmt *format;
 
-  vidroidsink->flow_lock = g_mutex_new ();
-  g_mutex_lock (vidroidsink->flow_lock);
+  eglglessink->flow_lock = g_mutex_new ();
+  g_mutex_lock (eglglessink->flow_lock);
 
-  ret = gst_vidroidsink_init_egl_display (vidroidsink);
+  ret = gst_eglglessink_init_egl_display (eglglessink);
 
   if (!ret) {
-    GST_ERROR_OBJECT (vidroidsink, "Couldn't init EGL display");
+    GST_ERROR_OBJECT (eglglessink, "Couldn't init EGL display");
     goto HANDLE_ERROR;
   }
 
   ret = platform_wrapper_init ();
 
   if (!ret) {
-    GST_ERROR_OBJECT (vidroidsink, "Couldn't init EGL platform wrapper");
+    GST_ERROR_OBJECT (eglglessink, "Couldn't init EGL platform wrapper");
     goto HANDLE_ERROR;
   }
 
   /* Init supported caps list (Right now we just harcode the only one we support)
    * XXX: Not sure this is the right place to do it.
    */
-  format = g_new0 (GstViDroidImageFmt, 1);
+  format = g_new0 (GstEglGlesImageFmt, 1);
   if (format) {
-    format->fmt = GST_VIDROIDSINK_IMAGE_RGB565;
+    format->fmt = GST_EGLGLESSINK_IMAGE_RGB565;
     format->caps = gst_caps_copy (gst_pad_get_pad_template_caps
-        (GST_VIDEO_SINK_PAD (vidroidsink)));
-    vidroidsink->supported_fmts = g_list_append
-        (vidroidsink->supported_fmts, format);
+        (GST_VIDEO_SINK_PAD (eglglessink)));
+    eglglessink->supported_fmts = g_list_append
+        (eglglessink->supported_fmts, format);
   }
 
-  g_mutex_unlock (vidroidsink->flow_lock);
+  g_mutex_unlock (eglglessink->flow_lock);
 
   return TRUE;
 
 HANDLE_ERROR:
-  g_mutex_unlock (vidroidsink->flow_lock);
+  g_mutex_unlock (eglglessink->flow_lock);
   return FALSE;
 }
 
 /* XXX: Should implement */
 gboolean
-gst_vidroidsink_stop (GstBaseSink * sink)
+gst_eglglessink_stop (GstBaseSink * sink)
 {
-  GstViDroidSink *vidroidsink = GST_VIDROIDSINK (sink);
+  GstEglGlesSink *eglglessink = GST_EGLGLESSINK (sink);
 
-  platform_destroy_native_window (vidroidsink->display, vidroidsink->window);
-  g_mutex_free (vidroidsink->flow_lock);
-  vidroidsink->flow_lock = NULL;
+  platform_destroy_native_window (eglglessink->display, eglglessink->window);
+  g_mutex_free (eglglessink->flow_lock);
+  eglglessink->flow_lock = NULL;
 
   return TRUE;
 }
 
 static void
-gst_vidroidsink_xoverlay_init (GstXOverlayClass * iface)
+gst_eglglessink_xoverlay_init (GstXOverlayClass * iface)
 {
-  iface->set_window_handle = gst_vidroidsink_set_window_handle;
-  iface->expose = gst_vidroidsink_expose;
+  iface->set_window_handle = gst_eglglessink_set_window_handle;
+  iface->expose = gst_eglglessink_expose;
 }
 
 static gboolean
-gst_vidroidsink_interface_supported (GstImplementsInterface * iface, GType type)
+gst_eglglessink_interface_supported (GstImplementsInterface * iface, GType type)
 {
   return (type == GST_TYPE_X_OVERLAY);
 }
 
 static void
-gst_vidroidsink_implements_init (GstImplementsInterfaceClass * klass)
+gst_eglglessink_implements_init (GstImplementsInterfaceClass * klass)
 {
-  klass->supported = gst_vidroidsink_interface_supported;
+  klass->supported = gst_eglglessink_interface_supported;
 }
 
 static inline gboolean
@@ -826,28 +826,28 @@ got_gl_error (const char *wtf)
 }
 
 static EGLNativeWindowType
-gst_vidroidsink_create_window (GstViDroidSink * vidroidsink, gint width,
+gst_eglglessink_create_window (GstEglGlesSink * eglglessink, gint width,
     gint height)
 {
   EGLNativeWindowType window = 0;
 
-  if (!vidroidsink->can_create_window) {
-    GST_ERROR_OBJECT (vidroidsink, "This sink can't create a window by itself");
+  if (!eglglessink->can_create_window) {
+    GST_ERROR_OBJECT (eglglessink, "This sink can't create a window by itself");
     return window;
   } else
-    GST_INFO_OBJECT (vidroidsink, "Attempting internal window creation");
+    GST_INFO_OBJECT (eglglessink, "Attempting internal window creation");
 
   if (!width && !height) {      /* Create a default size window */
-    width = vidroidsink->window_default_width;
-    height = vidroidsink->window_default_height;
+    width = eglglessink->window_default_width;
+    height = eglglessink->window_default_height;
   }
 
   window = platform_create_native_window (width, height);
   if (!window) {
-    GST_ERROR_OBJECT (vidroidsink, "Could not create window");
+    GST_ERROR_OBJECT (eglglessink, "Could not create window");
     return window;
   }
-  gst_x_overlay_got_window_handle (GST_X_OVERLAY (vidroidsink), window);
+  gst_x_overlay_got_window_handle (GST_X_OVERLAY (eglglessink), window);
   return window;
 }
 
@@ -855,18 +855,18 @@ gst_vidroidsink_create_window (GstViDroidSink * vidroidsink, gint width,
  * We need at least the last buffer stored for this to work
  */
 static void
-gst_vidroidsink_expose (GstXOverlay * overlay)
+gst_eglglessink_expose (GstXOverlay * overlay)
 {
-  GstViDroidSink *vidroidsink;
-  vidroidsink = GST_VIDROIDSINK (overlay);
-  GST_DEBUG_OBJECT (vidroidsink, "Expose catched, redisplay");
+  GstEglGlesSink *eglglessink;
+  eglglessink = GST_EGLGLESSINK (overlay);
+  GST_DEBUG_OBJECT (eglglessink, "Expose catched, redisplay");
 
   /* Logic would be to get _render_and_display() to use
    * last seen buffer to render from when NULL it's
    * passed on */
-  g_mutex_lock (vidroidsink->flow_lock);
-  gst_vidroidsink_render_and_display (vidroidsink, NULL);
-  g_mutex_unlock (vidroidsink->flow_lock);
+  g_mutex_lock (eglglessink->flow_lock);
+  gst_eglglessink_render_and_display (eglglessink, NULL);
+  g_mutex_unlock (eglglessink->flow_lock);
 
   return;
 }
@@ -877,16 +877,16 @@ gst_vidroidsink_expose (GstXOverlay * overlay)
  * EGL context has been made current.
  */
 static void
-gst_vidroidsink_init_egl_exts (GstViDroidSink * vidroidsink)
+gst_eglglessink_init_egl_exts (GstEglGlesSink * eglglessink)
 {
   const char *eglexts;
   unsigned const char *glexts;
 
-  eglexts = eglQueryString (vidroidsink->display, EGL_EXTENSIONS);
+  eglexts = eglQueryString (eglglessink->display, EGL_EXTENSIONS);
   glexts = glGetString (GL_EXTENSIONS);
 
-  GST_DEBUG_OBJECT (vidroidsink, "Available EGL extensions: %s\n", eglexts);
-  GST_DEBUG_OBJECT (vidroidsink, "Available GLES extensions: %s\n", glexts);
+  GST_DEBUG_OBJECT (eglglessink, "Available EGL extensions: %s\n", eglexts);
+  GST_DEBUG_OBJECT (eglglessink, "Available GLES extensions: %s\n", glexts);
 
 #ifdef EGL_FAST_RENDERING_POSSIBLE
   /* OK Fast rendering should be possible from the declared
@@ -911,7 +911,7 @@ gst_vidroidsink_init_egl_exts (GstViDroidSink * vidroidsink)
 
   if (!my_eglCreateImageKHR || !my_eglDestroyImageKHR) {
   KHR_IMAGE_NA:
-    GST_INFO_OBJECT (vidroidsink, "Extension missing: EGL_KHR_image");
+    GST_INFO_OBJECT (eglglessink, "Extension missing: EGL_KHR_image");
     goto MISSING_EXTS;
   }
 
@@ -922,7 +922,7 @@ gst_vidroidsink_init_egl_exts (GstViDroidSink * vidroidsink)
 
   if (!my_eglLockSurfaceKHR || !my_eglUnlockSurfaceKHR) {
   SURFACE_LOCK_NA:
-    GST_INFO_OBJECT (vidroidsink, "Extension missing: EGL_KHR_lock_surface");
+    GST_INFO_OBJECT (eglglessink, "Extension missing: EGL_KHR_lock_surface");
     goto MISSING_EXTS;
   }
 
@@ -932,69 +932,69 @@ gst_vidroidsink_init_egl_exts (GstViDroidSink * vidroidsink)
 
   if (!my_glEGLImageTargetTexture2DOES) {
   TEXTURE_2DOES_NA:
-    GST_INFO_OBJECT (vidroidsink, "Extension missing: GL_OES_EGL_image");
+    GST_INFO_OBJECT (eglglessink, "Extension missing: GL_OES_EGL_image");
     goto MISSING_EXTS;
   }
 
-  if (!vidroidsink->force_rendering_slow) {
-    GST_INFO_OBJECT (vidroidsink,
+  if (!eglglessink->force_rendering_slow) {
+    GST_INFO_OBJECT (eglglessink,
         "Have needed extensions for fast rendering path");
   } else {
-    GST_WARNING_OBJECT (vidroidsink,
+    GST_WARNING_OBJECT (eglglessink,
         "Extension check passed but slow rendering path being forced");
     goto SLOW_PATH_SELECTED;
   }
 
   /* Extension check passed. Enable fast rendering path */
-  vidroidsink->rendering_path = GST_VIDROIDSINK_RENDER_FAST;
-  GST_INFO_OBJECT (vidroidsink, "Using fast rendering path");
+  eglglessink->rendering_path = GST_EGLGLESSINK_RENDER_FAST;
+  GST_INFO_OBJECT (eglglessink, "Using fast rendering path");
   return;
 #endif
 
 MISSING_EXTS:
-  GST_WARNING_OBJECT (vidroidsink,
+  GST_WARNING_OBJECT (eglglessink,
       "Extensions missing. Can't use fast rendering path");
 SLOW_PATH_SELECTED:
-  vidroidsink->rendering_path = GST_VIDROIDSINK_RENDER_SLOW;
-  GST_INFO_OBJECT (vidroidsink, "Using slow rendering path");
+  eglglessink->rendering_path = GST_EGLGLESSINK_RENDER_SLOW;
+  GST_INFO_OBJECT (eglglessink, "Using slow rendering path");
   return;
 }
 
 static gboolean
-gst_vidroidsink_init_egl_surface (GstViDroidSink * vidroidsink)
+gst_eglglessink_init_egl_surface (GstEglGlesSink * eglglessink)
 {
   GLint test;
   GLuint verthandle, fraghandle, prog;
 
-  GST_DEBUG_OBJECT (vidroidsink, "Enter EGL surface setup");
+  GST_DEBUG_OBJECT (eglglessink, "Enter EGL surface setup");
 
-  g_mutex_lock (vidroidsink->flow_lock);
+  g_mutex_lock (eglglessink->flow_lock);
 
-  vidroidsink->surface = eglCreateWindowSurface (vidroidsink->display,
-      vidroidsink->config, vidroidsink->window, NULL);
+  eglglessink->surface = eglCreateWindowSurface (eglglessink->display,
+      eglglessink->config, eglglessink->window, NULL);
 
-  if (vidroidsink->surface == EGL_NO_SURFACE) {
-    GST_ERROR_OBJECT (vidroidsink, "Can't create surface, eglCreateSurface");
+  if (eglglessink->surface == EGL_NO_SURFACE) {
+    GST_ERROR_OBJECT (eglglessink, "Can't create surface, eglCreateSurface");
     goto HANDLE_EGL_ERROR_LOCKED;
   }
 
-  if (!eglMakeCurrent (vidroidsink->display, vidroidsink->surface,
-          vidroidsink->surface, vidroidsink->context)) {
-    GST_ERROR_OBJECT (vidroidsink, "Couldn't bind surface/context, "
+  if (!eglMakeCurrent (eglglessink->display, eglglessink->surface,
+          eglglessink->surface, eglglessink->context)) {
+    GST_ERROR_OBJECT (eglglessink, "Couldn't bind surface/context, "
         "eglMakeCurrent");
     goto HANDLE_EGL_ERROR_LOCKED;
   }
 
   /* We have a surface! */
-  vidroidsink->have_surface = TRUE;
-  g_mutex_unlock (vidroidsink->flow_lock);
+  eglglessink->have_surface = TRUE;
+  g_mutex_unlock (eglglessink->flow_lock);
 
   /* Init vertex and fragment progs.
    * XXX: Need to be runtime conditional or ifdefed
    */
 
   verthandle = glCreateShader (GL_VERTEX_SHADER);
-  GST_DEBUG_OBJECT (vidroidsink, "sending %s to handle %d", vert_prog,
+  GST_DEBUG_OBJECT (eglglessink, "sending %s to handle %d", vert_prog,
       verthandle);
   glShaderSource (verthandle, 1, &vert_prog, NULL);
   if (got_gl_error ("glShaderSource vertex"))
@@ -1006,7 +1006,7 @@ gst_vidroidsink_init_egl_surface (GstViDroidSink * vidroidsink)
 
   glGetShaderiv (verthandle, GL_COMPILE_STATUS, &test);
   if (test != GL_FALSE)
-    GST_DEBUG_OBJECT (vidroidsink, "Successfully compiled vertex program");
+    GST_DEBUG_OBJECT (eglglessink, "Successfully compiled vertex program");
 
   fraghandle = glCreateShader (GL_FRAGMENT_SHADER);
   glShaderSource (fraghandle, 1, &frag_prog, NULL);
@@ -1019,7 +1019,7 @@ gst_vidroidsink_init_egl_surface (GstViDroidSink * vidroidsink)
 
   glGetShaderiv (fraghandle, GL_COMPILE_STATUS, &test);
   if (test != GL_FALSE)
-    GST_DEBUG_OBJECT (vidroidsink, "Successfully compiled fragment program");
+    GST_DEBUG_OBJECT (eglglessink, "Successfully compiled fragment program");
 
   prog = glCreateProgram ();
   if (got_gl_error ("glCreateProgram"))
@@ -1033,176 +1033,176 @@ gst_vidroidsink_init_egl_surface (GstViDroidSink * vidroidsink)
   glLinkProgram (prog);
   glGetProgramiv (prog, GL_LINK_STATUS, &test);
   if (test != GL_FALSE)
-    GST_DEBUG_OBJECT (vidroidsink, "GLES: Successfully linked program");
+    GST_DEBUG_OBJECT (eglglessink, "GLES: Successfully linked program");
 
   glUseProgram (prog);
   if (got_gl_error ("glUseProgram"))
     goto HANDLE_ERROR;
 
   /* Generate and bind texture */
-  if (!vidroidsink->have_texture) {
-    GST_INFO_OBJECT (vidroidsink, "Doing initial texture setup");
+  if (!eglglessink->have_texture) {
+    GST_INFO_OBJECT (eglglessink, "Doing initial texture setup");
 
-    g_mutex_lock (vidroidsink->flow_lock);
+    g_mutex_lock (eglglessink->flow_lock);
 
-    glGenTextures (1, &vidroidsink->texture[0]);
+    glGenTextures (1, &eglglessink->texture[0]);
     if (got_gl_error ("glGenTextures"))
       goto HANDLE_ERROR_LOCKED;
 
-    glBindTexture (GL_TEXTURE_2D, vidroidsink->texture[0]);
+    glBindTexture (GL_TEXTURE_2D, eglglessink->texture[0]);
     if (got_gl_error ("glBindTexture"))
       goto HANDLE_ERROR_LOCKED;
 
-    vidroidsink->have_texture = TRUE;
-    g_mutex_unlock (vidroidsink->flow_lock);
+    eglglessink->have_texture = TRUE;
+    g_mutex_unlock (eglglessink->flow_lock);
   }
 
   return TRUE;
 
   /* Errors */
 HANDLE_EGL_ERROR_LOCKED:
-  GST_ERROR_OBJECT (vidroidsink, "EGL call returned error %x", eglGetError ());
+  GST_ERROR_OBJECT (eglglessink, "EGL call returned error %x", eglGetError ());
 HANDLE_ERROR_LOCKED:
-  g_mutex_unlock (vidroidsink->flow_lock);
+  g_mutex_unlock (eglglessink->flow_lock);
 HANDLE_ERROR:
-  GST_ERROR_OBJECT (vidroidsink, "Couldn't setup EGL surface");
+  GST_ERROR_OBJECT (eglglessink, "Couldn't setup EGL surface");
   return FALSE;
 }
 
 static gboolean
-gst_vidroidsink_init_egl_display (GstViDroidSink * vidroidsink)
+gst_eglglessink_init_egl_display (GstEglGlesSink * eglglessink)
 {
   GLint egl_configs;
   EGLint egl_major, egl_minor;
 
   EGLint con_attribs[] = { EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE };
 
-  GST_DEBUG_OBJECT (vidroidsink, "Enter EGL initial configuration");
+  GST_DEBUG_OBJECT (eglglessink, "Enter EGL initial configuration");
 
-  vidroidsink->display = eglGetDisplay (EGL_DEFAULT_DISPLAY);
-  if (vidroidsink->display == EGL_NO_DISPLAY) {
-    GST_ERROR_OBJECT (vidroidsink, "Could not get EGL display connection");
+  eglglessink->display = eglGetDisplay (EGL_DEFAULT_DISPLAY);
+  if (eglglessink->display == EGL_NO_DISPLAY) {
+    GST_ERROR_OBJECT (eglglessink, "Could not get EGL display connection");
     goto HANDLE_ERROR;          /* No EGL error is set by eglGetDisplay() */
   }
 
-  if (eglInitialize (vidroidsink->display, &egl_major, &egl_minor)
+  if (eglInitialize (eglglessink->display, &egl_major, &egl_minor)
       == EGL_FALSE) {
-    GST_ERROR_OBJECT (vidroidsink, "Could not init EGL display connection");
+    GST_ERROR_OBJECT (eglglessink, "Could not init EGL display connection");
     goto HANDLE_EGL_ERROR;
   }
 
   /* Check against required EGL version */
-  if (egl_major < GST_VIDROIDSINK_EGL_MIN_VERSION) {
-    GST_ERROR_OBJECT (vidroidsink, "EGL v%d\n needed, but you only have v%d.%d",
-        GST_VIDROIDSINK_EGL_MIN_VERSION, egl_major, egl_minor);
+  if (egl_major < GST_EGLGLESSINK_EGL_MIN_VERSION) {
+    GST_ERROR_OBJECT (eglglessink, "EGL v%d\n needed, but you only have v%d.%d",
+        GST_EGLGLESSINK_EGL_MIN_VERSION, egl_major, egl_minor);
     goto HANDLE_ERROR;
   }
 
-  GST_INFO_OBJECT (vidroidsink, "System reports supported EGL version v%d.%d",
+  GST_INFO_OBJECT (eglglessink, "System reports supported EGL version v%d.%d",
       egl_major, egl_minor);
 
-  if (!eglChooseConfig (vidroidsink->display, vidroidsink_RGB16_config,
-          &vidroidsink->config, 1, &egl_configs)) {
-    GST_ERROR_OBJECT (vidroidsink, "eglChooseConfig failed");
+  if (!eglChooseConfig (eglglessink->display, eglglessink_RGB16_config,
+          &eglglessink->config, 1, &egl_configs)) {
+    GST_ERROR_OBJECT (eglglessink, "eglChooseConfig failed");
     goto HANDLE_EGL_ERROR;
   }
 
   eglBindAPI (EGL_OPENGL_ES_API);
 
-  vidroidsink->context = eglCreateContext (vidroidsink->display,
-      vidroidsink->config, EGL_NO_CONTEXT, con_attribs);
+  eglglessink->context = eglCreateContext (eglglessink->display,
+      eglglessink->config, EGL_NO_CONTEXT, con_attribs);
 
-  if (vidroidsink->context == EGL_NO_CONTEXT) {
-    GST_ERROR_OBJECT (vidroidsink, "Error getting context, eglCreateContext");
+  if (eglglessink->context == EGL_NO_CONTEXT) {
+    GST_ERROR_OBJECT (eglglessink, "Error getting context, eglCreateContext");
     goto HANDLE_EGL_ERROR;
   }
 
-  GST_DEBUG_OBJECT (vidroidsink, "EGL Context: %x", vidroidsink->context);
+  GST_DEBUG_OBJECT (eglglessink, "EGL Context: %x", eglglessink->context);
 
   return TRUE;
 
   /* Errors */
 HANDLE_EGL_ERROR:
-  GST_ERROR_OBJECT (vidroidsink, "EGL call returned error %x", eglGetError ());
+  GST_ERROR_OBJECT (eglglessink, "EGL call returned error %x", eglGetError ());
 HANDLE_ERROR:
-  GST_ERROR_OBJECT (vidroidsink, "Couldn't setup window/surface from handle");
+  GST_ERROR_OBJECT (eglglessink, "Couldn't setup window/surface from handle");
   return FALSE;
 }
 
 /* XXX: Never actually tested */
 static void
-gst_vidroidsink_set_window_handle (GstXOverlay * overlay, guintptr id)
+gst_eglglessink_set_window_handle (GstXOverlay * overlay, guintptr id)
 {
-  GstViDroidSink *vidroidsink = GST_VIDROIDSINK (overlay);
+  GstEglGlesSink *eglglessink = GST_EGLGLESSINK (overlay);
 
-  g_return_if_fail (GST_IS_VIDROIDSINK (vidroidsink));
-  GST_DEBUG_OBJECT (vidroidsink, "We got a window handle!");
+  g_return_if_fail (GST_IS_EGLGLESSINK (eglglessink));
+  GST_DEBUG_OBJECT (eglglessink, "We got a window handle!");
 
   if (!id) {
     /* We are being requested to create our own window. 
      * 0x0 fires default size creation 
      */
-    GST_WARNING_OBJECT (vidroidsink, "OH NOES they want a new window");
-    g_mutex_lock (vidroidsink->flow_lock);
-    vidroidsink->window = gst_vidroidsink_create_window (vidroidsink, 0, 0);
-    if (!vidroidsink->window) {
-      GST_ERROR_OBJECT (vidroidsink, "Got a NULL window");
+    GST_WARNING_OBJECT (eglglessink, "OH NOES they want a new window");
+    g_mutex_lock (eglglessink->flow_lock);
+    eglglessink->window = gst_eglglessink_create_window (eglglessink, 0, 0);
+    if (!eglglessink->window) {
+      GST_ERROR_OBJECT (eglglessink, "Got a NULL window");
       goto HANDLE_ERROR_LOCKED;
     }
-  } else if (vidroidsink->window == id) {       /* Already used window */
-    GST_WARNING_OBJECT (vidroidsink,
+  } else if (eglglessink->window == id) {       /* Already used window */
+    GST_WARNING_OBJECT (eglglessink,
         "We've got the same %x window handle again", id);
-    GST_INFO_OBJECT (vidroidsink, "Skipping surface setup");
+    GST_INFO_OBJECT (eglglessink, "Skipping surface setup");
     goto HANDLE_ERROR;
   } else {
-    g_mutex_lock (vidroidsink->flow_lock);
-    vidroidsink->window = (EGLNativeWindowType) id;
+    g_mutex_lock (eglglessink->flow_lock);
+    eglglessink->window = (EGLNativeWindowType) id;
   }
 
   /* OK, we have a new window */
-  vidroidsink->have_window = TRUE;
-  g_mutex_unlock (vidroidsink->flow_lock);
+  eglglessink->have_window = TRUE;
+  g_mutex_unlock (eglglessink->flow_lock);
 
-  if (!gst_vidroidsink_init_egl_surface (vidroidsink)) {
-    GST_ERROR_OBJECT (vidroidsink, "Couldn't init EGL surface!");
+  if (!gst_eglglessink_init_egl_surface (eglglessink)) {
+    GST_ERROR_OBJECT (eglglessink, "Couldn't init EGL surface!");
     goto HANDLE_ERROR;
   }
 
   /* Init extensions */
-  gst_vidroidsink_init_egl_exts (vidroidsink);
+  gst_eglglessink_init_egl_exts (eglglessink);
 
   return;
 
   /* Errors */
 HANDLE_ERROR_LOCKED:
-  g_mutex_unlock (vidroidsink->flow_lock);
+  g_mutex_unlock (eglglessink->flow_lock);
 HANDLE_ERROR:
-  GST_ERROR_OBJECT (vidroidsink, "Couldn't setup window/surface from handle");
+  GST_ERROR_OBJECT (eglglessink, "Couldn't setup window/surface from handle");
   return;
 }
 
 /* Rendering and display */
 static void
-gst_vidroidsink_render_and_display (GstViDroidSink * vidroidsink,
+gst_eglglessink_render_and_display (GstEglGlesSink * eglglessink,
     GstBuffer * buf)
 {
   gint w, h;
 
   if (!buf) {
-    GST_ERROR_OBJECT (vidroidsink, "Null buffer, no past queue implemented");
+    GST_ERROR_OBJECT (eglglessink, "Null buffer, no past queue implemented");
     goto HANDLE_ERROR;
   }
 
-  w = GST_VIDEO_SINK_WIDTH (vidroidsink);
-  h = GST_VIDEO_SINK_HEIGHT (vidroidsink);
-  GST_DEBUG_OBJECT (vidroidsink,
+  w = GST_VIDEO_SINK_WIDTH (eglglessink);
+  h = GST_VIDEO_SINK_HEIGHT (eglglessink);
+  GST_DEBUG_OBJECT (eglglessink,
       "Got good buffer %x. Sink geometry is %dx%d size %d", buf, w, h,
       GST_BUFFER_SIZE (buf));
 
   /* Make sure we stay on our context to avoid threading nightmares */
-  if (!eglMakeCurrent (vidroidsink->display, vidroidsink->surface,
-          vidroidsink->surface, vidroidsink->context)) {
-    GST_ERROR_OBJECT (vidroidsink, "Couldn't bind surface/context, "
+  if (!eglMakeCurrent (eglglessink->display, eglglessink->surface,
+          eglglessink->surface, eglglessink->context)) {
+    GST_ERROR_OBJECT (eglglessink, "Couldn't bind surface/context, "
         "eglMakeCurrent");
     goto HANDLE_ERROR;
   }
@@ -1227,42 +1227,42 @@ gst_vidroidsink_render_and_display (GstViDroidSink * vidroidsink,
   /* XXX: VBO stuff this actually makes more sense on the setcaps stub?
    * The way it is right now makes this happen only for the first buffer
    * though so I guess it should work */
-  g_mutex_lock (vidroidsink->flow_lock);
-  if (!vidroidsink->have_vbo) {
-    GST_DEBUG_OBJECT (vidroidsink, "Doing initial VBO setup");
+  g_mutex_lock (eglglessink->flow_lock);
+  if (!eglglessink->have_vbo) {
+    GST_DEBUG_OBJECT (eglglessink, "Doing initial VBO setup");
 
-    vidroidsink->coordarray[0].x = -1;
-    vidroidsink->coordarray[0].y = 1;
-    vidroidsink->coordarray[0].z = 0;
+    eglglessink->coordarray[0].x = -1;
+    eglglessink->coordarray[0].y = 1;
+    eglglessink->coordarray[0].z = 0;
 
-    vidroidsink->coordarray[1].x = 1;
-    vidroidsink->coordarray[1].y = 1;
-    vidroidsink->coordarray[1].z = 0;
+    eglglessink->coordarray[1].x = 1;
+    eglglessink->coordarray[1].y = 1;
+    eglglessink->coordarray[1].z = 0;
 
-    vidroidsink->coordarray[2].x = 1;
-    vidroidsink->coordarray[2].y = -1;
-    vidroidsink->coordarray[2].z = 0;
+    eglglessink->coordarray[2].x = 1;
+    eglglessink->coordarray[2].y = -1;
+    eglglessink->coordarray[2].z = 0;
 
-    vidroidsink->coordarray[3].x = -1;
-    vidroidsink->coordarray[3].y = -1;
-    vidroidsink->coordarray[3].z = 0;
+    eglglessink->coordarray[3].x = -1;
+    eglglessink->coordarray[3].y = -1;
+    eglglessink->coordarray[3].z = 0;
 
-    vidroidsink->indexarray[0] = 1;
-    vidroidsink->indexarray[1] = 2;
-    vidroidsink->indexarray[2] = 0;
-    vidroidsink->indexarray[3] = 3;
+    eglglessink->indexarray[0] = 1;
+    eglglessink->indexarray[1] = 2;
+    eglglessink->indexarray[2] = 0;
+    eglglessink->indexarray[3] = 3;
 
-    glGenBuffers (1, &vidroidsink->vdata);
-    glGenBuffers (1, &vidroidsink->idata);
+    glGenBuffers (1, &eglglessink->vdata);
+    glGenBuffers (1, &eglglessink->idata);
     if (got_gl_error ("glGenBuffers"))
       goto HANDLE_ERROR_LOCKED;
 
-    glBindBuffer (GL_ARRAY_BUFFER, vidroidsink->vdata);
+    glBindBuffer (GL_ARRAY_BUFFER, eglglessink->vdata);
     if (got_gl_error ("glBindBuffer vdata"))
       goto HANDLE_ERROR_LOCKED;
 
-    glBufferData (GL_ARRAY_BUFFER, sizeof (vidroidsink->coordarray),
-        vidroidsink->coordarray, GL_STATIC_DRAW);
+    glBufferData (GL_ARRAY_BUFFER, sizeof (eglglessink->coordarray),
+        eglglessink->coordarray, GL_STATIC_DRAW);
     if (got_gl_error ("glBufferData vdata"))
       goto HANDLE_ERROR_LOCKED;
 
@@ -1271,20 +1271,20 @@ gst_vidroidsink_render_and_display (GstViDroidSink * vidroidsink,
       goto HANDLE_ERROR_LOCKED;
     glEnableVertexAttribArray (0);
 
-    glBindBuffer (GL_ELEMENT_ARRAY_BUFFER, vidroidsink->idata);
+    glBindBuffer (GL_ELEMENT_ARRAY_BUFFER, eglglessink->idata);
     if (got_gl_error ("glBindBuffer idata"))
       goto HANDLE_ERROR_LOCKED;
 
-    glBufferData (GL_ELEMENT_ARRAY_BUFFER, sizeof (vidroidsink->indexarray),
-        vidroidsink->indexarray, GL_STATIC_DRAW);
+    glBufferData (GL_ELEMENT_ARRAY_BUFFER, sizeof (eglglessink->indexarray),
+        eglglessink->indexarray, GL_STATIC_DRAW);
     if (got_gl_error ("glBufferData idata"))
       goto HANDLE_ERROR_LOCKED;
 
     glViewport (0, 0, w, h);
 
-    vidroidsink->have_vbo = TRUE;
+    eglglessink->have_vbo = TRUE;
   }
-  g_mutex_unlock (vidroidsink->flow_lock);
+  g_mutex_unlock (eglglessink->flow_lock);
 
   glClearColor (1.0, 0.0, 0.0, 0.0);
   glClear (GL_COLOR_BUFFER_BIT);
@@ -1292,7 +1292,7 @@ gst_vidroidsink_render_and_display (GstViDroidSink * vidroidsink,
   if (got_gl_error ("glDrawElements"))
     goto HANDLE_ERROR;
 
-  eglSwapBuffers (vidroidsink->display, vidroidsink->surface);
+  eglSwapBuffers (eglglessink->display, eglglessink->surface);
 
   return;
 
@@ -1303,171 +1303,171 @@ gst_vidroidsink_render_and_display (GstViDroidSink * vidroidsink,
   };
 
   if (!buf) {
-    GST_ERROR_OBJECT (vidroidsink, "Null buffer, no past queue implemented");
+    GST_ERROR_OBJECT (eglglessink, "Null buffer, no past queue implemented");
     goto HANDLE_ERROR;
   }
 
-  img = my_eglCreateImageKHR (vidroidsink->display, EGL_NO_CONTEXT,
+  img = my_eglCreateImageKHR (eglglessink->display, EGL_NO_CONTEXT,
       EGL_NATIVE_PIXMAP_KHR, (EGLClientBuffer) GST_BUFFER_DATA (buf), attrs);
 
   if (img == EGL_NO_IMAGE_KHR) {
-    GST_ERROR_OBJECT (vidroidsink, "my_eglCreateImageKHR failed");
+    GST_ERROR_OBJECT (eglglessink, "my_eglCreateImageKHR failed");
     goto HANDLE_EGL_ERROR;
   }
 
   my_glEGLImageTargetTexture2DOES (GL_TEXTURE_2D, img);
 
 HANDLE_EGL_ERROR:
-  GST_ERROR_OBJECT (vidroidsink, "EGL call returned error %x", eglGetError ());
+  GST_ERROR_OBJECT (eglglessink, "EGL call returned error %x", eglGetError ());
 */
 HANDLE_ERROR_LOCKED:
-  g_mutex_unlock (vidroidsink->flow_lock);
+  g_mutex_unlock (eglglessink->flow_lock);
 HANDLE_ERROR:
-  GST_ERROR_OBJECT (vidroidsink, "Rendering disabled for this frame");
+  GST_ERROR_OBJECT (eglglessink, "Rendering disabled for this frame");
 }
 
 static GstFlowReturn
-gst_vidroidsink_show_frame (GstVideoSink * vsink, GstBuffer * buf)
+gst_eglglessink_show_frame (GstVideoSink * vsink, GstBuffer * buf)
 {
-  GstViDroidSink *vidroidsink;
+  GstEglGlesSink *eglglessink;
 
   g_return_val_if_fail (buf != NULL, GST_FLOW_ERROR);
 
-  vidroidsink = GST_VIDROIDSINK (vsink);
-  GST_DEBUG_OBJECT (vidroidsink, "Got buffer: %p", buf);
+  eglglessink = GST_EGLGLESSINK (vsink);
+  GST_DEBUG_OBJECT (eglglessink, "Got buffer: %p", buf);
 
-  if (!vidroidsink->have_window) {
-    GST_ERROR_OBJECT (vidroidsink, "I don't have a window to render to");
+  if (!eglglessink->have_window) {
+    GST_ERROR_OBJECT (eglglessink, "I don't have a window to render to");
     return GST_FLOW_ERROR;
   }
 
-  if (!vidroidsink->have_surface) {
-    GST_ERROR_OBJECT (vidroidsink, "I don't have a surface to render to");
+  if (!eglglessink->have_surface) {
+    GST_ERROR_OBJECT (eglglessink, "I don't have a surface to render to");
     return GST_FLOW_ERROR;
   }
 #ifndef EGL_ANDROID_image_native_buffer
-  GST_WARNING_OBJECT (vidroidsink, "EGL_ANDROID_image_native_buffer not "
+  GST_WARNING_OBJECT (eglglessink, "EGL_ANDROID_image_native_buffer not "
       "available");
 #endif
 
-  gst_vidroidsink_render_and_display (vidroidsink, buf);
+  gst_eglglessink_render_and_display (eglglessink, buf);
 
   return GST_FLOW_OK;
 }
 
 static gboolean
-gst_vidroidsink_setcaps (GstBaseSink * bsink, GstCaps * caps)
+gst_eglglessink_setcaps (GstBaseSink * bsink, GstCaps * caps)
 {
-  GstViDroidSink *vidroidsink;
+  GstEglGlesSink *eglglessink;
   gboolean ret = TRUE;
   gint width, height;
 
-  vidroidsink = GST_VIDROIDSINK (bsink);
+  eglglessink = GST_EGLGLESSINK (bsink);
 
-  GST_DEBUG_OBJECT (vidroidsink,
+  GST_DEBUG_OBJECT (eglglessink,
       "In setcaps. Possible caps %" GST_PTR_FORMAT ", setting caps %"
-      GST_PTR_FORMAT, vidroidsink->current_caps, caps);
+      GST_PTR_FORMAT, eglglessink->current_caps, caps);
 
-  if (!(ret = gst_video_format_parse_caps (caps, &vidroidsink->format, &width,
+  if (!(ret = gst_video_format_parse_caps (caps, &eglglessink->format, &width,
               &height))) {
-    GST_ERROR_OBJECT (vidroidsink, "Got weird and/or incomplete caps");
+    GST_ERROR_OBJECT (eglglessink, "Got weird and/or incomplete caps");
     goto HANDLE_ERROR;
   }
 
-  if (vidroidsink->format == GST_VIDEO_FORMAT_UNKNOWN) {
-    GST_ERROR_OBJECT (vidroidsink, "Got unknown video format caps");
+  if (eglglessink->format == GST_VIDEO_FORMAT_UNKNOWN) {
+    GST_ERROR_OBJECT (eglglessink, "Got unknown video format caps");
     goto HANDLE_ERROR;
   }
 
-  if (gst_vidroidsink_get_compat_format_from_caps (vidroidsink, caps) ==
-      GST_VIDROIDSINK_IMAGE_NOFMT) {
-    GST_ERROR_OBJECT (vidroidsink, "Unsupported format");
+  if (gst_eglglessink_get_compat_format_from_caps (eglglessink, caps) ==
+      GST_EGLGLESSINK_IMAGE_NOFMT) {
+    GST_ERROR_OBJECT (eglglessink, "Unsupported format");
     goto HANDLE_ERROR;
   }
 
   /* XXX: Renegotiation not implemented yet */
-  if (vidroidsink->current_caps) {
-    GST_ERROR_OBJECT (vidroidsink, "Caps already set. Won't do it again");
-    if (gst_caps_is_always_compatible (caps, vidroidsink->current_caps)) {
-      GST_INFO_OBJECT (vidroidsink, "Caps are compatible anyway");
+  if (eglglessink->current_caps) {
+    GST_ERROR_OBJECT (eglglessink, "Caps already set. Won't do it again");
+    if (gst_caps_is_always_compatible (caps, eglglessink->current_caps)) {
+      GST_INFO_OBJECT (eglglessink, "Caps are compatible anyway");
       goto SUCCEED;
     } else {
-      GST_INFO_OBJECT (vidroidsink,
+      GST_INFO_OBJECT (eglglessink,
           "Caps %" GST_PTR_FORMAT "Not always compatible with current-caps %"
-          GST_PTR_FORMAT, caps, vidroidsink->current_caps);
-      GST_WARNING_OBJECT (vidroidsink, "Renegotiation not implemented");
+          GST_PTR_FORMAT, caps, eglglessink->current_caps);
+      GST_WARNING_OBJECT (eglglessink, "Renegotiation not implemented");
       goto HANDLE_ERROR;
     }
   }
 
   /* OK, got caps and had none. Ask application to give us a window */
-  if (!vidroidsink->have_window) {
-    gst_x_overlay_prepare_xwindow_id (GST_X_OVERLAY (vidroidsink));
+  if (!eglglessink->have_window) {
+    gst_x_overlay_prepare_xwindow_id (GST_X_OVERLAY (eglglessink));
   }
 
-  g_mutex_lock (vidroidsink->flow_lock);
-  GST_VIDEO_SINK_WIDTH (vidroidsink) = width;
-  GST_VIDEO_SINK_HEIGHT (vidroidsink) = height;
+  g_mutex_lock (eglglessink->flow_lock);
+  GST_VIDEO_SINK_WIDTH (eglglessink) = width;
+  GST_VIDEO_SINK_HEIGHT (eglglessink) = height;
 
-  if (!vidroidsink->have_window) {
+  if (!eglglessink->have_window) {
     /* Window creation for no x11/mesa hasn't been implemented yet */
-    GST_INFO_OBJECT (vidroidsink,
+    GST_INFO_OBJECT (eglglessink,
         "No window. Will attempt internal window creation");
-    if (!(vidroidsink->window = gst_vidroidsink_create_window (vidroidsink,
+    if (!(eglglessink->window = gst_eglglessink_create_window (eglglessink,
                 width, height))) {
-      GST_ERROR_OBJECT (vidroidsink, "Internal window creation failed!");
+      GST_ERROR_OBJECT (eglglessink, "Internal window creation failed!");
       goto HANDLE_ERROR_LOCKED;
     }
   }
 
-  vidroidsink->have_window = TRUE;
-  vidroidsink->current_caps = gst_caps_ref (caps);
-  g_mutex_unlock (vidroidsink->flow_lock);
+  eglglessink->have_window = TRUE;
+  eglglessink->current_caps = gst_caps_ref (caps);
+  g_mutex_unlock (eglglessink->flow_lock);
 
-  if (!gst_vidroidsink_init_egl_surface (vidroidsink)) {
-    GST_ERROR_OBJECT (vidroidsink, "Couldn't init EGL surface from window");
+  if (!gst_eglglessink_init_egl_surface (eglglessink)) {
+    GST_ERROR_OBJECT (eglglessink, "Couldn't init EGL surface from window");
     goto HANDLE_ERROR;
   }
 
-  gst_vidroidsink_init_egl_exts (vidroidsink);
+  gst_eglglessink_init_egl_exts (eglglessink);
 
 SUCCEED:
-  GST_INFO_OBJECT (vidroidsink, "Setcaps succeed");
+  GST_INFO_OBJECT (eglglessink, "Setcaps succeed");
   return TRUE;
 
 /* Errors */
 HANDLE_ERROR_LOCKED:
-  g_mutex_unlock (vidroidsink->flow_lock);
+  g_mutex_unlock (eglglessink->flow_lock);
 HANDLE_ERROR:
-  GST_ERROR_OBJECT (vidroidsink, "Setcaps failed");
+  GST_ERROR_OBJECT (eglglessink, "Setcaps failed");
   return FALSE;
 }
 
 static void
-gst_vidroidsink_set_property (GObject * object, guint prop_id,
+gst_eglglessink_set_property (GObject * object, guint prop_id,
     const GValue * value, GParamSpec * pspec)
 {
-  GstViDroidSink *vidroidsink;
+  GstEglGlesSink *eglglessink;
 
-  g_return_if_fail (GST_IS_VIDROIDSINK (object));
+  g_return_if_fail (GST_IS_EGLGLESSINK (object));
 
-  vidroidsink = GST_VIDROIDSINK (object);
+  eglglessink = GST_EGLGLESSINK (object);
 
   switch (prop_id) {
     case PROP_SILENT:
-      vidroidsink->silent = g_value_get_boolean (value);
+      eglglessink->silent = g_value_get_boolean (value);
       break;
     case PROP_CAN_CREATE_WINDOW:
-      vidroidsink->can_create_window = g_value_get_boolean (value);
+      eglglessink->can_create_window = g_value_get_boolean (value);
       break;
     case PROP_DEFAULT_HEIGHT:
-      vidroidsink->window_default_height = g_value_get_int (value);
+      eglglessink->window_default_height = g_value_get_int (value);
       break;
     case PROP_DEFAULT_WIDTH:
-      vidroidsink->window_default_width = g_value_get_int (value);
+      eglglessink->window_default_width = g_value_get_int (value);
       break;
     case PROP_FORCE_RENDERING_SLOW:
-      vidroidsink->force_rendering_slow = g_value_get_boolean (value);
+      eglglessink->force_rendering_slow = g_value_get_boolean (value);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -1476,30 +1476,30 @@ gst_vidroidsink_set_property (GObject * object, guint prop_id,
 }
 
 static void
-gst_vidroidsink_get_property (GObject * object, guint prop_id,
+gst_eglglessink_get_property (GObject * object, guint prop_id,
     GValue * value, GParamSpec * pspec)
 {
-  GstViDroidSink *vidroidsink;
+  GstEglGlesSink *eglglessink;
 
-  g_return_if_fail (GST_IS_VIDROIDSINK (object));
+  g_return_if_fail (GST_IS_EGLGLESSINK (object));
 
-  vidroidsink = GST_VIDROIDSINK (object);
+  eglglessink = GST_EGLGLESSINK (object);
 
   switch (prop_id) {
     case PROP_SILENT:
-      g_value_set_boolean (value, vidroidsink->silent);
+      g_value_set_boolean (value, eglglessink->silent);
       break;
     case PROP_CAN_CREATE_WINDOW:
-      g_value_set_boolean (value, vidroidsink->can_create_window);
+      g_value_set_boolean (value, eglglessink->can_create_window);
       break;
     case PROP_DEFAULT_HEIGHT:
-      g_value_set_int (value, vidroidsink->window_default_height);
+      g_value_set_int (value, eglglessink->window_default_height);
       break;
     case PROP_DEFAULT_WIDTH:
-      g_value_set_int (value, vidroidsink->window_default_width);
+      g_value_set_int (value, eglglessink->window_default_width);
       break;
     case PROP_FORCE_RENDERING_SLOW:
-      g_value_set_boolean (value, vidroidsink->force_rendering_slow);
+      g_value_set_boolean (value, eglglessink->force_rendering_slow);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -1508,7 +1508,7 @@ gst_vidroidsink_get_property (GObject * object, guint prop_id,
 }
 
 static void
-gst_vidroidsink_base_init (gpointer gclass)
+gst_eglglessink_base_init (gpointer gclass)
 {
   GstElementClass *element_class = GST_ELEMENT_CLASS (gclass);
 
@@ -1519,12 +1519,12 @@ gst_vidroidsink_base_init (gpointer gclass)
       "Reynaldo H. Verdejo Pinochet <reynaldo@collabora.com>");
 
   gst_element_class_add_pad_template (element_class,
-      gst_static_pad_template_get (&gst_vidroidsink_sink_template_factory));
+      gst_static_pad_template_get (&gst_eglglessink_sink_template_factory));
 }
 
-/* initialize the vidroidsink's class */
+/* initialize the eglglessink's class */
 static void
-gst_vidroidsink_class_init (GstViDroidSinkClass * klass)
+gst_eglglessink_class_init (GstEglGlesSinkClass * klass)
 {
   GObjectClass *gobject_class;
   GstBaseSinkClass *gstbasesink_class;
@@ -1534,17 +1534,17 @@ gst_vidroidsink_class_init (GstViDroidSinkClass * klass)
   gstbasesink_class = (GstBaseSinkClass *) klass;
   gstvideosink_class = (GstVideoSinkClass *) klass;
 
-  gobject_class->set_property = gst_vidroidsink_set_property;
-  gobject_class->get_property = gst_vidroidsink_get_property;
+  gobject_class->set_property = gst_eglglessink_set_property;
+  gobject_class->get_property = gst_eglglessink_get_property;
 
-  gstbasesink_class->start = gst_vidroidsink_start;
-  gstbasesink_class->stop = gst_vidroidsink_stop;
-  gstbasesink_class->set_caps = GST_DEBUG_FUNCPTR (gst_vidroidsink_setcaps);
+  gstbasesink_class->start = gst_eglglessink_start;
+  gstbasesink_class->stop = gst_eglglessink_stop;
+  gstbasesink_class->set_caps = GST_DEBUG_FUNCPTR (gst_eglglessink_setcaps);
   gstbasesink_class->buffer_alloc = GST_DEBUG_FUNCPTR
-      (gst_vidroidsink_buffer_alloc);
+      (gst_eglglessink_buffer_alloc);
 
   gstvideosink_class->show_frame =
-      GST_DEBUG_FUNCPTR (gst_vidroidsink_show_frame);
+      GST_DEBUG_FUNCPTR (gst_eglglessink_show_frame);
 
   g_object_class_install_property (gobject_class, PROP_SILENT,
       g_param_spec_boolean ("silent", "Silent", "Produce verbose output ?",
@@ -1559,42 +1559,42 @@ gst_vidroidsink_class_init (GstViDroidSinkClass * klass)
   g_object_class_install_property (gobject_class, PROP_DEFAULT_WIDTH,
       g_param_spec_int ("window_default_width", "DefaultWidth",
           "Default width for self created windows", 0,
-          VIDROIDSINK_MAX_FRAME_WIDTH, VIDROIDSINK_MAX_FRAME_WIDTH,
+          EGLGLESSINK_MAX_FRAME_WIDTH, EGLGLESSINK_MAX_FRAME_WIDTH,
           G_PARAM_READWRITE));
   g_object_class_install_property (gobject_class, PROP_DEFAULT_HEIGHT,
       g_param_spec_int ("window_default_height", "CanCreateWindow",
           "Default height for self created windows", 0,
-          VIDROIDSINK_MAX_FRAME_HEIGHT, VIDROIDSINK_MAX_FRAME_HEIGHT,
+          EGLGLESSINK_MAX_FRAME_HEIGHT, EGLGLESSINK_MAX_FRAME_HEIGHT,
           G_PARAM_READWRITE));
 }
 
 
 static void
-gst_vidroidsink_init (GstViDroidSink * vidroidsink,
-    GstViDroidSinkClass * gclass)
+gst_eglglessink_init (GstEglGlesSink * eglglessink,
+    GstEglGlesSinkClass * gclass)
 {
   /* Init defaults */
-  vidroidsink->have_window = FALSE;
-  vidroidsink->have_surface = FALSE;
-  vidroidsink->have_vbo = FALSE;
-  vidroidsink->have_texture = FALSE;
-  vidroidsink->running = FALSE; /* XXX: unused */
-  vidroidsink->can_create_window = TRUE;
-  vidroidsink->force_rendering_slow = FALSE;
+  eglglessink->have_window = FALSE;
+  eglglessink->have_surface = FALSE;
+  eglglessink->have_vbo = FALSE;
+  eglglessink->have_texture = FALSE;
+  eglglessink->running = FALSE; /* XXX: unused */
+  eglglessink->can_create_window = TRUE;
+  eglglessink->force_rendering_slow = FALSE;
 }
 
 /* Interface initializations. Used here for initializing the XOverlay
  * Interface.
  */
 static void
-gst_vidroidsink_init_interfaces (GType type)
+gst_eglglessink_init_interfaces (GType type)
 {
   static const GInterfaceInfo implements_info = {
-    (GInterfaceInitFunc) gst_vidroidsink_implements_init, NULL, NULL
+    (GInterfaceInitFunc) gst_eglglessink_implements_init, NULL, NULL
   };
 
   static const GInterfaceInfo xoverlay_info = {
-    (GInterfaceInitFunc) gst_vidroidsink_xoverlay_init, NULL, NULL
+    (GInterfaceInitFunc) gst_eglglessink_xoverlay_init, NULL, NULL
   };
 
   g_type_add_interface_static (type, GST_TYPE_IMPLEMENTS_INTERFACE,
@@ -1608,14 +1608,14 @@ gst_vidroidsink_init_interfaces (GType type)
  * register the element factories and other features
  */
 static gboolean
-vidroidsink_plugin_init (GstPlugin * plugin)
+eglglessink_plugin_init (GstPlugin * plugin)
 {
   /* debug category for fltering log messages */
-  GST_DEBUG_CATEGORY_INIT (gst_vidroidsink_debug, "vidroidsink",
+  GST_DEBUG_CATEGORY_INIT (gst_eglglessink_debug, "eglglessink",
       0, "Simple EGL/GLES Sink");
 
-  return gst_element_register (plugin, "vidroidsink", GST_RANK_NONE,
-      GST_TYPE_VIDROIDSINK);
+  return gst_element_register (plugin, "eglglessink", GST_RANK_NONE,
+      GST_TYPE_EGLGLESSINK);
 }
 
 /* PACKAGE: this is usually set by autotools depending on some _INIT macro
@@ -1631,10 +1631,10 @@ vidroidsink_plugin_init (GstPlugin * plugin)
 #define VERSION "0.911"
 #endif
 
-/* gstreamer looks for this structure to register vidroidsinks */
+/* gstreamer looks for this structure to register eglglessinks */
 GST_PLUGIN_DEFINE (GST_VERSION_MAJOR,
     GST_VERSION_MINOR,
-    "vidroidsink",
+    "eglglessink",
     "EGL/GLES sink",
-    vidroidsink_plugin_init,
+    eglglessink_plugin_init,
     VERSION, "LGPL", "GStreamer", "http://gstreamer.net/")
