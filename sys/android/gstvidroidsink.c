@@ -849,7 +849,7 @@ gst_vidroidsink_expose (GstXOverlay * overlay)
   return;
 }
 
-/* Checks available egl extensions and chooses
+/* Checks available egl/gles extensions and chooses
  * a suitable rendering path from GstVidroidSinkRenderingPath
  * according to what's available on this platform.
  * This function can only be called after an EGL context
@@ -936,12 +936,6 @@ gst_vidroidsink_init_egl_surface (GstViDroidSink * vidroidsink)
   const char *glexts;
 
   GST_DEBUG_OBJECT (vidroidsink, "Enter EGL surface setup");
-
-  /* XXX: Impossible?. Check logic and remove if not needed */
-  if (G_UNLIKELY (!vidroidsink->have_window)) {
-    GST_ERROR_OBJECT (vidroidsink, "Attempted to setup surface without window");
-    goto HANDLE_ERROR;
-  }
 
   g_mutex_lock (vidroidsink->flow_lock);
 
