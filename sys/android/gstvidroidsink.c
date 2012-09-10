@@ -1,5 +1,5 @@
 /*
- * GStreamer Android EGL/GLES Sink
+ * GStreamer EGL/GLES Sink
  * Copyright (C) 2012 Collabora Ltd.
  *   @author: Reynaldo H. Verdejo Pinochet <reynaldo@collabora.com>
  *
@@ -45,18 +45,10 @@
 /**
  * SECTION:element-vidroidsink
  *
- * This is a vout sink for Android using GLESv2/EGL. It also
- * works on a X11/Mesa environment provided it's base set of
- * requirements are met.
+ * This is a vout sink using EGL/GLES. 
  * 
  * <refsect2>
  * <title>Rationale on OpenGL ES version</title>
- * <para>
- * Android supports OpenGL ES 1.0 / 1.1 and since 2.2
- * (API level 8) it supports OpenGL ES 2.0. Most widely
- * supported version is OpenGL ES 1.1 according to
- * http://developer.android.com/resources/dashboard/opengl.html
- * </para>
  * <para>
  * This Sink uses GLESv2
  * </para>
@@ -65,7 +57,31 @@
  * <refsect2>
  * <title>Example launch line</title>
  * |[
- * gst-launch -v -m videotestsrc ! vidroidsink silent=TRUE
+ * gst-launch -v -m videotestsrc ! vidroidsink
+ * ]|
+ * </refsect2>
+ *
+ * <refsect2>
+ * <title>Example launch line with forced slow path rendering</title>
+ * <para>
+ * The sink will chose a buffer copy-over slow rendering path even
+ * if needed EGL/GLES extensions to use a fast rendering path are
+ * available.
+ * </para>
+ * |[
+ * gst-launch -v -m videotestsrc ! vidroidsink force_rendering_slow=TRUE 
+ * ]|
+ * </refsect2>
+ *
+ * <refsect2>
+ * <title>Example launch line with internal window creation disabled</title>
+ * <para>
+ * The sink will wait for a window handle through it's xOverlay interface
+ * even if internal window creation is supported by the platform and
+ * implemented.
+ * </para>
+ * |[
+ * gst-launch -v -m videotestsrc ! vidroidsink force_rendering_slow=TRUE 
  * ]|
  * </refsect2>
  */
@@ -99,7 +115,7 @@ GST_DEBUG_CATEGORY_STATIC (gst_vidroidsink_debug);
 #define VIDROIDSINK_MAX_FRAME_WIDTH 1280
 #define VIDROIDSINK_MAX_FRAME_HEIGHT 720
 
-/* These are needed for our fast rendering path */
+/* These are only needed for the fast rendering path */
 #ifdef EGL_KHR_image
 static PFNEGLCREATEIMAGEKHRPROC my_eglCreateImageKHR;
 static PFNEGLDESTROYIMAGEKHRPROC my_eglDestroyImageKHR;
@@ -142,8 +158,7 @@ static const char *frag_prog = {
  *
  * OpenGL ES Standard does not mandate YUV support
  *
- * XXX: Extend RGB support to a set
- * XXX: YUV seems to be supported by our primary target at least..
+ * XXX: Extend RGB support to a set. Maybe implement YUV too.
  */
 static GstStaticPadTemplate gst_vidroidsink_sink_template_factory =
 GST_STATIC_PAD_TEMPLATE ("sink",
@@ -247,7 +262,7 @@ GST_BOILERPLATE_FULL (GstViDroidSink, gst_vidroidsink, GstVideoSink,
   EGLint *buffer = NULL;
 
   /* XXX: Need to figure out how to create an egl_native_pixmap_t to
-   * feed to eglCreatePixmapSurface. Another option: create an
+   * feed to eglCreatePixmapSurface. An option on android: create an
    * android_native_buffer_t to pass straight to eglCreateImageKHR.
    */
 
@@ -1498,9 +1513,9 @@ gst_vidroidsink_base_init (gpointer gclass)
   GstElementClass *element_class = GST_ELEMENT_CLASS (gclass);
 
   gst_element_class_set_details_simple (element_class,
-      "EGL/GLES Android Sink",
+      "EGL/GLES vout Sink",
       "Sink/Video",
-      "An EGL/GLES Android Video Sink Implementing the XOverlay interface",
+      "An EGL/GLES Video Output Sink Implementing the XOverlay interface",
       "Reynaldo H. Verdejo Pinochet <reynaldo@collabora.com>");
 
   gst_element_class_add_pad_template (element_class,
@@ -1609,7 +1624,7 @@ vidroidsink_plugin_init (GstPlugin * plugin)
  * compile this code. GST_PLUGIN_DEFINE needs PACKAGE to be defined.
  */
 #ifndef PACKAGE
-#define PACKAGE "EGL/GLES Android Sink"
+#define PACKAGE "EGL/GLES Sink"
 #endif
 
 #ifndef VERSION
@@ -1620,6 +1635,6 @@ vidroidsink_plugin_init (GstPlugin * plugin)
 GST_PLUGIN_DEFINE (GST_VERSION_MAJOR,
     GST_VERSION_MINOR,
     "vidroidsink",
-    "EGL/GLES Android sink",
+    "EGL/GLES sink",
     vidroidsink_plugin_init,
     VERSION, "LGPL", "GStreamer", "http://gstreamer.net/")

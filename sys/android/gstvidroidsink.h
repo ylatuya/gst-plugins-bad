@@ -1,5 +1,5 @@
 /*
- * GStreamer Android EGL/GLES Sink
+ * GStreamer EGL/GLES Sink
  * Copyright (C) 2012 Collabora Ltd.
  *   @author: Reynaldo H. Verdejo Pinochet <reynaldo@collabora.com>
  *
