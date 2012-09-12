@@ -1516,6 +1516,16 @@ AG_GST_CHECK_FEATURE(RSVG, [rsvg decoder], rsvg, [
   AC_SUBST(RSVG_LIBS)
 ])
 
+dnl *** eglgles ***
+translit(dnm, m, l) AM_CONDITIONAL(USE_EGLGLES, true)
+AG_GST_CHECK_FEATURE(EGLGLES, [eglgles sink], eglgles, [
+  PKG_CHECK_MODULES(EGLGLES, egl glesv2, HAVE_EGLGLES="yes", [
+    HAVE_EGLGLES="no"
+  ])
+  AC_SUBST(EGLGLES_CFLAGS)
+  AC_SUBST(EGLGLES_LIBS)
+])
+
 dnl *** timidity ***
 translit(dnm, m, l) AM_CONDITIONAL(USE_TIMIDITY, true)
 AG_GST_CHECK_FEATURE(TIMIDITY, [timidity midi soft synth plugin], timidity, [
@@ -1874,6 +1884,7 @@ AM_CONDITIONAL(USE_CURL, false)
 AM_CONDITIONAL(USE_DC1394, false)
 AM_CONDITIONAL(USE_DECKLINK, false)
 AM_CONDITIONAL(USE_DIRECTFB, false)
+AM_CONDITIONAL(USE_EGLGLES, false)
 AM_CONDITIONAL(USE_DIRAC, false)
 AM_CONDITIONAL(USE_DTS, false)
 AM_CONDITIONAL(USE_DIVX, false)
@@ -2139,6 +2150,7 @@ ext/dirac/Makefile
 ext/directfb/Makefile
 ext/divx/Makefile
 ext/dts/Makefile
+ext/eglgles/Makefile
 ext/faac/Makefile
 ext/faad/Makefile
 ext/flite/Makefile
