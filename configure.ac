@@ -1519,8 +1519,28 @@ AG_GST_CHECK_FEATURE(RSVG, [rsvg decoder], rsvg, [
 dnl *** eglgles ***
 translit(dnm, m, l) AM_CONDITIONAL(USE_EGLGLES, true)
 AG_GST_CHECK_FEATURE(EGLGLES, [eglgles sink], eglgles, [
+  HAVE_EGLGLES="no"
   PKG_CHECK_MODULES(EGLGLES, egl glesv2, HAVE_EGLGLES="yes", [
     HAVE_EGLGLES="no"
+    old_LIBS=$LIBS
+    old_CFLAGS=$CFLAGS
+    AC_CHECK_LIB([GLESv2], [glEnable],
+      [
+        AC_CHECK_HEADER([GLES2/gl2.h],
+          [
+            AC_CHECK_LIB([EGL], [eglGetProcAddress],
+              [
+                AC_CHECK_HEADER([EGL/egl.h],
+                  [
+                    HAVE_EGLGLES="yes"
+                    EGLGLES_LIBS="-lGLESv2 -lEGL"
+                    EGLGLES_CFLAGS=""
+                  ])
+              ])
+          ])
+      ])
+    LIBS=$old_LIBS
+    CFLAGS=$old_CFLAGS
   ])
   AC_SUBST(EGLGLES_CFLAGS)
   AC_SUBST(EGLGLES_LIBS)
