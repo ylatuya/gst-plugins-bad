@@ -143,6 +143,7 @@ struct _GstEglGlesSink
   gboolean have_surface;;
   gboolean have_vbo;
   gboolean have_texture;
+  gboolean egl_started;
   gboolean running;
 
   GstEglGlesSinkRenderingPath rendering_path;
@@ -158,6 +159,8 @@ struct _GstEglGlesSink
   gboolean force_rendering_slow;
   gint window_default_width;
   gint window_default_height;
+  EGLint surface_width;
+  EGLint surface_height;
 };
 
 struct _GstEglGlesSinkClass

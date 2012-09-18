@@ -147,11 +147,12 @@ static const char *vert_prog = {
 };
 
 static const char *frag_prog = {
-  "varying vec2 opos;"
+  "precision mediump float;"
+      "varying vec2 opos;"
       "uniform sampler2D tex;"
       "void main(void)"
       "{"
-      " vec4 t = texture2D(tex, opos);" " gl_FragColor = vec4(t.xyz, 0.5);" "}"
+      " vec4 t = texture2D(tex, opos);" " gl_FragColor = vec4(t.xyz, 1.0);" "}"
 };
 
 /* Input capabilities.
@@ -163,20 +164,8 @@ static GstStaticPadTemplate gst_eglglessink_sink_template_factory =
     GST_STATIC_PAD_TEMPLATE ("sink",
     GST_PAD_SINK,
     GST_PAD_ALWAYS,
-    GST_STATIC_CAPS ("video/x-raw-rgb, "
-        "framerate = (fraction) [ 0, MAX ], "
-        "width = (int) [ 1, MAX ], "
-        "height = (int) [ 1, MAX ], "
-        "bpp = 24; "
-        "video/x-raw-rgb, "
-        "framerate = (fraction) [ 0, MAX ], "
-        "width = (int) [ 1, MAX ], "
-        "height = (int) [ 1, MAX ], "
-        "depth = (int) 24, "
-        "bpp = 32; "
-        "video/x-raw-rgb, "
-        "framerate = (fraction) [ 0, MAX ], "
-        "width = (int) [ 1, MAX ], " "height = (int) [ 1, MAX ], " "bpp = 16"));
+    GST_STATIC_CAPS (GST_VIDEO_CAPS_RGB ";" GST_VIDEO_CAPS_RGBx ";"
+        GST_VIDEO_CAPS_RGB_16));
 
 /* Filter signals and args */
 enum
@@ -275,6 +264,7 @@ static GstFlowReturn gst_eglglessink_render_and_display (GstEglGlesSink * sink,
 static inline gboolean got_gl_error (const char *wtf);
 static inline void show_egl_error (const char *wtf);
 static void gst_eglglessink_wipe_fmt (gpointer data);
+static inline gboolean egl_init (GstEglGlesSink * eglglessink);
 
 static GstBufferClass *gsteglglessink_buffer_parent_class = NULL;
 #define GST_TYPE_EGLGLESBUFFER (gst_eglglesbuffer_get_type())
@@ -537,6 +527,11 @@ gst_eglglessink_get_compat_format_from_caps (GstEglGlesSink * eglglessink,
     if (format) {
       if (gst_caps_can_intersect (caps, format->caps)) {
         eglglessink->selected_fmt = format;
+        GST_LOG ("Found compatible caps");
+        GST_LOG ("Sugested was %" GST_PTR_FORMAT, caps);
+        GST_LOG ("And we can do %" GST_PTR_FORMAT, format->caps);
+        GST_INFO_OBJECT (eglglessink, "Selected internal format:%d",
+            format->fmt);
         return format->fmt;
       }
     }
@@ -777,7 +772,12 @@ gst_eglglessink_fill_supported_fbuffer_configs (GstEglGlesSink * eglglessink)
   EGLint cfg_number;
   GstEglGlesImageFmt *format;
 
+  GST_DEBUG_OBJECT (eglglessink,
+      "Building initial list of wanted eglattribs per format");
+
   /* Init supported format/caps list */
+  g_mutex_lock (eglglessink->flow_lock);
+
   if (eglChooseConfig (eglglessink->display, eglglessink_RGB888_config,
           NULL, 1, &cfg_number) != EGL_FALSE) {
     format = g_new0 (GstEglGlesImageFmt, 1);
@@ -817,21 +817,15 @@ gst_eglglessink_fill_supported_fbuffer_configs (GstEglGlesSink * eglglessink)
     GST_INFO_OBJECT (eglglessink,
         "EGL display doesn't support RGBA8888 config");
 
+  g_mutex_unlock (eglglessink->flow_lock);
+
   return ret;
 }
 
-gboolean
-gst_eglglessink_start (GstBaseSink * sink)
+static inline gboolean
+egl_init (GstEglGlesSink * eglglessink)
 {
-  gboolean ret;
-  GstEglGlesSink *eglglessink = GST_EGLGLESSINK (sink);
-
-  eglglessink->flow_lock = g_mutex_new ();
-  g_mutex_lock (eglglessink->flow_lock);
-
-  ret = platform_wrapper_init ();
-
-  if (!ret) {
+  if (!platform_wrapper_init ()) {
     GST_ERROR_OBJECT (eglglessink, "Couldn't init EGL platform wrapper");
     goto HANDLE_ERROR;
   }
@@ -841,20 +835,48 @@ gst_eglglessink_start (GstBaseSink * sink)
     goto HANDLE_ERROR;
   }
 
+  gst_eglglessink_init_egl_exts (eglglessink);
+
   if (!gst_eglglessink_fill_supported_fbuffer_configs (eglglessink)) {
     GST_ERROR_OBJECT (eglglessink, "Display support NONE of our configs");
     goto HANDLE_ERROR;
   }
 
-  /* Ask for a window to render to */
-  gst_x_overlay_prepare_xwindow_id (GST_X_OVERLAY (eglglessink));
-
+  g_mutex_lock (eglglessink->flow_lock);
+  eglglessink->egl_started = TRUE;
   g_mutex_unlock (eglglessink->flow_lock);
 
   return TRUE;
 
 HANDLE_ERROR:
-  g_mutex_unlock (eglglessink->flow_lock);
+  GST_ERROR_OBJECT (eglglessink, "Failed to perform EGL init");
+  return FALSE;
+}
+
+gboolean
+gst_eglglessink_start (GstBaseSink * sink)
+{
+  GstEglGlesSink *eglglessink = GST_EGLGLESSINK (sink);
+
+  if (!eglglessink->egl_started)
+    if (!egl_init (eglglessink)) {
+      GST_ERROR_OBJECT (eglglessink, "EGL uninitialized. Bailing out");
+      goto HANDLE_ERROR;
+    }
+
+  /* Ask for a window to render to */
+  gst_x_overlay_prepare_xwindow_id (GST_X_OVERLAY (eglglessink));
+
+  if (!eglglessink->have_window && !eglglessink->can_create_window) {
+    GST_ERROR_OBJECT (eglglessink, "Window handle unavailable and we "
+        "were instructed not to create an internal one. Bailing out.");
+    goto HANDLE_ERROR;
+  }
+
+  return TRUE;
+
+HANDLE_ERROR:
+  GST_ERROR_OBJECT (eglglessink, "Couldn't start");
   return FALSE;
 }
 
@@ -1140,7 +1162,9 @@ static gboolean
 gst_eglglessink_init_egl_surface (GstEglGlesSink * eglglessink)
 {
   GLint test;
-  GLuint verthandle, fraghandle, prog;
+  GLuint verthandle, fraghandle, prog, texlocation;
+  GLboolean ret;
+  GLchar *info_log;
 
   GST_DEBUG_OBJECT (eglglessink, "Enter EGL surface setup");
 
@@ -1162,6 +1186,15 @@ gst_eglglessink_init_egl_surface (GstEglGlesSink * eglglessink)
     goto HANDLE_EGL_ERROR_LOCKED;
   }
 
+  /* Save surface dims */
+  eglQuerySurface (eglglessink->display, eglglessink->surface, EGL_WIDTH,
+      &eglglessink->surface_width);
+  eglQuerySurface (eglglessink->display, eglglessink->surface, EGL_HEIGHT,
+      &eglglessink->surface_height);
+
+  GST_INFO_OBJECT (eglglessink, "Got surface of %dx%d pixels",
+      eglglessink->surface_width, eglglessink->surface_height);
+
   /* We have a surface! */
   eglglessink->have_surface = TRUE;
   g_mutex_unlock (eglglessink->flow_lock);
@@ -1169,6 +1202,16 @@ gst_eglglessink_init_egl_surface (GstEglGlesSink * eglglessink)
   /* Init vertex and fragment progs.
    * XXX: Need to be runtime conditional or ifdefed
    */
+
+  /* Shader compiler support it's optional byt we
+   * currently rely on it.
+   */
+
+  glGetBooleanv (GL_SHADER_COMPILER, &ret);
+  if (ret == GL_FALSE) {
+    GST_ERROR_OBJECT (eglglessink, "Shader compiler support is unavailable!");
+    goto HANDLE_ERROR;
+  }
 
   verthandle = glCreateShader (GL_VERTEX_SHADER);
   GST_DEBUG_OBJECT (eglglessink, "sending %s to handle %d", vert_prog,
@@ -1183,7 +1226,16 @@ gst_eglglessink_init_egl_surface (GstEglGlesSink * eglglessink)
 
   glGetShaderiv (verthandle, GL_COMPILE_STATUS, &test);
   if (test != GL_FALSE)
-    GST_DEBUG_OBJECT (eglglessink, "Successfully compiled vertex program");
+    GST_DEBUG_OBJECT (eglglessink, "Successfully compiled vertex shader");
+  else {
+    GST_ERROR_OBJECT (eglglessink, "Couldn't compile vertex shader");
+    glGetShaderiv (verthandle, GL_INFO_LOG_LENGTH, &test);
+    info_log = g_new0 (GLchar, test);
+    glGetShaderInfoLog (verthandle, test, NULL, info_log);
+    GST_INFO_OBJECT (eglglessink, "Compilation info log:\n%s", info_log);
+    g_free (info_log);
+    goto HANDLE_ERROR;
+  }
 
   fraghandle = glCreateShader (GL_FRAGMENT_SHADER);
   glShaderSource (fraghandle, 1, &frag_prog, NULL);
@@ -1196,7 +1248,16 @@ gst_eglglessink_init_egl_surface (GstEglGlesSink * eglglessink)
 
   glGetShaderiv (fraghandle, GL_COMPILE_STATUS, &test);
   if (test != GL_FALSE)
-    GST_DEBUG_OBJECT (eglglessink, "Successfully compiled fragment program");
+    GST_DEBUG_OBJECT (eglglessink, "Successfully compiled fragment shader");
+  else {
+    GST_ERROR_OBJECT (eglglessink, "Couldn't compile fragment shader");
+    glGetShaderiv (fraghandle, GL_INFO_LOG_LENGTH, &test);
+    info_log = g_new0 (GLchar, test);
+    glGetShaderInfoLog (fraghandle, test, NULL, info_log);
+    GST_INFO_OBJECT (eglglessink, "Compilation info log:\n%s", info_log);
+    g_free (info_log);
+    goto HANDLE_ERROR;
+  }
 
   prog = glCreateProgram ();
   if (got_gl_error ("glCreateProgram"))
@@ -1211,10 +1272,15 @@ gst_eglglessink_init_egl_surface (GstEglGlesSink * eglglessink)
   glGetProgramiv (prog, GL_LINK_STATUS, &test);
   if (test != GL_FALSE)
     GST_DEBUG_OBJECT (eglglessink, "GLES: Successfully linked program");
+  else {
+    GST_ERROR_OBJECT (eglglessink, "Couldn't link program");
+    goto HANDLE_ERROR;
+  }
 
   glUseProgram (prog);
   if (got_gl_error ("glUseProgram"))
     goto HANDLE_ERROR;
+
 
   /* Generate and bind texture */
   if (!eglglessink->have_texture) {
@@ -1226,9 +1292,13 @@ gst_eglglessink_init_egl_surface (GstEglGlesSink * eglglessink)
     if (got_gl_error ("glGenTextures"))
       goto HANDLE_ERROR_LOCKED;
 
+    glActiveTexture (GL_TEXTURE0);
     glBindTexture (GL_TEXTURE_2D, eglglessink->texture[0]);
     if (got_gl_error ("glBindTexture"))
       goto HANDLE_ERROR_LOCKED;
+
+    texlocation = glGetUniformLocation (prog, "tex");
+    glUniform1i (texlocation, 0);
 
     eglglessink->have_texture = TRUE;
     g_mutex_unlock (eglglessink->flow_lock);
@@ -1293,11 +1363,17 @@ gst_eglglessink_choose_config (GstEglGlesSink * eglglessink)
   EGLint con_attribs[] = { EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE };
   GLint egl_configs;
 
-  if (!eglChooseConfig (eglglessink->display, eglglessink->selected_fmt->eglcfg,
-          &eglglessink->config, 1, &egl_configs)) {
+  if ((eglChooseConfig (eglglessink->display, eglglessink->selected_fmt->eglcfg,
+              &eglglessink->config, 1, &egl_configs)) == EGL_FALSE) {
     show_egl_error ("eglChooseConfig");
-    GST_ERROR_OBJECT (eglglessink, "Could not choose EGL config");
+    GST_ERROR_OBJECT (eglglessink, "eglChooseConfig failed");
     goto HANDLE_EGL_ERROR;
+  }
+
+  if (egl_configs < 1) {
+    GST_ERROR_OBJECT (eglglessink,
+        "Could not find matching framebuffer config");
+    goto HANDLE_ERROR;
   }
 
   eglglessink->context = eglCreateContext (eglglessink->display,
@@ -1315,7 +1391,8 @@ gst_eglglessink_choose_config (GstEglGlesSink * eglglessink)
   /* Errors */
 HANDLE_EGL_ERROR:
   GST_ERROR_OBJECT (eglglessink, "EGL call returned error %x", eglGetError ());
-  GST_ERROR_OBJECT (eglglessink, "Couldn't choose config");
+HANDLE_ERROR:
+  GST_ERROR_OBJECT (eglglessink, "Couldn't choose an usable config");
   return FALSE;
 }
 
@@ -1345,13 +1422,13 @@ gst_eglglessink_set_window_handle (GstXOverlay * overlay, guintptr id)
   eglglessink->have_window = TRUE;
   g_mutex_unlock (eglglessink->flow_lock);
 
-  if (!gst_eglglessink_init_egl_surface (eglglessink)) {
-    GST_ERROR_OBJECT (eglglessink, "Couldn't init EGL surface!");
-    goto HANDLE_ERROR;
+  if (!eglglessink->egl_started) {
+    GST_INFO_OBJECT (eglglessink, "Got a handle, doing EGL initialization");
+    if (!egl_init (eglglessink)) {
+      GST_ERROR_OBJECT (eglglessink, "EGL Initialization failed!");
+      goto HANDLE_ERROR;
+    }
   }
-
-  /* Init extensions */
-  gst_eglglessink_init_egl_exts (eglglessink);
 
   return;
 
@@ -1417,6 +1494,15 @@ gst_eglglessink_render_and_display (GstEglGlesSink * eglglessink,
        * width and height values when non power of two
        * and no npot extension available.
        */
+
+      /* resizing params */
+      glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+      glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+      glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+      glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+      if (got_gl_error ("glTexParameteri"))
+        goto HANDLE_ERROR;
+
       switch (eglglessink->selected_fmt->fmt) {
         case GST_EGLGLESSINK_IMAGE_RGB888:
           glTexImage2D (GL_TEXTURE_2D, 0, GL_RGB, w, h, 0, GL_RGB,
@@ -1434,17 +1520,12 @@ gst_eglglessink_render_and_display (GstEglGlesSink * eglglessink,
       if (got_gl_error ("glTexImage2D"))
         goto HANDLE_ERROR;
 
-      /* resizing params */
-      glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-      glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-      if (got_gl_error ("glTexParameteri"))
-        goto HANDLE_ERROR;
-
       /* XXX: VBO stuff this actually makes more sense on the setcaps stub?
        * The way it is right now makes this happen only for the first buffer
        * though so I guess it should work */
       if (gst_eglglessink_setup_vbo (eglglessink, FALSE)) {
-        glViewport (0, 0, w, h);
+        glViewport (0, 0, eglglessink->surface_width,
+            eglglessink->surface_height);
       } else {
         GST_ERROR_OBJECT (eglglessink, "VBO setup failed");
         goto HANDLE_ERROR;
@@ -1456,7 +1537,11 @@ gst_eglglessink_render_and_display (GstEglGlesSink * eglglessink,
       if (got_gl_error ("glDrawElements"))
         goto HANDLE_ERROR;
 
-      eglSwapBuffers (eglglessink->display, eglglessink->surface);
+      if ((eglSwapBuffers (eglglessink->display, eglglessink->surface))
+          == EGL_FALSE) {
+        show_egl_error ("eglSwapBuffers");
+        goto HANDLE_ERROR;
+      }
   }
 
   GST_DEBUG_OBJECT (eglglessink, "Succesfully rendered 1 frame");
@@ -1552,11 +1637,6 @@ gst_eglglessink_setcaps (GstBaseSink * bsink, GstCaps * caps)
    * already if it meant to do so
    */
   if (!eglglessink->have_window) {
-    if (!eglglessink->can_create_window) {
-      GST_ERROR_OBJECT (eglglessink,
-          "Have no window and we have been told not to create one!");
-      goto HANDLE_ERROR;
-    }
     GST_INFO_OBJECT (eglglessink,
         "No window. Will attempt internal window creation");
     if (!(window = gst_eglglessink_create_window (eglglessink, width, height))) {
@@ -1566,20 +1646,18 @@ gst_eglglessink_setcaps (GstBaseSink * bsink, GstCaps * caps)
     gst_eglglessink_set_window_handle (GST_X_OVERLAY (eglglessink), window);
   }
 
-  if (!gst_eglglessink_init_egl_surface (eglglessink)) {
-    GST_ERROR_OBJECT (eglglessink, "Couldn't init EGL surface from window");
-    goto HANDLE_ERROR;
+  if (!eglglessink->have_surface) {
+    if (!gst_eglglessink_init_egl_surface (eglglessink)) {
+      GST_ERROR_OBJECT (eglglessink, "Couldn't init EGL surface from window");
+      goto HANDLE_ERROR;
+    }
   }
-
-  gst_eglglessink_init_egl_exts (eglglessink);
 
 SUCCEED:
   GST_INFO_OBJECT (eglglessink, "Setcaps succeed");
   return TRUE;
 
 /* Errors */
-HANDLE_ERROR_LOCKED:
-  g_mutex_unlock (eglglessink->flow_lock);
 HANDLE_ERROR:
   GST_ERROR_OBJECT (eglglessink, "Setcaps failed");
   return FALSE;
@@ -1720,9 +1798,11 @@ gst_eglglessink_init (GstEglGlesSink * eglglessink,
   eglglessink->have_surface = FALSE;
   eglglessink->have_vbo = FALSE;
   eglglessink->have_texture = FALSE;
+  eglglessink->egl_started = FALSE;
   eglglessink->running = FALSE; /* XXX: unused */
   eglglessink->can_create_window = TRUE;
   eglglessink->force_rendering_slow = FALSE;
+  eglglessink->flow_lock = g_mutex_new ();
 }
 
 /* Interface initializations. Used here for initializing the XOverlay
