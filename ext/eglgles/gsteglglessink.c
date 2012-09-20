@@ -185,25 +185,28 @@ enum
 };
 
 /* will probably move elsewhere */
-static EGLint eglglessink_RGBA8888_config[] = {
+static EGLint eglglessink_RGBA8888_attribs[] = {
   EGL_RED_SIZE, 8,
   EGL_GREEN_SIZE, 8,
   EGL_BLUE_SIZE, 8,
   EGL_ALPHA_SIZE, 8,
+  EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
   EGL_NONE
 };
 
-static EGLint eglglessink_RGB888_config[] = {
+static EGLint eglglessink_RGB888_attribs[] = {
   EGL_RED_SIZE, 8,
   EGL_GREEN_SIZE, 8,
   EGL_BLUE_SIZE, 8,
+  EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
   EGL_NONE
 };
 
-static EGLint eglglessink_RGB565_config[] = {
+static EGLint eglglessink_RGB565_attribs[] = {
   EGL_RED_SIZE, 5,
   EGL_GREEN_SIZE, 6,
   EGL_BLUE_SIZE, 5,
+  EGL_RENDERABLE_TYPE, EGL_OPENGL_ES2_BIT,
   EGL_NONE
 };
 
@@ -778,11 +781,11 @@ gst_eglglessink_fill_supported_fbuffer_configs (GstEglGlesSink * eglglessink)
   /* Init supported format/caps list */
   g_mutex_lock (eglglessink->flow_lock);
 
-  if (eglChooseConfig (eglglessink->display, eglglessink_RGB888_config,
+  if (eglChooseConfig (eglglessink->display, eglglessink_RGB888_attribs,
           NULL, 1, &cfg_number) != EGL_FALSE) {
     format = g_new0 (GstEglGlesImageFmt, 1);
     format->fmt = GST_EGLGLESSINK_IMAGE_RGB888;
-    format->eglcfg = eglglessink_RGB888_config;
+    format->attribs = eglglessink_RGB888_attribs;
     format->caps =
         gst_caps_new_simple ("video/x-raw-rgb", "bpp", G_TYPE_INT, 24, NULL);
     eglglessink->supported_fmts =
@@ -791,11 +794,11 @@ gst_eglglessink_fill_supported_fbuffer_configs (GstEglGlesSink * eglglessink)
   } else
     GST_INFO_OBJECT (eglglessink, "EGL display doesn't support RGB888 config");
 
-  if (eglChooseConfig (eglglessink->display, eglglessink_RGB565_config,
+  if (eglChooseConfig (eglglessink->display, eglglessink_RGB565_attribs,
           NULL, 1, &cfg_number) != EGL_FALSE) {
     format = g_new0 (GstEglGlesImageFmt, 1);
     format->fmt = GST_EGLGLESSINK_IMAGE_RGB565;
-    format->eglcfg = eglglessink_RGB565_config;
+    format->attribs = eglglessink_RGB565_attribs;
     format->caps =
         gst_caps_new_simple ("video/x-raw-rgb", "bpp", G_TYPE_INT, 16, NULL);
     eglglessink->supported_fmts =
@@ -804,11 +807,11 @@ gst_eglglessink_fill_supported_fbuffer_configs (GstEglGlesSink * eglglessink)
   } else
     GST_INFO_OBJECT (eglglessink, "EGL display doesn't support RGB565 config");
 
-  if (eglChooseConfig (eglglessink->display, eglglessink_RGBA8888_config,
+  if (eglChooseConfig (eglglessink->display, eglglessink_RGBA8888_attribs,
           NULL, 1, &cfg_number) != EGL_FALSE) {
     format = g_new0 (GstEglGlesImageFmt, 1);
     format->fmt = GST_EGLGLESSINK_IMAGE_RGBA8888;
-    format->eglcfg = eglglessink_RGBA8888_config;
+    format->attribs = eglglessink_RGBA8888_attribs;
     format->caps = gst_caps_new_simple ("video/x-raw-rgb", "depth", G_TYPE_INT, 24, "bpp", G_TYPE_INT, 32, NULL);       /* proly doesn't work for rgba */
     eglglessink->supported_fmts = g_list_append
         (eglglessink->supported_fmts, format);
@@ -865,7 +868,8 @@ gst_eglglessink_start (GstBaseSink * sink)
     }
 
   /* Ask for a window to render to */
-  gst_x_overlay_prepare_xwindow_id (GST_X_OVERLAY (eglglessink));
+  if (!eglglessink->have_window)
+    gst_x_overlay_prepare_xwindow_id (GST_X_OVERLAY (eglglessink));
 
   if (!eglglessink->have_window && !eglglessink->can_create_window) {
     GST_ERROR_OBJECT (eglglessink, "Window handle unavailable and we "
@@ -1300,6 +1304,14 @@ gst_eglglessink_init_egl_surface (GstEglGlesSink * eglglessink)
     texlocation = glGetUniformLocation (prog, "tex");
     glUniform1i (texlocation, 0);
 
+    /* Set 2D resizing params */
+    glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    if (got_gl_error ("glTexParameteri"))
+      goto HANDLE_ERROR_LOCKED;
+
     eglglessink->have_texture = TRUE;
     g_mutex_unlock (eglglessink->flow_lock);
   }
@@ -1363,8 +1375,9 @@ gst_eglglessink_choose_config (GstEglGlesSink * eglglessink)
   EGLint con_attribs[] = { EGL_CONTEXT_CLIENT_VERSION, 2, EGL_NONE };
   GLint egl_configs;
 
-  if ((eglChooseConfig (eglglessink->display, eglglessink->selected_fmt->eglcfg,
-              &eglglessink->config, 1, &egl_configs)) == EGL_FALSE) {
+  if ((eglChooseConfig (eglglessink->display,
+              eglglessink->selected_fmt->attribs, &eglglessink->config, 1,
+              &egl_configs)) == EGL_FALSE) {
     show_egl_error ("eglChooseConfig");
     GST_ERROR_OBJECT (eglglessink, "eglChooseConfig failed");
     goto HANDLE_EGL_ERROR;
@@ -1396,7 +1409,6 @@ HANDLE_ERROR:
   return FALSE;
 }
 
-/* XXX: Never actually tested */
 static void
 gst_eglglessink_set_window_handle (GstXOverlay * overlay, guintptr id)
 {
@@ -1421,14 +1433,6 @@ gst_eglglessink_set_window_handle (GstXOverlay * overlay, guintptr id)
   eglglessink->window = (EGLNativeWindowType) id;
   eglglessink->have_window = TRUE;
   g_mutex_unlock (eglglessink->flow_lock);
-
-  if (!eglglessink->egl_started) {
-    GST_INFO_OBJECT (eglglessink, "Got a handle, doing EGL initialization");
-    if (!egl_init (eglglessink)) {
-      GST_ERROR_OBJECT (eglglessink, "EGL Initialization failed!");
-      goto HANDLE_ERROR;
-    }
-  }
 
   return;
 
@@ -1495,14 +1499,6 @@ gst_eglglessink_render_and_display (GstEglGlesSink * eglglessink,
        * and no npot extension available.
        */
 
-      /* resizing params */
-      glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-      glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-      glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-      glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-      if (got_gl_error ("glTexParameteri"))
-        goto HANDLE_ERROR;
-
       switch (eglglessink->selected_fmt->fmt) {
         case GST_EGLGLESSINK_IMAGE_RGB888:
           glTexImage2D (GL_TEXTURE_2D, 0, GL_RGB, w, h, 0, GL_RGB,
@@ -1524,14 +1520,19 @@ gst_eglglessink_render_and_display (GstEglGlesSink * eglglessink,
        * The way it is right now makes this happen only for the first buffer
        * though so I guess it should work */
       if (gst_eglglessink_setup_vbo (eglglessink, FALSE)) {
-        glViewport (0, 0, eglglessink->surface_width,
-            eglglessink->surface_height);
+        /* This makes the rendered fram to fill the whole
+         * surface area.
+
+         glViewport (0, 0, eglglessink->surface_width,
+         eglglessink->surface_height);
+         */
+        glViewport (0, 0, w, h);
       } else {
         GST_ERROR_OBJECT (eglglessink, "VBO setup failed");
         goto HANDLE_ERROR;
       }
 
-      glClearColor (1.0, 0.0, 0.0, 0.0);
+      glClearColor (0.0, 0.0, 0.0, 0.0);
       glClear (GL_COLOR_BUFFER_BIT);
       glDrawElements (GL_TRIANGLE_STRIP, 4, GL_UNSIGNED_SHORT, 0);
       if (got_gl_error ("glDrawElements"))
