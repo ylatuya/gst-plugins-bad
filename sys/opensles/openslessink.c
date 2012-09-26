@@ -53,7 +53,7 @@ static GstStaticPadTemplate sink_factory = GST_STATIC_PAD_TEMPLATE ("sink",
         "channels = (int) [1, 2];"
         "audio/x-raw-int, "
         "endianness = (int) {" G_STRINGIFY (G_BYTE_ORDER) " }, "
-        "signed = (boolean) { TRUE }, "
+        "signed = (boolean) { FALSE }, "
         "width = (int) 8, "
         "depth = (int) 8, "
         "rate = (int) { " RATES "}, " "channels = (int) [1, 2]")
@@ -267,4 +267,6 @@ gst_opensles_sink_init (GstOpenSLESSink * sink, GstOpenSLESSinkClass * gclass)
   sink->mute = DEFAULT_MUTE;
 
   _opensles_query_capabilities (sink);
+
+  gst_base_audio_sink_set_provide_clock (GST_BASE_AUDIO_SINK (sink), FALSE);
 }

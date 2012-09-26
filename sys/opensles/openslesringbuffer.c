@@ -38,6 +38,9 @@ _do_init (GType type)
 GST_BOILERPLATE_FULL (GstOpenSLESRingBuffer, gst_opensles_ringbuffer,
     GstRingBuffer, GST_TYPE_RING_BUFFER, _do_init);
 
+#define PLAYER_QUEUE_SIZE 2
+#define RECORDER_QUEUE_SIZE 2
+
 /* Some generic helper functions */
 
 static inline SLuint32
@@ -102,27 +105,24 @@ _opensles_format (GstRingBufferSpec * spec, SLDataFormat_PCM * format)
       (spec->bigend ? SL_BYTEORDER_BIGENDIAN : SL_BYTEORDER_LITTLEENDIAN);
 }
 
-/* Recorder related functions */
-
 static void
-_opensles_recorder_cb (SLAndroidSimpleBufferQueueItf bufferQueue, void *context)
+_opensles_enqueue_cb (SLAndroidSimpleBufferQueueItf bufferQueue, void *context)
 {
   GstRingBuffer *rb = GST_RING_BUFFER_CAST (context);
   GstOpenSLESRingBuffer *thiz = GST_OPENSLES_RING_BUFFER_CAST (rb);
   SLresult result;
-  guint8 *writeptr;
-  gint writeseg;
+  guint8 *ptr;
+  gint seg;
   gint len;
 
-  if (!gst_ring_buffer_prepare_read (rb, &writeseg, &writeptr, &len)) {
+  if (!gst_ring_buffer_prepare_read (rb, &seg, &ptr, &len)) {
     GST_WARNING_OBJECT (rb, "No segment available");
     return;
   }
 
   /* Enqueue a buffer */
-  GST_LOG_OBJECT (thiz, "enqueue: %p size %d segment: %d",
-      writeptr, len, writeseg);
-  result = (*thiz->bufferQueue)->Enqueue (thiz->bufferQueue, writeptr, len);
+  GST_LOG_OBJECT (thiz, "enqueue: %p size %d segment: %d", ptr, len, seg);
+  result = (*thiz->bufferQueue)->Enqueue (thiz->bufferQueue, ptr, len);
 
   if (result != SL_RESULT_SUCCESS) {
     GST_ERROR_OBJECT (thiz, "bufferQueue.Enqueue failed(0x%08x)",
@@ -132,6 +132,8 @@ _opensles_recorder_cb (SLAndroidSimpleBufferQueueItf bufferQueue, void *context)
 
   gst_ring_buffer_advance (rb, 1);
 }
+
+/* Recorder related functions */
 
 static gboolean
 _opensles_recorder_acquire (GstRingBuffer * rb, GstRingBufferSpec * spec)
@@ -149,7 +151,7 @@ _opensles_recorder_acquire (GstRingBuffer * rb, GstRingBufferSpec * spec)
 
   /* Configure audio sink */
   SLDataLocator_AndroidSimpleBufferQueue loc_bq = {
-    SL_DATALOCATOR_ANDROIDSIMPLEBUFFERQUEUE, 2
+    SL_DATALOCATOR_ANDROIDSIMPLEBUFFERQUEUE, RECORDER_QUEUE_SIZE
   };
   SLDataSink audioSink = { &loc_bq, &format };
 
@@ -196,15 +198,6 @@ _opensles_recorder_acquire (GstRingBuffer * rb, GstRingBufferSpec * spec)
     goto failed;
   }
 
-  /* Register callback on the buffer queue */
-  result = (*thiz->bufferQueue)->RegisterCallback (thiz->bufferQueue,
-      _opensles_recorder_cb, rb);
-  if (result != SL_RESULT_SUCCESS) {
-    GST_ERROR_OBJECT (thiz, "bufferQueue.RegisterCallback failed(0x%08x)",
-        (guint32) result);
-    goto failed;
-  }
-
   /* Define our ringbuffer in terms of number of buffers and buffer size. */
   spec->segsize = (spec->rate * spec->bytes_per_sample) >> 2;
   spec->segtotal = 16;
@@ -220,26 +213,23 @@ _opensles_recorder_start (GstRingBuffer * rb)
 {
   GstOpenSLESRingBuffer *thiz = GST_OPENSLES_RING_BUFFER_CAST (rb);
   SLresult result;
+  gint i;
 
-  /* in case already recording, stop recording and clear buffer queue */
-  result =
-      (*thiz->recorderRecord)->SetRecordState (thiz->recorderRecord,
-      SL_RECORDSTATE_STOPPED);
+  /* Register callback on the buffer queue */
+  result = (*thiz->bufferQueue)->RegisterCallback (thiz->bufferQueue,
+      _opensles_enqueue_cb, rb);
   if (result != SL_RESULT_SUCCESS) {
-    GST_ERROR_OBJECT (thiz, "recorder.SetRecordState failed(0x%08x)",
+    GST_ERROR_OBJECT (thiz, "bufferQueue.RegisterCallback failed(0x%08x)",
         (guint32) result);
     return FALSE;
   }
-  result = (*thiz->bufferQueue)->Clear (thiz->bufferQueue);
-  if (result != SL_RESULT_SUCCESS) {
-    GST_ERROR_OBJECT (thiz, "bq.Clear failed(0x%08x)", (guint32) result);
-    return FALSE;
+
+  /* Fill the queue by enqueing buffers */
+  for (i = 0; i < RECORDER_QUEUE_SIZE; i++) {
+    _opensles_enqueue_cb (NULL, rb);
   }
 
-  _opensles_recorder_cb (NULL, rb);
-  _opensles_recorder_cb (NULL, rb);
-
-  /* start recording */
+  /* Start recording */
   result =
       (*thiz->recorderRecord)->SetRecordState (thiz->recorderRecord,
       SL_RECORDSTATE_RECORDING);
@@ -257,6 +247,7 @@ _opensles_recorder_stop (GstRingBuffer * rb)
   GstOpenSLESRingBuffer *thiz = GST_OPENSLES_RING_BUFFER_CAST (rb);
   SLresult result;
 
+  /* Stop recording */
   result =
       (*thiz->recorderRecord)->SetRecordState (thiz->recorderRecord,
       SL_RECORDSTATE_STOPPED);
@@ -265,48 +256,28 @@ _opensles_recorder_stop (GstRingBuffer * rb)
         (guint32) result);
     return FALSE;
   }
+
+  /* Unregister callback on the buffer queue */
+  result = (*thiz->bufferQueue)->RegisterCallback (thiz->bufferQueue,
+      NULL, NULL);
+  if (result != SL_RESULT_SUCCESS) {
+    GST_ERROR_OBJECT (thiz, "bufferQueue.RegisterCallback failed(0x%08x)",
+        (guint32) result);
+    return FALSE;
+  }
+
+  /* Reset the queue */
+  result = (*thiz->bufferQueue)->Clear (thiz->bufferQueue);
+  if (result != SL_RESULT_SUCCESS) {
+    GST_ERROR_OBJECT (thiz, "bufferQueue.Clear failed(0x%08x)",
+        (guint32) result);
+    return FALSE;
+  }
+
   return TRUE;
 }
 
 /* Player related functions */
-
-static void
-_opensles_player_cb (SLAndroidSimpleBufferQueueItf bufferQueue, void *context)
-{
-  GstRingBuffer *rb = GST_RING_BUFFER_CAST (context);
-  GstOpenSLESRingBuffer *thiz = GST_OPENSLES_RING_BUFFER_CAST (rb);
-  SLresult result;
-  guint8 *readptr;
-  gint readseg;
-  gint len;
-
-  if (!gst_ring_buffer_prepare_read (rb, &readseg, &readptr, &len)) {
-    GST_WARNING_OBJECT (rb, "The sink is starving");
-    return;
-  }
-
-  /* Enqueue a buffer */
-  GST_LOG_OBJECT (thiz, "enqueue: %p size %d segment: %d",
-      readptr, len, readseg);
-  result = (*thiz->bufferQueue)->Enqueue (thiz->bufferQueue, readptr, len);
-
-  if (result != SL_RESULT_SUCCESS) {
-    GST_ERROR_OBJECT (thiz, "bufferQueue.Enqueue failed(0x%08x)",
-        (guint32) result);
-    return;
-  }
-
-  if (G_UNLIKELY (thiz->last_clearseg < 0)) {
-    thiz->last_clearseg++;
-  } else {
-    GST_LOG_OBJECT (thiz, "clear segment %d", thiz->last_clearseg);
-    /* Clear written samples */
-    gst_ring_buffer_clear (rb, thiz->last_clearseg);
-    thiz->last_clearseg = (thiz->last_clearseg + 1) % rb->spec.segtotal;
-    /* We wrote one segment */
-  }
-  gst_ring_buffer_advance (rb, 1);
-}
 
 static gboolean
 _opensles_player_change_volume (GstRingBuffer * rb)
@@ -361,7 +332,7 @@ _opensles_player_acquire (GstRingBuffer * rb, GstRingBufferSpec * spec)
 
   /* Configure audio source */
   SLDataLocator_AndroidSimpleBufferQueue loc_bufq = {
-    SL_DATALOCATOR_ANDROIDSIMPLEBUFFERQUEUE, 2
+    SL_DATALOCATOR_ANDROIDSIMPLEBUFFERQUEUE, PLAYER_QUEUE_SIZE
   };
   SLDataSource audioSrc = { &loc_bufq, &format };
 
@@ -412,15 +383,6 @@ _opensles_player_acquire (GstRingBuffer * rb, GstRingBufferSpec * spec)
     goto failed;
   }
 
-  /* Register callback on the buffer queue */
-  result = (*thiz->bufferQueue)->RegisterCallback (thiz->bufferQueue,
-      _opensles_player_cb, rb);
-  if (result != SL_RESULT_SUCCESS) {
-    GST_ERROR_OBJECT (thiz, "bufferQueue.RegisterCallback failed(0x%08x)",
-        (guint32) result);
-    goto failed;
-  }
-
   /* Get the volume interface */
   result = (*thiz->playerObject)->GetInterface (thiz->playerObject,
       SL_IID_VOLUME, &thiz->playerVolume);
@@ -435,9 +397,8 @@ _opensles_player_acquire (GstRingBuffer * rb, GstRingBufferSpec * spec)
   _opensles_player_change_mute (rb);
 
   /* Define our ringbuffer in terms of number of buffers and buffer size. */
-  spec->segsize = (spec->rate * spec->bytes_per_sample) >> 2;
-  spec->segtotal = 16;
-  thiz->last_clearseg = 1 - spec->segtotal;
+  spec->segsize = (spec->rate >> 4) * spec->bytes_per_sample;
+  spec->segtotal = 2 << 4;
 
   return TRUE;
 
@@ -450,7 +411,23 @@ _opensles_player_start (GstRingBuffer * rb)
 {
   GstOpenSLESRingBuffer *thiz = GST_OPENSLES_RING_BUFFER_CAST (rb);
   SLresult result;
+  gint i;
 
+  /* Register callback on the buffer queue */
+  result = (*thiz->bufferQueue)->RegisterCallback (thiz->bufferQueue,
+      _opensles_enqueue_cb, rb);
+  if (result != SL_RESULT_SUCCESS) {
+    GST_ERROR_OBJECT (thiz, "bufferQueue.RegisterCallback failed(0x%08x)",
+        (guint32) result);
+    return FALSE;
+  }
+
+  /* Fill the queue by enqueing buffers */
+  for (i = 0; i < PLAYER_QUEUE_SIZE; i++) {
+    _opensles_enqueue_cb (NULL, rb);
+  }
+
+  /* Change player state into PLAYING */
   result =
       (*thiz->playerPlay)->SetPlayState (thiz->playerPlay,
       SL_PLAYSTATE_PLAYING);
@@ -460,9 +437,6 @@ _opensles_player_start (GstRingBuffer * rb)
     return FALSE;
   }
 
-  /* Fill the queue by enqueing two buffers */
-  _opensles_player_cb (NULL, rb);
-  _opensles_player_cb (NULL, rb);
   return TRUE;
 }
 
@@ -488,14 +462,34 @@ _opensles_player_stop (GstRingBuffer * rb)
   GstOpenSLESRingBuffer *thiz = GST_OPENSLES_RING_BUFFER_CAST (rb);
   SLresult result;
 
+  /* Change player state into STOPPED */
   result =
       (*thiz->playerPlay)->SetPlayState (thiz->playerPlay,
       SL_PLAYSTATE_STOPPED);
+
   if (result != SL_RESULT_SUCCESS) {
     GST_ERROR_OBJECT (thiz, "player.SetPlayState failed(0x%08x)",
         (guint32) result);
     return FALSE;
   }
+
+  /* Unregister callback on the buffer queue */
+  result = (*thiz->bufferQueue)->RegisterCallback (thiz->bufferQueue,
+      NULL, NULL);
+  if (result != SL_RESULT_SUCCESS) {
+    GST_ERROR_OBJECT (thiz, "bufferQueue.RegisterCallback failed(0x%08x)",
+        (guint32) result);
+    return FALSE;
+  }
+
+  /* Reset the queue */
+  result = (*thiz->bufferQueue)->Clear (thiz->bufferQueue);
+  if (result != SL_RESULT_SUCCESS) {
+    GST_ERROR_OBJECT (thiz, "bufferQueue.Clear failed(0x%08x)",
+        (guint32) result);
+    return FALSE;
+  }
+
   return TRUE;
 }
 
