@@ -38,7 +38,6 @@ _do_init (GType type)
 GST_BOILERPLATE_FULL (GstOpenSLESRingBuffer, gst_opensles_ringbuffer,
     GstRingBuffer, GST_TYPE_RING_BUFFER, _do_init);
 
-#define PLAYER_QUEUE_SIZE 2
 #define RECORDER_QUEUE_SIZE 2
 
 /* Some generic helper functions */
@@ -103,34 +102,6 @@ _opensles_format (GstRingBufferSpec * spec, SLDataFormat_PCM * format)
   format->channelMask = _opensles_channel_mask (spec);
   format->endianness =
       (spec->bigend ? SL_BYTEORDER_BIGENDIAN : SL_BYTEORDER_LITTLEENDIAN);
-}
-
-static void
-_opensles_enqueue_cb (SLAndroidSimpleBufferQueueItf bufferQueue, void *context)
-{
-  GstRingBuffer *rb = GST_RING_BUFFER_CAST (context);
-  GstOpenSLESRingBuffer *thiz = GST_OPENSLES_RING_BUFFER_CAST (rb);
-  SLresult result;
-  guint8 *ptr;
-  gint seg;
-  gint len;
-
-  if (!gst_ring_buffer_prepare_read (rb, &seg, &ptr, &len)) {
-    GST_WARNING_OBJECT (rb, "No segment available");
-    return;
-  }
-
-  /* Enqueue a buffer */
-  GST_LOG_OBJECT (thiz, "enqueue: %p size %d segment: %d", ptr, len, seg);
-  result = (*thiz->bufferQueue)->Enqueue (thiz->bufferQueue, ptr, len);
-
-  if (result != SL_RESULT_SUCCESS) {
-    GST_ERROR_OBJECT (thiz, "bufferQueue.Enqueue failed(0x%08x)",
-        (guint32) result);
-    return;
-  }
-
-  gst_ring_buffer_advance (rb, 1);
 }
 
 /* Recorder related functions */
@@ -208,6 +179,34 @@ failed:
   return FALSE;
 }
 
+static void
+_opensles_recorder_cb (SLAndroidSimpleBufferQueueItf bufferQueue, void *context)
+{
+  GstRingBuffer *rb = GST_RING_BUFFER_CAST (context);
+  GstOpenSLESRingBuffer *thiz = GST_OPENSLES_RING_BUFFER_CAST (rb);
+  SLresult result;
+  guint8 *ptr;
+  gint seg;
+  gint len;
+
+  if (!gst_ring_buffer_prepare_read (rb, &seg, &ptr, &len)) {
+    GST_WARNING_OBJECT (rb, "No segment available");
+    return;
+  }
+
+  /* Enqueue a buffer */
+  GST_LOG_OBJECT (thiz, "enqueue: %p size %d segment: %d", ptr, len, seg);
+  result = (*thiz->bufferQueue)->Enqueue (thiz->bufferQueue, ptr, len);
+
+  if (result != SL_RESULT_SUCCESS) {
+    GST_ERROR_OBJECT (thiz, "bufferQueue.Enqueue failed(0x%08x)",
+        (guint32) result);
+    return;
+  }
+
+  gst_ring_buffer_advance (rb, 1);
+}
+
 static gboolean
 _opensles_recorder_start (GstRingBuffer * rb)
 {
@@ -216,17 +215,20 @@ _opensles_recorder_start (GstRingBuffer * rb)
   gint i;
 
   /* Register callback on the buffer queue */
-  result = (*thiz->bufferQueue)->RegisterCallback (thiz->bufferQueue,
-      _opensles_enqueue_cb, rb);
-  if (result != SL_RESULT_SUCCESS) {
-    GST_ERROR_OBJECT (thiz, "bufferQueue.RegisterCallback failed(0x%08x)",
-        (guint32) result);
-    return FALSE;
+  if (!thiz->is_queue_callback_registered) {
+    result = (*thiz->bufferQueue)->RegisterCallback (thiz->bufferQueue,
+        _opensles_recorder_cb, rb);
+    if (result != SL_RESULT_SUCCESS) {
+      GST_ERROR_OBJECT (thiz, "bufferQueue.RegisterCallback failed(0x%08x)",
+          (guint32) result);
+      return FALSE;
+    }
+    thiz->is_queue_callback_registered = TRUE;
   }
 
   /* Fill the queue by enqueing buffers */
   for (i = 0; i < RECORDER_QUEUE_SIZE; i++) {
-    _opensles_enqueue_cb (NULL, rb);
+    _opensles_recorder_cb (NULL, rb);
   }
 
   /* Start recording */
@@ -265,6 +267,7 @@ _opensles_recorder_stop (GstRingBuffer * rb)
         (guint32) result);
     return FALSE;
   }
+  thiz->is_queue_callback_registered = FALSE;
 
   /* Reset the queue */
   result = (*thiz->bufferQueue)->Clear (thiz->bufferQueue);
@@ -323,6 +326,23 @@ _opensles_player_change_mute (GstRingBuffer * rb)
   return TRUE;
 }
 
+static void
+_opensles_player_event_cb (SLPlayItf caller, void *context, SLuint32 event)
+{
+  GstOpenSLESRingBuffer *thiz;
+
+  thiz = GST_OPENSLES_RING_BUFFER_CAST (context);
+
+  if (event & SL_PLAYEVENT_HEADATNEWPOS) {
+    SLmillisecond position;
+
+    (*caller)->GetPosition (caller, &position);
+    GST_LOG_OBJECT (thiz, "at position=%u ms", (guint) position);
+  } else if (event & SL_PLAYEVENT_HEADSTALLED) {
+    GST_WARNING_OBJECT (thiz, "head stalled");
+  }
+}
+
 static gboolean
 _opensles_player_acquire (GstRingBuffer * rb, GstRingBufferSpec * spec)
 {
@@ -332,7 +352,8 @@ _opensles_player_acquire (GstRingBuffer * rb, GstRingBufferSpec * spec)
 
   /* Configure audio source */
   SLDataLocator_AndroidSimpleBufferQueue loc_bufq = {
-    SL_DATALOCATOR_ANDROIDSIMPLEBUFFERQUEUE, PLAYER_QUEUE_SIZE
+    SL_DATALOCATOR_ANDROIDSIMPLEBUFFERQUEUE,
+    MIN (32, (spec->segtotal >> 1))
   };
   SLDataSource audioSrc = { &loc_bufq, &format };
 
@@ -392,18 +413,81 @@ _opensles_player_acquire (GstRingBuffer * rb, GstRingBufferSpec * spec)
     goto failed;
   }
 
+  /* Request position update events at each 10 ms */
+  result = (*thiz->playerPlay)->SetPositionUpdatePeriod (thiz->playerPlay, 10);
+  if (result != SL_RESULT_SUCCESS) {
+    GST_ERROR_OBJECT (thiz, "player.SetPositionUpdatePeriod failed(0x%08x)",
+        (guint32) result);
+    goto failed;
+  }
+
+  /* Define the event mask to be monitorized */
+  result = (*thiz->playerPlay)->SetCallbackEventsMask (thiz->playerPlay,
+      SL_PLAYEVENT_HEADATNEWPOS | SL_PLAYEVENT_HEADSTALLED);
+  if (result != SL_RESULT_SUCCESS) {
+    GST_ERROR_OBJECT (thiz, "player.SetCallbackEventsMask failed(0x%08x)",
+        (guint32) result);
+    goto failed;
+  }
+
+  /* Register a callback to process the events */
+  result = (*thiz->playerPlay)->RegisterCallback (thiz->playerPlay,
+      _opensles_player_event_cb, thiz);
+  if (result != SL_RESULT_SUCCESS) {
+    GST_ERROR_OBJECT (thiz, "player.RegisterCallback(event_cb) failed(0x%08x)",
+        (guint32) result);
+    goto failed;
+  }
+
   /* Configure the volume and mute state */
   _opensles_player_change_volume (rb);
   _opensles_player_change_mute (rb);
 
-  /* Define our ringbuffer in terms of number of buffers and buffer size. */
-  spec->segsize = (spec->rate >> 4) * spec->bytes_per_sample;
-  spec->segtotal = 2 << 4;
+  /* Define our queue data buffer */
+  thiz->data_segtotal = loc_bufq.numBuffers;
+  thiz->data = g_malloc (spec->segsize * thiz->data_segtotal);
+  thiz->cursor = 0;
 
   return TRUE;
 
 failed:
   return FALSE;
+}
+
+static void
+_opensles_player_cb (SLAndroidSimpleBufferQueueItf bufferQueue, void *context)
+{
+  GstRingBuffer *rb = GST_RING_BUFFER_CAST (context);
+  GstOpenSLESRingBuffer *thiz = GST_OPENSLES_RING_BUFFER_CAST (rb);
+  SLresult result;
+  guint8 *ptr, *cur;
+  gint seg;
+  gint len;
+
+  if (!gst_ring_buffer_prepare_read (rb, &seg, &ptr, &len)) {
+    GST_WARNING_OBJECT (rb, "No segment available");
+    return;
+  }
+
+  /* copy data to our queue ringbuffer */
+  cur = thiz->data + (thiz->cursor * rb->spec.segsize);
+  memcpy (cur, ptr, len);
+  g_atomic_int_inc (&thiz->segqueued);
+
+  /* Enqueue a buffer */
+  GST_LOG_OBJECT (thiz, "enqueue: %p size %d segment: %d in queue[%d]",
+      cur, len, seg, thiz->cursor);
+  result = (*thiz->bufferQueue)->Enqueue (thiz->bufferQueue, cur, len);
+  thiz->cursor = (thiz->cursor + 1) % thiz->data_segtotal;
+
+  if (result != SL_RESULT_SUCCESS) {
+    GST_ERROR_OBJECT (thiz, "bufferQueue.Enqueue failed(0x%08x)",
+        (guint32) result);
+    return;
+  }
+
+  gst_ring_buffer_clear (rb, seg);
+  gst_ring_buffer_advance (rb, 1);
 }
 
 static gboolean
@@ -414,17 +498,20 @@ _opensles_player_start (GstRingBuffer * rb)
   gint i;
 
   /* Register callback on the buffer queue */
-  result = (*thiz->bufferQueue)->RegisterCallback (thiz->bufferQueue,
-      _opensles_enqueue_cb, rb);
-  if (result != SL_RESULT_SUCCESS) {
-    GST_ERROR_OBJECT (thiz, "bufferQueue.RegisterCallback failed(0x%08x)",
-        (guint32) result);
-    return FALSE;
+  if (!thiz->is_queue_callback_registered) {
+    result = (*thiz->bufferQueue)->RegisterCallback (thiz->bufferQueue,
+        _opensles_player_cb, rb);
+    if (result != SL_RESULT_SUCCESS) {
+      GST_ERROR_OBJECT (thiz, "bufferQueue.RegisterCallback failed(0x%08x)",
+          (guint32) result);
+      return FALSE;
+    }
+    thiz->is_queue_callback_registered = TRUE;
   }
 
   /* Fill the queue by enqueing buffers */
-  for (i = 0; i < PLAYER_QUEUE_SIZE; i++) {
-    _opensles_enqueue_cb (NULL, rb);
+  for (i = 0; i < thiz->data_segtotal; i++) {
+    _opensles_player_cb (NULL, rb);
   }
 
   /* Change player state into PLAYING */
@@ -481,6 +568,7 @@ _opensles_player_stop (GstRingBuffer * rb)
         (guint32) result);
     return FALSE;
   }
+  thiz->is_queue_callback_registered = FALSE;
 
   /* Reset the queue */
   result = (*thiz->bufferQueue)->Clear (thiz->bufferQueue);
@@ -489,6 +577,9 @@ _opensles_player_stop (GstRingBuffer * rb)
         (guint32) result);
     return FALSE;
   }
+
+  g_atomic_int_set (&thiz->segqueued, 0);
+  thiz->cursor = 0;
 
   return TRUE;
 }
@@ -681,6 +772,11 @@ gst_opensles_ringbuffer_release (GstRingBuffer * rb)
     thiz->recorderRecord = NULL;
   }
 
+  if (thiz->data) {
+    g_free (thiz->data);
+    thiz->data = NULL;
+  }
+
   if (rb->data) {
     gst_buffer_unref (rb->data);
     rb->data = NULL;
@@ -728,11 +824,29 @@ gst_opensles_ringbuffer_stop (GstRingBuffer * rb)
   return res;
 }
 
-
 static guint
 gst_opensles_ringbuffer_delay (GstRingBuffer * rb)
 {
-  return 0;
+  GstOpenSLESRingBuffer *thiz;
+  guint res = 0;
+
+  thiz = GST_OPENSLES_RING_BUFFER_CAST (rb);
+
+  if (thiz->playerPlay) {
+    SLmillisecond position;
+    guint64 playedpos, queuedpos;
+
+    (*thiz->playerPlay)->GetPosition (thiz->playerPlay, &position);
+    playedpos = gst_util_uint64_scale_round (position, rb->spec.rate, 1000);
+    queuedpos = g_atomic_int_get (&thiz->segqueued) * rb->samples_per_seg;
+    res = queuedpos - playedpos;
+
+    GST_LOG_OBJECT (thiz, "queued samples %" G_GUINT64_FORMAT " position %u ms "
+        "(%" G_GUINT64_FORMAT " samples) delay %u samples",
+        queuedpos, (guint) position, playedpos, res);
+  }
+
+  return res;
 }
 
 static void
@@ -795,4 +909,5 @@ gst_opensles_ringbuffer_init (GstOpenSLESRingBuffer * thiz,
   thiz->outputMixObject = NULL;
   thiz->playerObject = NULL;
   thiz->recorderObject = NULL;
+  thiz->is_queue_callback_registered = FALSE;
 }
