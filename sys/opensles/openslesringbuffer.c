@@ -38,8 +38,6 @@ _do_init (GType type)
 GST_BOILERPLATE_FULL (GstOpenSLESRingBuffer, gst_opensles_ringbuffer,
     GstRingBuffer, GST_TYPE_RING_BUFFER, _do_init);
 
-#define RECORDER_QUEUE_SIZE 2
-
 /*
  * Some generic helper functions
  */
@@ -125,7 +123,7 @@ _opensles_recorder_acquire (GstRingBuffer * rb, GstRingBufferSpec * spec)
 
   /* Configure audio sink */
   SLDataLocator_AndroidSimpleBufferQueue loc_bq = {
-    SL_DATALOCATOR_ANDROIDSIMPLEBUFFERQUEUE, RECORDER_QUEUE_SIZE
+    SL_DATALOCATOR_ANDROIDSIMPLEBUFFERQUEUE, 2
   };
   SLDataSink audioSink = { &loc_bq, &format };
 
@@ -173,10 +171,6 @@ _opensles_recorder_acquire (GstRingBuffer * rb, GstRingBufferSpec * spec)
     goto failed;
   }
 
-  /* Define our ringbuffer in terms of number of buffers and buffer size. */
-  spec->segsize = (spec->rate * spec->bytes_per_sample) >> 2;
-  spec->segtotal = 16;
-
   return TRUE;
 
 failed:
@@ -198,6 +192,11 @@ _opensles_recorder_cb (SLAndroidSimpleBufferQueueItf bufferQueue, void *context)
   gint seg;
   gint len;
 
+  /* Advance only when we are called by the callback function */
+  if (bufferQueue) {
+    gst_ring_buffer_advance (rb, 1);
+  }
+
   /* Get a segment form the GStreamer ringbuffer to write in */
   if (!gst_ring_buffer_prepare_read (rb, &seg, &ptr, &len)) {
     GST_WARNING_OBJECT (rb, "No segment available");
@@ -213,10 +212,6 @@ _opensles_recorder_cb (SLAndroidSimpleBufferQueueItf bufferQueue, void *context)
         (guint32) result);
     return;
   }
-
-  /* FIXME: we advance here and behaviour might be racy with the reading
-   * thread */
-  gst_ring_buffer_advance (rb, 1);
 }
 
 static gboolean
@@ -224,7 +219,6 @@ _opensles_recorder_start (GstRingBuffer * rb)
 {
   GstOpenSLESRingBuffer *thiz = GST_OPENSLES_RING_BUFFER_CAST (rb);
   SLresult result;
-  gint i;
 
   /* Register callback on the buffer queue */
   if (!thiz->is_queue_callback_registered) {
@@ -238,10 +232,8 @@ _opensles_recorder_start (GstRingBuffer * rb)
     thiz->is_queue_callback_registered = TRUE;
   }
 
-  /* Preroll the buffer queue by enqueing segments */
-  for (i = 0; i < RECORDER_QUEUE_SIZE; i++) {
-    _opensles_recorder_cb (NULL, rb);
-  }
+  /* Preroll one buffer */
+  _opensles_recorder_cb (NULL, rb);
 
   /* Start recording */
   result =
@@ -461,7 +453,9 @@ _opensles_player_acquire (GstRingBuffer * rb, GstRingBufferSpec * spec)
 
   /* Allocate the queue associated ringbuffer memory */
   thiz->data_segtotal = loc_bufq.numBuffers;
-  thiz->data = g_malloc (spec->segsize * thiz->data_segtotal);
+  thiz->data_size = spec->segsize * thiz->data_segtotal;
+  thiz->data = g_malloc0 (thiz->data_size);
+  g_atomic_int_set (&thiz->segqueued, 0);
   thiz->cursor = 0;
 
   return TRUE;
@@ -618,7 +612,6 @@ _opensles_player_stop (GstRingBuffer * rb)
 /*
  * OpenSL ES ringbuffer wrapper
  */
-
 
 GstRingBuffer *
 gst_opensles_ringbuffer_new (RingBufferMode mode)
@@ -907,6 +900,22 @@ gst_opensles_ringbuffer_delay (GstRingBuffer * rb)
 }
 
 static void
+gst_opensles_ringbuffer_clear_all (GstRingBuffer * rb)
+{
+  GstOpenSLESRingBuffer *thiz;
+
+  thiz = GST_OPENSLES_RING_BUFFER_CAST (rb);
+
+  if (thiz->data) {
+    memset (thiz->data, 0, thiz->data_size);
+    g_atomic_int_set (&thiz->segqueued, 0);
+    thiz->cursor = 0;
+  }
+
+  GST_CALL_PARENT (GST_RING_BUFFER_CLASS, clear_all, (rb));
+}
+
+static void
 gst_opensles_ringbuffer_dispose (GObject * object)
 {
   G_OBJECT_CLASS (ring_parent_class)->dispose (object);
@@ -955,6 +964,8 @@ gst_opensles_ringbuffer_class_init (GstOpenSLESRingBufferClass * klass)
   gstringbuffer_class->stop = GST_DEBUG_FUNCPTR (gst_opensles_ringbuffer_stop);
   gstringbuffer_class->delay =
       GST_DEBUG_FUNCPTR (gst_opensles_ringbuffer_delay);
+  gstringbuffer_class->clear_all =
+      GST_DEBUG_FUNCPTR (gst_opensles_ringbuffer_clear_all);
 }
 
 static void
