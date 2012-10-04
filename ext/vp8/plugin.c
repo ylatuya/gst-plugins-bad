@@ -32,8 +32,14 @@ static gboolean
 plugin_init (GstPlugin * plugin)
 {
 #ifdef HAVE_VP8_DECODER
+#ifdef __BIONIC__
+  /* On Android prefer the android.media.MediaCodec decoder */
+  gst_element_register (plugin, "vp8dec", GST_RANK_MARGINAL,
+      gst_vp8_dec_get_type ());
+#else
   gst_element_register (plugin, "vp8dec", GST_RANK_PRIMARY,
       gst_vp8_dec_get_type ());
+#endif
 #endif
 
 #ifdef HAVE_VP8_ENCODER
