@@ -1830,8 +1830,11 @@ AG_GST_CHECK_FEATURE(VP8, [VP8 decoder], vp8, [
   if test $HAVE_VPX = "yes"; then
     dnl on windows platforms libvpx can only be compiled statically
     case "$host" in
-      *ming*|*cygwin*|*android*)
+      *ming*|*cygwin*)
         VPX_LIBS=`$PKG_CONFIG --static --libs vpx`
+        ;;
+      *android*)
+        VPX_LIBS=`$PKG_CONFIG --static --libs vpx | sed 's;-lpthread;;g'`
         ;;
     esac
     HAVE_VP8_ENCODER=no
