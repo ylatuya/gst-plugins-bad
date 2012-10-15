@@ -23,7 +23,7 @@
 
 #include <gst/gst.h>
 
-#include <gst/video/gstvideodecoder.h>
+#include "video/gstvideodecoder.h"
 
 #include "gstamc.h"
 
