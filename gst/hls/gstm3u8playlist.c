@@ -34,6 +34,7 @@
 #define M3U8_INT_INF_TAG "#EXTINF:%d,%s\n%s\n"
 #define M3U8_FLOAT_INF_TAG "#EXTINF:%.2f,%s\n%s\n"
 #define M3U8_ENDLIST_TAG "#EXT-X-ENDLIST"
+#define M3U8_VARIANT_TAG "#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=%d\n"
 
 enum
 {
@@ -42,7 +43,7 @@ enum
 };
 
 static GstM3U8Entry *
-gst_m3u8_entry_new (const gchar * url, GFile * file, const gchar * title,
+gst_m3u8_entry_new (gchar * url, GFile * file, gchar * title,
     gfloat duration, gboolean discontinuous)
 {
   GstM3U8Entry *entry;
@@ -52,10 +53,11 @@ gst_m3u8_entry_new (const gchar * url, GFile * file, const gchar * title,
 
   entry = g_new0 (GstM3U8Entry, 1);
   entry->url = g_strdup (url);
+  entry->file = file;
   entry->title = g_strdup (title);
   entry->duration = duration;
-  entry->file = file;
   entry->discontinuous = discontinuous;
+  g_object_ref (entry->file);
   return entry;
 }
 
@@ -64,11 +66,20 @@ gst_m3u8_entry_free (GstM3U8Entry * entry)
 {
   g_return_if_fail (entry != NULL);
 
-  g_free (entry->url);
-  g_free (entry->title);
-  if (entry->file != NULL)
+  if (entry->url != NULL) {
+    g_free (entry->url);
+    entry->url = NULL;
+  }
+
+  if (entry->title != NULL) {
+    g_free (entry->title);
+    entry->title = NULL;
+  }
+
+  if (entry->file != NULL) {
     g_object_unref (entry->file);
-  g_free (entry);
+    entry->file = NULL;
+  }
 }
 
 static gchar *
@@ -90,17 +101,23 @@ gst_m3u8_entry_render (GstM3U8Entry * entry, guint version)
 }
 
 GstM3U8Playlist *
-gst_m3u8_playlist_new (guint version, guint window_size, gboolean allow_cache)
+gst_m3u8_playlist_new (gchar * name, gchar * base_url, GFile * file,
+    gint bitrate, guint version, guint window_size, gboolean allow_cache)
 {
   GstM3U8Playlist *playlist;
 
   playlist = g_new0 (GstM3U8Playlist, 1);
+  playlist->name = g_strdup (name);
+  playlist->base_url = g_strdup (base_url);
+  playlist->bitrate = bitrate;
   playlist->version = version;
   playlist->window_size = window_size;
   playlist->allow_cache = allow_cache;
   playlist->type = GST_M3U8_PLAYLIST_TYPE_EVENT;
   playlist->end_list = FALSE;
   playlist->entries = g_queue_new ();
+  g_object_ref (file);
+  playlist->file = file;
 
   return playlist;
 }
@@ -112,43 +129,23 @@ gst_m3u8_playlist_free (GstM3U8Playlist * playlist)
 
   g_queue_foreach (playlist->entries, (GFunc) gst_m3u8_entry_free, NULL);
   g_queue_free (playlist->entries);
-  g_free (playlist);
-}
 
-
-GList *
-gst_m3u8_playlist_add_entry (GstM3U8Playlist * playlist,
-    const gchar * url, GFile * file, const gchar * title,
-    gfloat duration, guint index, gboolean discontinuous)
-{
-  GstM3U8Entry *entry;
-  GList *old_files = NULL;
-
-  g_return_val_if_fail (playlist != NULL, FALSE);
-  g_return_val_if_fail (url != NULL, FALSE);
-  g_return_val_if_fail (title != NULL, FALSE);
-
-  if (playlist->type == GST_M3U8_PLAYLIST_TYPE_VOD)
-    return FALSE;
-
-  entry = gst_m3u8_entry_new (url, file, title, duration, discontinuous);
-
-  if (playlist->window_size != -1) {
-    /* Delete old entries from the playlist */
-    while (playlist->entries->length >= playlist->window_size) {
-      GstM3U8Entry *old_entry;
-
-      old_entry = g_queue_pop_head (playlist->entries);
-      g_object_ref (old_entry->file);
-      old_files = g_list_prepend (old_files, old_entry->file);
-      gst_m3u8_entry_free (old_entry);
-    }
+  if (playlist->name != NULL) {
+    g_free (playlist->name);
+    playlist->name = NULL;
   }
 
-  playlist->sequence_number = index + 1;
-  g_queue_push_tail (playlist->entries, entry);
+  if (playlist->base_url != NULL) {
+    g_free (playlist->base_url);
+    playlist->base_url = NULL;
+  }
 
-  return old_files;
+  if (playlist->file != NULL) {
+    g_object_unref (playlist->file);
+    playlist->file = NULL;
+  }
+
+  g_free (playlist);
 }
 
 static guint
@@ -165,6 +162,44 @@ gst_m3u8_playlist_target_duration (GstM3U8Playlist * playlist)
   }
 
   return (guint) (target_duration / GST_SECOND);
+}
+
+GList *
+gst_m3u8_playlist_add_entry (GstM3U8Playlist * playlist,
+    gchar * url, GFile * file, gchar * title,
+    gfloat duration, guint index, gboolean discontinuous)
+{
+  GstM3U8Entry *entry;
+  GList *old_files = NULL;
+
+  g_return_val_if_fail (playlist != NULL, FALSE);
+  g_return_val_if_fail (url != NULL, FALSE);
+  g_return_val_if_fail (title != NULL, FALSE);
+
+  if (playlist->type == GST_M3U8_PLAYLIST_TYPE_VOD)
+    return FALSE;
+
+  entry = gst_m3u8_entry_new (url, file, title, duration, discontinuous);
+
+  if (playlist->window_size != 0) {
+    /* Delete old entries from the playlist */
+    while (gst_m3u8_playlist_target_duration (playlist) >=
+        playlist->window_size) {
+      GstM3U8Entry *old_entry;
+
+      old_entry = g_queue_pop_head (playlist->entries);
+      g_object_ref (old_entry->file);
+      old_files = g_list_prepend (old_files, old_entry->file);
+      gst_m3u8_entry_free (old_entry);
+    }
+  }
+
+  playlist->sequence_number = index + 1;
+  g_queue_push_tail (playlist->entries, entry);
+
+  if (old_files == NULL)
+    g_print ("RETURNING OLF FILES\n");
+  return old_files;
 }
 
 static void
@@ -225,4 +260,125 @@ gst_m3u8_playlist_n_entries (GstM3U8Playlist * playlist)
   g_return_val_if_fail (playlist != NULL, 0);
 
   return playlist->entries->length;
+}
+
+GstM3U8VariantPlaylist *
+gst_m3u8_variant_playlist_new (gchar * name, gchar * base_url, GFile * file)
+{
+  GstM3U8VariantPlaylist *playlist;
+
+  playlist = g_new0 (GstM3U8VariantPlaylist, 1);
+  playlist->variants = g_hash_table_new (g_str_hash, g_str_equal);
+  playlist->playlist_str = NULL;
+  playlist->name = g_strdup (name);
+  playlist->base_url = g_strdup (base_url);
+  playlist->file = file;
+  g_object_ref (playlist->file);;
+  return playlist;
+}
+
+void
+gst_m3u8_variant_playlist_free (GstM3U8VariantPlaylist * playlist)
+{
+  if (playlist->variants != NULL) {
+    g_hash_table_destroy (playlist->variants);
+    playlist->variants = NULL;
+  }
+
+  if (playlist->playlist_str != NULL) {
+    g_free (playlist->playlist_str);
+    playlist->playlist_str = NULL;
+  }
+
+  if (playlist->name != NULL) {
+    g_free (playlist->name);
+    playlist->name = NULL;
+  }
+
+  if (playlist->base_url != NULL) {
+    g_free (playlist->base_url);
+    playlist->base_url = NULL;
+  }
+
+  if (playlist->file != NULL) {
+    g_object_unref (playlist->file);;
+    playlist->file = NULL;
+  }
+
+  g_free (playlist);
+}
+
+static void
+render_variant (gchar * key, GstM3U8Playlist * playlist, GString * string)
+{
+  g_string_append_printf (string, M3U8_VARIANT_TAG, playlist->bitrate);
+  g_string_append_printf (string, "%s/%s.m3u8\n", playlist->base_url,
+      playlist->name);
+}
+
+static void
+gst_m3u8_variant_playlist_update (GstM3U8VariantPlaylist * playlist)
+{
+  if (playlist->playlist_str)
+    g_string_free (playlist->playlist_str, TRUE);
+
+  playlist->playlist_str = g_string_new ("");
+
+  /* #EXTM3U */
+  g_string_append_printf (playlist->playlist_str, M3U8_HEADER_TAG);
+  /* Variants */
+  g_hash_table_foreach (playlist->variants, (GHFunc) render_variant,
+      playlist->playlist_str);
+}
+
+gboolean
+gst_m3u8_variant_playlist_add_variant (GstM3U8VariantPlaylist * playlist,
+    GstM3U8Playlist * variant)
+{
+  g_return_val_if_fail (playlist != NULL, FALSE);
+  g_return_val_if_fail (variant != NULL, FALSE);
+
+  if (g_hash_table_lookup (playlist->variants, variant->name)) {
+    return FALSE;
+  }
+  g_hash_table_insert (playlist->variants, variant->name, variant);
+  gst_m3u8_variant_playlist_update (playlist);
+  return TRUE;
+}
+
+GstM3U8Playlist *
+gst_m3u8_variant_playlist_get_variant (GstM3U8VariantPlaylist * playlist,
+    gchar * name)
+{
+  g_return_val_if_fail (playlist != NULL, NULL);
+
+  return g_hash_table_lookup (playlist->variants, name);
+}
+
+gboolean
+gst_m3u8_variant_playlist_remove_variant (GstM3U8VariantPlaylist * playlist,
+    gchar * name, gboolean free)
+{
+  GstM3U8Playlist *variant;
+
+  g_return_val_if_fail (playlist != NULL, FALSE);
+
+  variant = gst_m3u8_variant_playlist_get_variant (playlist, name);
+  if (variant)
+    return FALSE;
+
+  g_hash_table_remove (playlist->variants, name);
+  if (free)
+    gst_m3u8_playlist_free (variant);
+  gst_m3u8_variant_playlist_update (playlist);
+
+  return TRUE;
+}
+
+gchar *
+gst_m3u8_variant_playlist_render (GstM3U8VariantPlaylist * playlist)
+{
+  g_return_val_if_fail (playlist != NULL, NULL);
+
+  return g_strdup (playlist->playlist_str->str);
 }
