@@ -70,6 +70,7 @@ gst_fragment_meta_init (GstFragmentMeta * meta, gpointer params,
   meta->completed = FALSE;
   meta->discontinuous = FALSE;
   meta->file = NULL;
+  meta->headers = NULL;
 
   return TRUE;
 }

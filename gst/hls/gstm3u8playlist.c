@@ -313,7 +313,7 @@ gst_m3u8_variant_playlist_free (GstM3U8VariantPlaylist * playlist)
   }
 
   if (playlist->playlist_str != NULL) {
-    g_free (playlist->playlist_str);
+    g_string_free (playlist->playlist_str, TRUE);
     playlist->playlist_str = NULL;
   }
 
@@ -328,7 +328,7 @@ gst_m3u8_variant_playlist_free (GstM3U8VariantPlaylist * playlist)
   }
 
   if (playlist->file != NULL) {
-    g_object_unref (playlist->file);;
+    g_object_unref (playlist->file);
     playlist->file = NULL;
   }
 
