@@ -53,17 +53,14 @@ GType gst_streams_manager_get_type (void);
 typedef struct _GstStreamsManager GstStreamsManager;
 typedef struct _GstStreamsManagerPrivate GstStreamsManagerPrivate;
 typedef struct _GstStreamsManagerClass GstStreamsManagerClass;
-typedef struct _GstMediaRepresentationFile GstMediaRepresentationFile;
-typedef struct _GstPeriod GstPeriod;
-typedef struct _GstRemanager GstRemanager;
-typedef struct _GstRemanagerSegment GstRemanagerSegment;
+typedef struct _GstMediaRepFile GstMediaRepFile;
 
 /**
- * GstMediaRepresentationFile:
+ * GstMediaRepFile:
  */
-struct _GstMediaRepresentationFile
+struct _GstMediaRepFile
 {
-  gchar * filename;
+  GFile * file;
   gchar * content;
 };
 
@@ -78,6 +75,7 @@ struct _GstStreamsManager
   gchar * base_url;
   gchar * title;
   gchar * fragment_prefix;
+  gchar * output_directory;
   gboolean is_live;
   gboolean chunked;
   gboolean finished;
@@ -94,28 +92,74 @@ struct _GstStreamsManagerClass
 {
   GObjectClass parent;
 
-  gboolean             (*add_stream)        (GstStreamsManager *self, GstPad *pad, GList *substreams_caps);
-  gboolean             (*remove_stream)     (GstStreamsManager *self, GstPad *pad);
-  gboolean             (*add_fragment)      (GstStreamsManager *self, GstPad *pad, GstBuffer *fragment, GList **removed_fragments);
-  gboolean             (*add_headers)       (GstStreamsManager *self, GstPad *pad, GstBuffer *fragment);
-  GstMediaRepresentationFile* (*render)            (GstStreamsManager *self, GstPad *pad);
-  void                 (*clear)             (GstStreamsManager *self);
+  gboolean    (*add_stream)      (GstStreamsManager *self,
+                                  GstPad *pad, guint avg_bitrate,
+                                  GList *substreams_caps,
+                                  GstMediaRepFile **rep_file);
+
+  gboolean    (*remove_stream)   (GstStreamsManager *self,
+                                  GstPad *pad,
+                                  GstMediaRepFile **rep_file);
+
+  gboolean    (*add_fragment)    (GstStreamsManager *self,
+                                  GstPad *pad, GstBuffer *fragment,
+                                  GstMediaRepFile **rep_file,
+                                  GList **removed_fragments);
+
+  gboolean    (*add_headers)     (GstStreamsManager *self, GstPad *pad,
+                                  GstBuffer *fragment);
+
+  gboolean    (*render)          (GstStreamsManager *self, GstPad *pad,
+                                  GstMediaRepFile **rep_file);
+
+  void        (*clear)           (GstStreamsManager *self);
 
   gpointer _gst_reserved[GST_PADDING_LARGE];
 };
 
-GstStreamsManager * gst_streams_manager_new (void);
-gboolean gst_streams_manager_add_stream (GstStreamsManager * streams_manager, GstPad * pad, GList *substreams_caps);
-gboolean gst_streams_manager_remove_stream (GstStreamsManager * streams_manager, GstPad * pad);
-gboolean gst_streams_manager_add_headers (GstStreamsManager * streams_manager, GstPad * pad, GstBuffer *fragment);
-gboolean gst_streams_manager_add_fragment (GstStreamsManager * streams_manager,
-                                              GstPad * pad, GstBuffer *fragment,
-                                              GList **removed_fragments);
-GstMediaRepresentationFile * gst_streams_manager_render (GstStreamsManager * streams_manager, GstPad *pad);
-void gst_streams_manager_set_base_url (GstStreamsManager * streams_manager, gchar * base_url);
-void gst_streams_manager_set_title (GstStreamsManager * streams_manager, gchar * title);
-void gst_streams_manager_set_fragment_prefix (GstStreamsManager * streams_manager, gchar * fragment_prefix);
-void gst_streams_manager_clear (GstStreamsManager * streams_manager);
-void gst_media_representation_file_free (GstMediaRepresentationFile * file);
+
+GstStreamsManager * gst_streams_manager_new               (void);
+
+gboolean          gst_streams_manager_add_stream          (GstStreamsManager * man,
+                                                           GstPad * pad, guint avg_bitrate,
+                                                           GList *streams_caps,
+                                                           GstMediaRepFile **rep_file);
+
+gboolean          gst_streams_manager_remove_stream       (GstStreamsManager * man,
+                                                           GstPad * pad,
+                                                           GstMediaRepFile **rep_file);
+
+gboolean          gst_streams_manager_add_headers         (GstStreamsManager * man,
+                                                           GstPad * pad, GstBuffer *frag);
+
+gboolean          gst_streams_manager_add_fragment        (GstStreamsManager * man,
+                                                           GstPad * pad, GstBuffer *frag,
+                                                           GstMediaRepFile **rep_file,
+                                                           GList **removed_fragments);
+
+gboolean          gst_streams_manager_render              (GstStreamsManager * man,
+                                                           GstPad *pad,
+                                                           GstMediaRepFile ** file);
+
+void              gst_streams_manager_set_base_url        (GstStreamsManager * man,
+                                                           gchar * base_url);
+
+void              gst_streams_manager_set_title           (GstStreamsManager * man,
+                                                           gchar * title);
+
+void              gst_streams_manager_clear               (GstStreamsManager * man);
+
+
+
+void              gst_streams_manager_set_output_directory (GstStreamsManager * man,
+                                                            gchar * output_directory);
+
+void              gst_streams_manager_set_fragment_prefix  (GstStreamsManager * man,
+                                                            gchar * prefix);
+
+GstMediaRepFile * gst_media_rep_file_new                   (gchar *content,
+                                                            GFile * file);
+
+void              gst_media_rep_file_free                  (GstMediaRepFile * file);
 
 #endif /* __GST_STREAMS_MANAGER_H__ */

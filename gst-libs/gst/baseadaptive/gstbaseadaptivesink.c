@@ -70,6 +70,8 @@ enum
   PROP_BASE_URL,
   PROP_CHUNKED,
   PROP_IS_LIVE,
+  PROP_MAX_WINDOW,
+  PROP_FRAGMENT_DURATION,
   PROP_LAST
 };
 
@@ -84,6 +86,7 @@ typedef struct
   GstBuffer *fragment;
   GstBuffer *last_fragment;
   GCancellable *cancellable;
+  guint count;
 
   GMutex *lock;
   GMutex *discover_lock;
@@ -207,7 +210,7 @@ gst_base_adaptive_sink_class_init (GstBaseAdaptiveSinkClass * klass)
   /**
    * GstBaseAdaptiveSink:write-to-disk
    *
-   * Wheter the fragments and the playlist should be written to disk or not
+   * Whether the fragments and the playlist should be written to disk or not
    *
    */
   g_object_class_install_property (gobject_class, PROP_WRITE_TO_DISK,
@@ -229,7 +232,7 @@ gst_base_adaptive_sink_class_init (GstBaseAdaptiveSinkClass * klass)
   /**
    * GstBaseAdaptiveSink:chunked
    *
-   * Wheter create a new file for each fragment or append them to same file
+   * Whether create a new file for each fragment or append them to same file
    *
    */
   g_object_class_install_property (gobject_class, PROP_DELETE_OLD_FILES,
@@ -239,13 +242,34 @@ gst_base_adaptive_sink_class_init (GstBaseAdaptiveSinkClass * klass)
   /**
    * GstBaseAdaptiveSink:is-live
    *
-   * Wheter the media is live or on-demand
+   * Whether the media is live or on-demand
    *
    */
   g_object_class_install_property (gobject_class, PROP_DELETE_OLD_FILES,
       g_param_spec_boolean ("is-live", "Is live",
           "Whether the media is live or on-demand", TRUE, G_PARAM_READWRITE));
 
+  /**
+   * GstBaseAdaptiveSink:max-window
+   *
+   * Maximum DVR window in seconds
+   *
+   */
+  g_object_class_install_property (gobject_class, PROP_MAX_WINDOW,
+      g_param_spec_uint ("max-window", "Max window",
+          "Maximum window for DVR", 0, G_MAXUINT32, 10 * 10,
+          G_PARAM_READWRITE));
+
+  /**
+   * GstBaseAdaptiveSink:fragment-duration
+   *
+   * Fragments duration in seconds
+   *
+   */
+  g_object_class_install_property (gobject_class, PROP_FRAGMENT_DURATION,
+      g_param_spec_uint ("fragment-duration", "Fragment duration",
+          "Duration of fragments in seconds", 0, G_MAXUINT32, 10,
+          G_PARAM_READWRITE));
   /**
    * GstBaseAdaptiveSink::eos:
    * @sink: the sink element that emited the signal
@@ -286,13 +310,11 @@ gst_base_adaptive_sink_class_init (GstBaseAdaptiveSinkClass * klass)
    * This signal is emited from the steaming thread.
    *
    */
-  /*
-     gst_base_adaptive_sink_signals[SIGNAL_NEW_FRAGMENT] =
-     g_signal_new ("new-fragment", G_TYPE_FROM_CLASS (klass),
-     G_SIGNAL_RUN_LAST, G_STRUCT_OFFSET (GstBaseAdaptiveSinkClass,
-     new_fragment), NULL, NULL, __gst_adaptive_marshal_VOID__OBJECT,
-     G_TYPE_NONE, 1, GST_TYPE_BUFFER);
-   */
+  gst_base_adaptive_sink_signals[SIGNAL_NEW_FRAGMENT] =
+      g_signal_new ("new-fragment", G_TYPE_FROM_CLASS (klass),
+      G_SIGNAL_RUN_LAST, G_STRUCT_OFFSET (GstBaseAdaptiveSinkClass,
+          new_fragment), NULL, NULL, __gst_adaptive_marshal_VOID__BOXED,
+      G_TYPE_NONE, 1, GST_TYPE_BUFFER);
 
   gobject_class->dispose = gst_base_adaptive_sink_dispose;
   gobject_class->finalize = gst_base_adaptive_sink_finalize;
@@ -308,21 +330,21 @@ gst_base_adaptive_sink_class_init (GstBaseAdaptiveSinkClass * klass)
 static void
 gst_base_adaptive_sink_init (GstBaseAdaptiveSink * sink)
 {
-  GstBaseAdaptiveSinkClass *g_class;
-
-  g_class = GST_BASE_ADAPTIVE_SINK_CLASS (sink);
 
   sink->pad_datas = g_hash_table_new_full (g_direct_hash, g_direct_equal,
       NULL, (GDestroyNotify) gst_base_adaptive_sink_pad_data_free);
   sink->write_to_disk = TRUE;
   sink->delete_old_files = TRUE;
   sink->chunked = TRUE;
-  sink->output_directory = g_strdup (".");
-  sink->base_url = g_strdup ("");
-  if (g_class->create_streams_manager != NULL)
-    sink->streams_manager = g_class->create_streams_manager (sink);
-  else
-    sink->streams_manager = gst_streams_manager_new ();
+  sink->is_live = FALSE;
+  sink->md_name = NULL;
+  sink->base_url = NULL;
+  sink->output_directory = NULL;
+  sink->fragment_prefix = NULL;
+  sink->fragment_tpl = "%s-%05d.frag";
+  sink->fragment_duration = 10 * GST_SECOND;
+  sink->prepend_headers = TRUE;
+  sink->min_cache = 3;
 
   GST_OBJECT_FLAG_SET (sink, GST_ELEMENT_FLAG_SINK);
 }
@@ -340,6 +362,21 @@ gst_base_adaptive_sink_finalize (GObject * object)
   if (sink->base_url != NULL) {
     g_free (sink->base_url);
     sink->base_url = NULL;
+  }
+
+  if (sink->md_name != NULL) {
+    g_free (sink->md_name);
+    sink->md_name = NULL;
+  }
+
+  if (sink->output_directory != NULL) {
+    g_free (sink->output_directory);
+    sink->output_directory = NULL;
+  }
+
+  if (sink->fragment_prefix != NULL) {
+    g_free (sink->fragment_prefix);
+    sink->fragment_prefix = NULL;
   }
 
   if (sink->pad_datas != NULL) {
@@ -368,6 +405,96 @@ gst_base_adaptive_sink_dispose (GObject * object)
   G_OBJECT_CLASS (gst_base_adaptive_sink_parent_class)->dispose (object);
 }
 
+void
+gst_base_adaptive_sink_set_output_directory (GstBaseAdaptiveSink * sink,
+    const gchar * output_dir)
+{
+  g_free (sink->output_directory);
+  sink->output_directory = g_strdup (output_dir);
+}
+
+void
+gst_base_adaptive_sink_set_base_url (GstBaseAdaptiveSink * sink,
+    const gchar * base_url)
+{
+  g_free (sink->base_url);
+  sink->base_url = g_strdup (base_url);
+}
+
+void
+gst_base_adaptive_sink_set_md_name (GstBaseAdaptiveSink * sink,
+    const gchar * name)
+{
+  g_free (sink->md_name);
+  sink->md_name = g_strdup (name);
+}
+
+void
+gst_base_adaptive_sink_set_fragment_prefix (GstBaseAdaptiveSink * sink,
+    const gchar * fragment_prefix)
+{
+  g_free (sink->fragment_prefix);
+  sink->fragment_prefix = g_strdup (fragment_prefix);
+}
+
+static gboolean
+gst_base_adaptive_sink_send_force_key_unit_event (GstBaseAdaptiveSink * sink,
+    GstPad * pad, GstClockTime ts, guint count)
+{
+  GstEvent *event;
+
+  event = gst_video_event_new_upstream_force_key_unit (ts,
+      sink->chunked && sink->prepend_headers, count);
+
+  if (!gst_pad_push_event (pad, event)) {
+    GST_WARNING_OBJECT (sink, "Failed to push upstream force key unit event");
+    return FALSE;
+  }
+  return TRUE;
+}
+
+static gboolean
+gst_base_adaptive_sink_request_new_fragment (GstBaseAdaptiveSink * sink,
+    GstPad * pad)
+{
+  GstBaseAdaptivePadData *pad_data;
+  GstClockTime ts;
+  gboolean ret;
+
+  pad_data = g_hash_table_lookup (sink->pad_datas, pad);
+
+  if (pad_data == NULL)
+    return FALSE;
+
+  ts = sink->fragment_duration * pad_data->count;
+  GST_DEBUG_OBJECT (sink,
+      "Requesting new fragment upstream for pad %s:%s and ts:%" GST_TIME_FORMAT,
+      GST_DEBUG_PAD_NAME (pad), GST_TIME_ARGS (ts));
+  ret =
+      gst_base_adaptive_sink_send_force_key_unit_event (sink, pad, ts,
+      pad_data->count);
+  pad_data->count++;
+  return ret;
+}
+
+static gboolean
+gst_base_adaptive_sink_request_first_fragments (GstBaseAdaptiveSink * sink)
+{
+  GList *tmp;
+  gint i;
+
+  tmp = g_list_first (GST_ELEMENT_PADS (GST_ELEMENT (sink)));
+
+  do {
+    for (i = 0; i < sink->min_cache; i++) {
+      gst_base_adaptive_sink_request_new_fragment (sink, (GstPad *) tmp->data);
+    }
+    tmp = g_list_next (tmp);
+  } while (tmp != NULL);
+
+  return TRUE;
+}
+
 static void
 gst_base_adaptive_sink_set_property (GObject * object, guint prop_id,
     const GValue * value, GParamSpec * pspec)
@@ -376,26 +503,18 @@ gst_base_adaptive_sink_set_property (GObject * object, guint prop_id,
 
   switch (prop_id) {
     case PROP_OUTPUT_DIRECTORY:
-      g_free (sink->output_directory);
-      sink->output_directory = g_value_dup_string (value);
+      gst_base_adaptive_sink_set_output_directory (sink,
+          g_value_get_string (value));
       break;
     case PROP_BASE_URL:
-      g_free (sink->base_url);
-      sink->base_url = g_value_dup_string (value);
-      gst_streams_manager_set_base_url (sink->streams_manager,
-          g_value_dup_string (value));
+      gst_base_adaptive_sink_set_base_url (sink, g_value_get_string (value));
       break;
     case PROP_MD_NAME:
-      g_free (sink->md_name);
-      sink->md_name = g_value_dup_string (value);
-      gst_streams_manager_set_title (sink->streams_manager,
-          g_value_dup_string (value));
+      gst_base_adaptive_sink_set_md_name (sink, g_value_get_string (value));
       break;
     case PROP_FRAGMENT_PREFIX:
-      g_free (sink->streams_manager->fragment_prefix);
-      sink->streams_manager->fragment_prefix = g_value_dup_string (value);
-      gst_streams_manager_set_fragment_prefix (sink->streams_manager,
-          g_value_dup_string (value));
+      gst_base_adaptive_sink_set_fragment_prefix (sink,
+          g_value_get_string (value));
       break;
     case PROP_WRITE_TO_DISK:
       sink->write_to_disk = g_value_get_boolean (value);
@@ -405,11 +524,15 @@ gst_base_adaptive_sink_set_property (GObject * object, guint prop_id,
       break;
     case PROP_CHUNKED:
       sink->chunked = g_value_get_boolean (value);
-      sink->streams_manager->chunked = g_value_get_boolean (value);
       break;
     case PROP_IS_LIVE:
       sink->is_live = g_value_get_boolean (value);
-      sink->streams_manager->is_live = g_value_get_boolean (value);
+      break;
+    case PROP_MAX_WINDOW:
+      sink->max_window = g_value_get_uint (value);
+      break;
+    case PROP_FRAGMENT_DURATION:
+      sink->fragment_duration = g_value_get_uint (value) * GST_SECOND;
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -448,6 +571,12 @@ gst_base_adaptive_sink_get_property (GObject * object, guint prop_id,
     case PROP_IS_LIVE:
       g_value_set_boolean (value, sink->is_live);
       break;
+    case PROP_MAX_WINDOW:
+      g_value_set_uint (value, sink->max_window);
+      break;
+    case PROP_FRAGMENT_DURATION:
+      g_value_set_uint (value, sink->fragment_duration / GST_SECOND);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -465,14 +594,20 @@ gst_base_adaptive_sink_change_state (GstElement * element,
     case GST_STATE_CHANGE_NULL_TO_READY:
       break;
     case GST_STATE_CHANGE_READY_TO_PAUSED:
+    {
+      GstBaseAdaptiveSinkClass *b_class =
+          GST_BASE_ADAPTIVE_SINK_GET_CLASS (sink);
+
+      if (b_class->create_streams_manager != NULL)
+        sink->streams_manager = b_class->create_streams_manager (sink);
+      else
+        sink->streams_manager = gst_streams_manager_new ();
+    }
       break;
     case GST_STATE_CHANGE_PAUSED_TO_PLAYING:
-      break;
-    case GST_STATE_CHANGE_PAUSED_TO_READY:
-      gst_base_adaptive_sink_unlock (sink);
-      gst_base_adaptive_sink_stop (sink);
-      break;
-    case GST_STATE_CHANGE_READY_TO_NULL:
+      if (sink->fragment_duration) {
+        gst_base_adaptive_sink_request_first_fragments (sink);
+      }
       break;
     default:
       break;
@@ -481,6 +616,21 @@ gst_base_adaptive_sink_change_state (GstElement * element,
   ret =
       GST_ELEMENT_CLASS (gst_base_adaptive_sink_parent_class)->change_state
       (element, transition);
+
+  switch (transition) {
+    case GST_STATE_CHANGE_PLAYING_TO_PAUSED:
+      break;
+    case GST_STATE_CHANGE_PAUSED_TO_READY:
+      gst_base_adaptive_sink_unlock (sink);
+      gst_base_adaptive_sink_stop (sink);
+      g_object_unref (sink->streams_manager);
+      sink->count = 0;
+      break;
+    case GST_STATE_CHANGE_READY_TO_NULL:
+      break;
+    default:
+      break;
+  }
 
   return ret;
 }
@@ -575,12 +725,6 @@ gst_base_adaptive_sink_chain (GstPad * pad, GstObject * element,
   sink = GST_BASE_ADAPTIVE_SINK (element);
   pad_data = g_hash_table_lookup (sink->pad_datas, pad);
 
-  /* Drop all IN_CAPS buffers */
-  if (GST_BUFFER_FLAG_IS_SET (buffer, GST_BUFFER_FLAG_HEADER)) {
-    GST_DEBUG_OBJECT (pad_data, "Dropping HEADER buffer");
-    return GST_FLOW_OK;
-  }
-
   /* Check if a new fragment needs to be created and save the old one updating
    * the playlist too */
   GST_PAD_DATA_LOCK (pad_data);
@@ -608,6 +752,8 @@ gst_base_adaptive_sink_chain (GstPad * pad, GstObject * element,
       offset = pad_data->fragment->offset + map.size;
       gst_buffer_unmap (pad_data->fragment, &map);
       ret = gst_base_adaptive_sink_close_fragment (sink, pad_data, ts);
+      if (sink->fragment_duration)
+        gst_base_adaptive_sink_request_new_fragment (sink, pad);
       if (ret != GST_FLOW_OK)
         goto quit;
     }
@@ -654,7 +800,7 @@ gst_base_adaptive_sink_set_stream_headers (GstBaseAdaptiveSink * sink,
   fragment = gst_fragment_new ();
   gst_fragment_set_headers (fragment, pad_data->streamheaders);
   meta = gst_buffer_get_fragment_meta (fragment);
-  meta->completed = TRUE;
+  meta->completed = FALSE;
 
   /* Add initialization segment */
   gst_streams_manager_add_headers (sink->streams_manager, pad, fragment);
@@ -689,7 +835,7 @@ gst_base_adaptive_sink_get_headers_from_caps (GstBaseAdaptiveSink * sink,
 {
   GstStructure *structure;
   const GValue *value;
-  gint i;
+  gint i = 0;
 
   structure = gst_caps_get_structure (caps, 0);
   if (!structure)
@@ -703,14 +849,27 @@ gst_base_adaptive_sink_get_headers_from_caps (GstBaseAdaptiveSink * sink,
   /* Clear old streamheaders */
   if (pad_data->streamheaders) {
     gst_buffer_unref (pad_data->streamheaders);
+    pad_data->streamheaders = NULL;
   }
 
-  /* Save new streamheaders */
-  pad_data->streamheaders = gst_buffer_new ();
-
   for (i = 0; i < gst_value_array_get_size (value); i++) {
-    gst_buffer_append (pad_data->streamheaders,
-        gst_value_get_buffer (gst_value_array_get_value (value, i)));
+    const GValue *val = gst_value_array_get_value (value, i);
+    GstBuffer *buf;
+
+    if (!val)
+      continue;
+
+    buf = gst_value_get_buffer (val);
+    if (!GST_IS_BUFFER (buf))
+      continue;
+
+    gst_buffer_ref (buf);
+    if (pad_data->streamheaders == NULL) {
+      pad_data->streamheaders = buf;
+    } else {
+      pad_data->streamheaders =
+          gst_buffer_append (pad_data->streamheaders, buf);
+    }
   }
 }
 
@@ -722,70 +881,6 @@ gst_base_adaptive_sink_set_caps (GstBaseAdaptiveSink * sink, GstPad * pad,
 
   pad_data = g_hash_table_lookup (sink->pad_datas, pad);
   gst_base_adaptive_sink_get_headers_from_caps (sink, caps, pad_data);
-  return TRUE;
-}
-
-static gboolean
-gst_base_adaptive_process_new_stream (GstBaseAdaptiveSink * sink, GstPad * pad,
-    GstBaseAdaptivePadData * pad_data)
-{
-  gst_base_adaptive_sink_parse_stream (sink, pad_data);
-  pad_data->parsed = TRUE;
-
-  if (!gst_streams_manager_add_stream (sink->streams_manager, pad,
-          pad_data->decoded_caps)) {
-    GST_ERROR_OBJECT (sink, "Could not add stream for pad %s:%s",
-        GST_DEBUG_PAD_NAME (pad));
-    return FALSE;
-  }
-
-  /* Save the headers to disk and update it in the media manager */
-  gst_base_adaptive_sink_set_stream_headers (sink, pad, pad_data);
-
-  return TRUE;
-}
-
-static gboolean
-gst_base_adaptive_sink_event (GstPad * pad, GstObject * parent,
-    GstEvent * event)
-{
-  GstBaseAdaptiveSink *sink;
-  GstBaseAdaptivePadData *pad_data;
-  GstClockTime timestamp, stream_time, running_time;
-  gboolean all_headers;
-  guint count;
-
-  sink = GST_BASE_ADAPTIVE_SINK (parent);
-  pad_data = g_hash_table_lookup (sink->pad_datas, pad);
-
-  if (gst_video_event_parse_downstream_force_key_unit (event, &timestamp,
-          &stream_time, &running_time, &all_headers, &count)) {
-    GST_DEBUG_OBJECT (sink, "Received GstForceKeyUnit event");
-    GST_PAD_DATA_LOCK (pad_data);
-    pad_data->new_fragment_index = count;
-    pad_data->new_fragment_ts = timestamp;
-    pad_data->new_fragment = TRUE;
-    GST_PAD_DATA_UNLOCK (pad_data);
-  }
-
-  else if (GST_EVENT_TYPE (event) == GST_EVENT_EOS) {
-    GstMessage *message;
-
-    g_signal_emit (sink, gst_base_adaptive_sink_signals[SIGNAL_EOS], 0);
-    /* ok, now we can post the message */
-    GST_DEBUG_OBJECT (sink, "Posting EOS");
-
-    message = gst_message_new_eos (GST_OBJECT_CAST (sink));
-    gst_element_post_message (GST_ELEMENT_CAST (sink), message);
-  }
-
-  else if (GST_EVENT_TYPE (event) == GST_EVENT_CAPS) {
-    GstCaps *caps;
-
-    gst_event_parse_caps (event, &caps);
-    gst_base_adaptive_sink_set_caps (sink, pad, caps);
-  }
-
   return TRUE;
 }
 
@@ -918,12 +1013,97 @@ done:
   }
 }
 
+static gboolean
+gst_base_adaptive_process_new_stream (GstBaseAdaptiveSink * sink, GstPad * pad,
+    GstBaseAdaptivePadData * pad_data)
+{
+  GstMediaRepFile *rep_file;
+
+  gst_base_adaptive_sink_parse_stream (sink, pad_data);
+  pad_data->parsed = TRUE;
+
+  GST_INFO_OBJECT (sink, "Adding new stream for pad %s:%s",
+      GST_DEBUG_PAD_NAME (pad));
+
+  if (!gst_streams_manager_add_stream (sink->streams_manager, pad, 1000,        /* FIXME: avg_bitrate */
+          pad_data->decoded_caps, &rep_file)) {
+    GST_ERROR_OBJECT (sink, "Could not add stream for pad %s:%s",
+        GST_DEBUG_PAD_NAME (pad));
+    return FALSE;
+  }
+
+  if (rep_file) {
+    gchar *path;
+    gboolean ret;
+
+    path = g_file_get_path (rep_file->file);
+    ret = gst_base_adaptive_sink_write_element (sink,
+        (WriteFunc) gst_base_adaptive_sink_write_playlist,
+        path, rep_file->content);
+    if (ret != GST_FLOW_OK) {
+      GST_ERROR_OBJECT (sink, "Could not save playlist %s", path);
+    }
+    g_free (path);
+    gst_media_rep_file_free (rep_file);
+  }
+
+  /* Save the headers to disk and update it in the media manager */
+  gst_base_adaptive_sink_set_stream_headers (sink, pad, pad_data);
+
+  return TRUE;
+}
+
+static gboolean
+gst_base_adaptive_sink_event (GstPad * pad, GstObject * parent,
+    GstEvent * event)
+{
+  GstBaseAdaptiveSink *sink;
+  GstBaseAdaptivePadData *pad_data;
+  GstClockTime timestamp, stream_time, running_time;
+  gboolean all_headers;
+  guint count;
+
+  sink = GST_BASE_ADAPTIVE_SINK (parent);
+  pad_data = g_hash_table_lookup (sink->pad_datas, pad);
+
+  if (gst_video_event_parse_downstream_force_key_unit (event, &timestamp,
+          &stream_time, &running_time, &all_headers, &count)) {
+    GST_DEBUG_OBJECT (sink, "Received GstForceKeyUnit event");
+    GST_PAD_DATA_LOCK (pad_data);
+    pad_data->new_fragment_index = count;
+    pad_data->new_fragment_ts = timestamp;
+    pad_data->new_fragment = TRUE;
+    GST_PAD_DATA_UNLOCK (pad_data);
+  }
+
+  else if (GST_EVENT_TYPE (event) == GST_EVENT_EOS) {
+    GstMessage *message;
+
+    g_signal_emit (sink, gst_base_adaptive_sink_signals[SIGNAL_EOS], 0);
+    /* ok, now we can post the message */
+    GST_DEBUG_OBJECT (sink, "Posting EOS");
+
+    message = gst_message_new_eos (GST_OBJECT_CAST (sink));
+    gst_element_post_message (GST_ELEMENT_CAST (sink), message);
+  }
+
+  else if (GST_EVENT_TYPE (event) == GST_EVENT_CAPS) {
+    GstCaps *caps;
+
+    gst_event_parse_caps (event, &caps);
+    gst_base_adaptive_sink_set_caps (sink, pad, caps);
+  }
+
+  return TRUE;
+}
+
 static void
 gst_base_adaptive_sink_create_empty_fragment (GstBaseAdaptiveSink * sink,
     GstBaseAdaptivePadData * pad_data, GstClockTime start_ts, guint64 offset,
     guint index)
 {
   GstFragmentMeta *meta;
+  gchar *frag_name;
 
   /* Create a new empty fragment */
   pad_data->fragment = gst_fragment_new ();
@@ -934,6 +1114,9 @@ gst_base_adaptive_sink_create_empty_fragment (GstBaseAdaptiveSink * sink,
   meta->offset = offset;
   if (pad_data->streamheaders != NULL && sink->append_headers)
     gst_fragment_set_headers (pad_data->fragment, pad_data->streamheaders);
+  frag_name =
+      g_strdup_printf (sink->fragment_tpl, sink->fragment_prefix, index);
+  gst_fragment_set_name (pad_data->fragment, frag_name);
 }
 
 static GstFlowReturn
@@ -943,6 +1126,8 @@ gst_base_adaptive_sink_close_fragment (GstBaseAdaptiveSink * sink,
   GstClockTime duration;
   GstFragmentMeta *meta;
   GList *old_files;
+  GFile *file;
+  GstMediaRepFile *rep_file;
   GstFlowReturn ret = GST_FLOW_OK;
   gchar *fragment_filename = NULL;
 
@@ -951,51 +1136,13 @@ gst_base_adaptive_sink_close_fragment (GstBaseAdaptiveSink * sink,
   meta->stop_ts = stop_ts;
   duration = gst_fragment_get_duration (pad_data->fragment);
 
-  /* Add the new entry to the playlist after the fragment was succeesfully
-   * written to disk */
-  gst_streams_manager_add_fragment (sink->streams_manager,
-      pad_data->pad, pad_data->fragment, &old_files);
-
-  /* Delete old files */
-  if (sink->delete_old_files && old_files != NULL) {
-    g_list_foreach (old_files, (GFunc) g_file_delete, NULL);
-  }
-  g_list_foreach (old_files, (GFunc) g_object_unref, NULL);
-  g_list_free (old_files);
-
-  /* Write playlist to disk */
-  if (sink->write_to_disk) {
-    GstMediaRepresentationFile *mg_file;
-
-    GST_DEBUG_OBJECT (sink, "Writting playlist to disk");
-    mg_file = gst_streams_manager_render (sink->streams_manager, pad_data->pad);
-
-    if (mg_file != NULL) {
-      gchar *filename;
-
-      filename = g_build_filename (sink->output_directory, mg_file->filename,
-          NULL);
-      ret = gst_base_adaptive_sink_write_element (sink,
-          (WriteFunc) gst_base_adaptive_sink_write_playlist,
-          filename, mg_file->content);
-
-      g_free (filename);
-      if (ret != GST_FLOW_OK) {
-        gst_media_representation_file_free (mg_file);
-        goto done;
-      }
-
-      g_signal_emit (sink, gst_base_adaptive_sink_signals[SIGNAL_NEW_PLAYLIST],
-          0, mg_file->filename, mg_file->content);
-      gst_media_representation_file_free (mg_file);
-    }
-  }
-
-  /* Build fragment file path and url */
+  /* Build fragment file */
   fragment_filename =
       g_build_filename (sink->output_directory, meta->name, NULL);
+  file = g_file_new_for_path (fragment_filename);
+  meta->file = file;
 
-  GST_INFO_OBJECT (sink, "Created new fragment name:%s duration: %"
+  GST_INFO_OBJECT (sink, "Creating new fragment name:%s duration: %"
       GST_TIME_FORMAT, fragment_filename, GST_TIME_ARGS (duration));
 
   /* Write fragment to disk */
@@ -1007,14 +1154,53 @@ gst_base_adaptive_sink_close_fragment (GstBaseAdaptiveSink * sink,
     if (ret != GST_FLOW_OK)
       goto done;
   }
-  //g_signal_emit (sink, gst_base_adaptive_sink_signals[SIGNAL_NEW_FRAGMENT], 0);
+
+  /* Add the new entry to the playlist after the fragment was succeesfully
+   * written to disk */
+  gst_streams_manager_add_fragment (sink->streams_manager,
+      pad_data->pad, pad_data->fragment, &rep_file, &old_files);
+
+  /* Delete old files */
+  if (sink->delete_old_files && old_files != NULL) {
+    g_list_foreach (old_files, (GFunc) g_file_delete, NULL);
+  }
+  g_list_foreach (old_files, (GFunc) g_object_unref, NULL);
+  g_list_free (old_files);
+
+  /* Write playlist to disk */
+  if (sink->write_to_disk) {
+
+    GST_DEBUG_OBJECT (sink, "Writting playlist to disk");
+
+    if (rep_file != NULL) {
+      gchar *filename;
+
+      filename = g_file_get_path (rep_file->file);
+      ret = gst_base_adaptive_sink_write_element (sink,
+          (WriteFunc) gst_base_adaptive_sink_write_playlist,
+          filename, rep_file->content);
+
+      if (ret != GST_FLOW_OK) {
+        gst_media_rep_file_free (rep_file);
+        g_free (filename);
+        goto done;
+      }
+
+      g_signal_emit (sink, gst_base_adaptive_sink_signals[SIGNAL_NEW_PLAYLIST],
+          0, filename, rep_file->content);
+      gst_media_rep_file_free (rep_file);
+      g_free (filename);
+    }
+  }
+
+  g_signal_emit (sink, gst_base_adaptive_sink_signals[SIGNAL_NEW_FRAGMENT], 0);
 
 done:
   {
     if (fragment_filename != NULL)
       g_free (fragment_filename);
     if (pad_data->fragment != NULL)
-      g_object_unref (pad_data->fragment);
+      gst_buffer_unref (pad_data->fragment);
     pad_data->fragment = NULL;
     return ret;
   }
@@ -1033,6 +1219,7 @@ gst_base_adaptive_sink_pad_data_new (GstPad * pad)
   pad_data->decoded_caps = NULL;
   pad_data->new_fragment = FALSE;
   pad_data->new_fragment_index = 0;
+  pad_data->count = 0;
   pad_data->new_fragment_ts = GST_CLOCK_TIME_NONE;
   pad_data->fragment = NULL;
   pad_data->cancellable = NULL;
@@ -1122,13 +1309,13 @@ gst_base_adaptive_sink_parse_stream (GstBaseAdaptiveSink * sink,
 
   pipeline = gst_pipeline_new ("pipeline");
   appsrc = gst_element_factory_make ("appsrc", "appsrc");
-  decodebin = gst_element_factory_make ("decodebin2", "decodebin2");
+  decodebin = gst_element_factory_make ("decodebin", "decodebin");
 
   gst_bin_add_many (GST_BIN (pipeline), appsrc, decodebin, NULL);
   gst_element_link (appsrc, decodebin);
 
   g_signal_connect (decodebin, "drained", G_CALLBACK (on_drained_cb), pad_data);
-  g_signal_connect (decodebin, "new-decoded-pad",
+  g_signal_connect (decodebin, "pad_added",
       G_CALLBACK (on_new_decoded_pad_cb), pad_data);
 
   g_object_set (G_OBJECT (appsrc), "is-live", TRUE, "num-buffers", 1, NULL);
@@ -1151,7 +1338,7 @@ gst_base_adaptive_sink_parse_stream (GstBaseAdaptiveSink * sink,
 
   if (!g_cond_timed_wait (pad_data->discover_cond, pad_data->discover_lock,
           &timeout)) {
-    GST_WARNING ("Timed out decoding the fragment");
+    GST_WARNING_OBJECT (sink, "Timed out decoding the fragment");
   }
   g_mutex_unlock (pad_data->discover_lock);
 

@@ -23,6 +23,7 @@
 #define __GSTFRAGMENT_H__
 
 #include <glib-object.h>
+#include <gio/gio.h>
 #include <gst/gst.h>
 
 G_BEGIN_DECLS
@@ -46,6 +47,7 @@ struct _GstFragmentMeta
   guint64 offset;               /* Bytes offset of the fragment in the stream */
   gboolean index;               /* Index of the fragment */
   gboolean discontinuous;       /* Whether this fragment is discontinuous or not */
+  GFile *file;                  /* File where this fragment is stored in disk */
   GstBuffer *headers;
 };
 
@@ -55,6 +57,7 @@ gboolean gst_fragment_set_headers (GstBuffer *fragment, GstBuffer *headers);
 gboolean gst_fragment_add_buffer (GstBuffer *fragment, GstBuffer *buffer);
 void gst_fragment_set_name (GstBuffer *buffer, gchar *name);
 guint64 gst_fragment_get_duration (GstBuffer *fragment);
+void gst_fragment_set_file (GstBuffer *fragment, GFile *file);
 GstBuffer * gst_fragment_new (void);
 
 G_END_DECLS

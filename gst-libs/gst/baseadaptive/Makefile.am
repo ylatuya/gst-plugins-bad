@@ -1,19 +1,29 @@
-
-lib_LTLIBRARIES = libgstbaseadaptive-@GST_API_VERSION@.la
+glib_gen_prefix = __gst_adaptive
+glib_gen_basename = gstadaptive
 
 include $(top_srcdir)/common/gst-glib-gen.mak
+
+built_sources = gstadaptive-marshal.c
+built_headers = gstadaptive-marshal.h
+
+BUILT_SOURCES = $(built_sources) $(built_headers)
+CLEANFILES = $(BUILT_SOURCES)
+
+lib_LTLIBRARIES = libgstbaseadaptive-@GST_API_VERSION@.la
 
 libgstbaseadaptive_@GST_API_VERSION@_la_SOURCES = \
         gstfragment.c \
         gststreamsmanager.c \
-        gstbaseadaptivesink.c
+        gstbaseadaptivesink.c \
+	$(built_sources)
 
 libgstbaseadaptive_@GST_API_VERSION@includedir = $(includedir)/gstreamer-@GST_API_VERSION@/gst/baseadaptive
 libgstbaseadaptive_@GST_API_VERSION@include_HEADERS = \
         gstadaptive.h \
         gstfragment.h \
-        gststreammanager.h \
-        gstbaseadaptivesink.h
+        gststreamsmanager.h \
+        gstbaseadaptivesink.h \
+	$(built_headers)
 
 libgstbaseadaptive_@GST_API_VERSION@_la_CFLAGS = \
 	$(GST_PLUGINS_BAD_CFLAGS) \

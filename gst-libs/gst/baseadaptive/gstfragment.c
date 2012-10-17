@@ -69,6 +69,7 @@ gst_fragment_meta_init (GstFragmentMeta * meta, gpointer params,
   meta->name = g_strdup ("");
   meta->completed = FALSE;
   meta->discontinuous = FALSE;
+  meta->file = NULL;
 
   return TRUE;
 }
@@ -83,6 +84,11 @@ gst_fragment_meta_free (GstFragmentMeta * meta, GstBuffer * buffer)
   if (meta->headers != NULL) {
     gst_buffer_unref (meta->headers);
     meta->headers = NULL;
+  }
+
+  if (meta->file != NULL) {
+    g_object_unref (meta->file);
+    meta->file = NULL;
   }
 }
 
@@ -103,7 +109,7 @@ gst_fragment_get_meta (GstBuffer * buffer)
 
   meta = gst_buffer_get_fragment_meta (buffer);
   if (!meta) {
-    GST_ERROR ("Buffer %p is not a fragment.");
+    g_error ("Buffer is not a fragment.");
     return NULL;
   }
 
@@ -131,11 +137,11 @@ gst_fragment_set_headers (GstBuffer * buffer, GstBuffer * headers)
 }
 
 void
-gst_fragment_set_name (GstBuffer * buffer, gchar * name)
+gst_fragment_set_name (GstBuffer * fragment, gchar * name)
 {
   GstFragmentMeta *meta;
 
-  meta = gst_fragment_get_meta (buffer);
+  meta = gst_fragment_get_meta (fragment);
   if (!meta) {
     return;
   }
@@ -146,11 +152,11 @@ gst_fragment_set_name (GstBuffer * buffer, gchar * name)
 }
 
 guint64
-gst_fragment_get_duration (GstBuffer * buffer)
+gst_fragment_get_duration (GstBuffer * fragment)
 {
   GstFragmentMeta *meta;
 
-  meta = gst_fragment_get_meta (buffer);
+  meta = gst_fragment_get_meta (fragment);
   if (!meta) {
     return FALSE;
   }
@@ -167,7 +173,7 @@ gst_fragment_add_buffer (GstBuffer * fragment, GstBuffer * buffer)
 {
   GstFragmentMeta *meta;
 
-  meta = gst_fragment_get_meta (buffer);
+  meta = gst_fragment_get_meta (fragment);
   if (!meta) {
     return FALSE;
   }
@@ -178,4 +184,22 @@ gst_fragment_add_buffer (GstBuffer * fragment, GstBuffer * buffer)
   }
   gst_buffer_append (fragment, buffer);
   return TRUE;
+}
+
+void
+gst_fragment_set_file (GstBuffer * fragment, GFile * file)
+{
+  GstFragmentMeta *meta;
+
+  meta = gst_fragment_get_meta (fragment);
+  if (!meta) {
+    return;
+  }
+
+  if (meta->file != NULL) {
+    g_object_unref (meta->file);
+  }
+
+  g_object_ref (file);
+  meta->file = file;
 }
