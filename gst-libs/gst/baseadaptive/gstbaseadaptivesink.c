@@ -137,7 +137,8 @@ static void gst_base_adaptive_sink_create_empty_fragment (GstBaseAdaptiveSink *
     sink, GstBaseAdaptivePadData * pad_data, GstClockTime start_ts,
     guint64 offset, guint index);
 static GstFlowReturn gst_base_adaptive_sink_write_element (GstBaseAdaptiveSink *
-    sink, WriteFunc write_func, gchar * filename, gpointer data);
+    sink, WriteFunc write_func, gchar * filename, gboolean append,
+    gpointer data);
 static void gst_base_adaptive_sink_parse_stream (GstBaseAdaptiveSink * sink,
     GstBaseAdaptivePadData * pad_data);
 static gboolean gst_base_adaptive_process_new_stream (GstBaseAdaptiveSink *
@@ -235,7 +236,7 @@ gst_base_adaptive_sink_class_init (GstBaseAdaptiveSinkClass * klass)
    * Whether create a new file for each fragment or append them to same file
    *
    */
-  g_object_class_install_property (gobject_class, PROP_DELETE_OLD_FILES,
+  g_object_class_install_property (gobject_class, PROP_CHUNKED,
       g_param_spec_boolean ("chunked", "Chunked",
           "Create a new file for each fragment", TRUE, G_PARAM_READWRITE));
 
@@ -245,7 +246,7 @@ gst_base_adaptive_sink_class_init (GstBaseAdaptiveSinkClass * klass)
    * Whether the media is live or on-demand
    *
    */
-  g_object_class_install_property (gobject_class, PROP_DELETE_OLD_FILES,
+  g_object_class_install_property (gobject_class, PROP_IS_LIVE,
       g_param_spec_boolean ("is-live", "Is live",
           "Whether the media is live or on-demand", TRUE, G_PARAM_READWRITE));
 
@@ -732,7 +733,6 @@ gst_base_adaptive_sink_chain (GstPad * pad, GstObject * element,
     guint64 offset;
     guint index;
     GstClockTime ts;
-    GstMapInfo map;
 
     /* Parse headers for this stream and add it to the media manager */
     if (G_UNLIKELY (!pad_data->parsed)) {
@@ -748,9 +748,10 @@ gst_base_adaptive_sink_chain (GstPad * pad, GstObject * element,
     offset = 0;
 
     if (pad_data->fragment != NULL) {
-      gst_buffer_map (pad_data->fragment, &map, GST_MAP_READ);
-      offset = pad_data->fragment->offset + map.size;
-      gst_buffer_unmap (pad_data->fragment, &map);
+      meta = gst_buffer_get_fragment_meta (pad_data->fragment);
+      meta->offset += gst_buffer_get_size (pad_data->fragment);
+      offset = meta->offset;
+
       ret = gst_base_adaptive_sink_close_fragment (sink, pad_data, ts);
       if (sink->fragment_duration)
         gst_base_adaptive_sink_request_new_fragment (sink, pad);
@@ -815,7 +816,8 @@ gst_base_adaptive_sink_set_stream_headers (GstBaseAdaptiveSink * sink,
     pad_data->fragment = fragment;
 
     fret = gst_base_adaptive_sink_write_element (sink,
-        (WriteFunc) gst_base_adaptive_sink_write_fragment, filename, pad_data);
+        (WriteFunc) gst_base_adaptive_sink_write_fragment, filename, FALSE,
+        pad_data);
     g_free (filename);
 
     if (fret != GST_FLOW_OK) {
@@ -897,13 +899,10 @@ gst_base_adaptive_sink_write_fragment (GstBaseAdaptiveSink * sink,
   gst_buffer_map (pad_data->fragment, &map, GST_MAP_READ);
   g_output_stream_write ((GOutputStream *) stream,
       map.data, map.size, pad_data->cancellable, &error);
-  if (error)
-    goto done;
 
-done:{
+  if (error)
     pad_data->cancellable = NULL;
-    return error;
-  }
+  return error;
 }
 
 static GError *
@@ -920,7 +919,7 @@ gst_base_adaptive_sink_write_playlist (GstBaseAdaptiveSink * sink,
 
 static GstFlowReturn
 gst_base_adaptive_sink_write_element (GstBaseAdaptiveSink * sink,
-    WriteFunc write_func, gchar * filename, gpointer data)
+    WriteFunc write_func, gchar * filename, gboolean append, gpointer data)
 {
   GFile *file;
   GFileOutputStream *stream;
@@ -931,8 +930,13 @@ gst_base_adaptive_sink_write_element (GstBaseAdaptiveSink * sink,
   /* Create the new file */
   file = g_file_new_for_path (filename);
   cancellable = g_cancellable_new ();
-  stream = g_file_replace (file, NULL, FALSE, G_FILE_CREATE_REPLACE_DESTINATION,
-      cancellable, &error);
+  if (append) {
+    stream = g_file_append_to (file, G_FILE_CREATE_REPLACE_DESTINATION,
+        cancellable, &error);
+  } else {
+    stream = g_file_replace (file, NULL, FALSE,
+        G_FILE_CREATE_REPLACE_DESTINATION, cancellable, &error);
+  }
   if (error) {
     if (error->code == G_IO_ERROR_CANCELLED)
       goto done;
@@ -1039,7 +1043,7 @@ gst_base_adaptive_process_new_stream (GstBaseAdaptiveSink * sink, GstPad * pad,
     path = g_file_get_path (rep_file->file);
     ret = gst_base_adaptive_sink_write_element (sink,
         (WriteFunc) gst_base_adaptive_sink_write_playlist,
-        path, rep_file->content);
+        path, FALSE, rep_file->content);
     if (ret != GST_FLOW_OK) {
       GST_ERROR_OBJECT (sink, "Could not save playlist %s", path);
     }
@@ -1108,12 +1112,17 @@ gst_base_adaptive_sink_create_empty_fragment (GstBaseAdaptiveSink * sink,
   /* Create a new empty fragment */
   pad_data->fragment = gst_fragment_new ();
 
+  /* Fill the fragment's metadata */
   meta = gst_buffer_get_fragment_meta (pad_data->fragment);
   meta->index = index;
   meta->start_ts = start_ts;
   meta->offset = offset;
   if (pad_data->streamheaders != NULL && sink->append_headers)
     gst_fragment_set_headers (pad_data->fragment, pad_data->streamheaders);
+
+  /* If fragments are not chunked in files, reuse the same file (with index=0) */
+  if (!sink->chunked)
+    index = 0;
   frag_name =
       g_strdup_printf (sink->fragment_tpl, sink->fragment_prefix, index);
   gst_fragment_set_name (pad_data->fragment, frag_name);
@@ -1147,10 +1156,10 @@ gst_base_adaptive_sink_close_fragment (GstBaseAdaptiveSink * sink,
 
   /* Write fragment to disk */
   if (sink->write_to_disk) {
-    GST_DEBUG_OBJECT (sink, "Writting fragment to disk");
+    GST_DEBUG_OBJECT (sink, "Writting fragment to disk %s", fragment_filename);
     ret = gst_base_adaptive_sink_write_element (sink,
         (WriteFunc) gst_base_adaptive_sink_write_fragment,
-        fragment_filename, pad_data);
+        fragment_filename, !sink->chunked, pad_data);
     if (ret != GST_FLOW_OK)
       goto done;
   }
@@ -1169,16 +1178,14 @@ gst_base_adaptive_sink_close_fragment (GstBaseAdaptiveSink * sink,
 
   /* Write playlist to disk */
   if (sink->write_to_disk) {
-
-    GST_DEBUG_OBJECT (sink, "Writting playlist to disk");
-
     if (rep_file != NULL) {
       gchar *filename;
 
       filename = g_file_get_path (rep_file->file);
+      GST_DEBUG_OBJECT (sink, "Updating playlist: %s", filename);
       ret = gst_base_adaptive_sink_write_element (sink,
           (WriteFunc) gst_base_adaptive_sink_write_playlist,
-          filename, rep_file->content);
+          filename, FALSE, rep_file->content);
 
       if (ret != GST_FLOW_OK) {
         gst_media_rep_file_free (rep_file);

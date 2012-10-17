@@ -47,7 +47,7 @@ gst_m3u8_manager_create_playlist_file (GstM3u8Manager * manager,
 GstM3u8Manager *
 gst_m3u8_manager_new (gchar * base_url, gchar * title, gchar * fragment_prefix,
     gchar * output_directory, gboolean is_live, gboolean chunked,
-    guint64 window_size, gchar * variant_pl_name, guint max_version,
+    GstClockTime window_size, gchar * variant_pl_name, guint max_version,
     gboolean allow_cache)
 {
   GstM3u8Manager *manager;
@@ -114,8 +114,8 @@ gst_m3u8_manager_add_stream (GstStreamsManager * bmanager, GstPad * pad,
       gst_m3u8_manager_create_playlist_file (manager, stream_name, stream_name);
 
   playlist = gst_m3u8_playlist_new (stream_name, bmanager->base_url, file,
-      manager->max_version, avg_bitrate, bmanager->window_size,
-      manager->allow_cache);
+      avg_bitrate, manager->max_version, bmanager->window_size / GST_SECOND,
+      manager->allow_cache, bmanager->chunked);
   g_object_unref (file);
 
   if (!gst_m3u8_variant_playlist_add_variant (manager->variant_playlist,
@@ -150,7 +150,8 @@ gst_m3u8_manager_add_fragment (GstStreamsManager * bmanager,
       gst_pad_get_name (pad));
   *removed_fragments =
       gst_m3u8_playlist_add_entry (playlist, meta->name, meta->file,
-      bmanager->title, ((gfloat) duration) / GST_SECOND, meta->index,
+      bmanager->title, ((gfloat) duration) / GST_SECOND,
+      gst_buffer_get_size (fragment), meta->offset, meta->index,
       meta->discontinuous);
   *rep_file =
       gst_media_rep_file_new (gst_m3u8_playlist_render (playlist),
@@ -223,6 +224,6 @@ gst_m3u8_manager_class_init (GstM3u8ManagerClass * klass)
 static void
 gst_m3u8_manager_init (GstM3u8Manager * manager)
 {
-  manager->max_version = 0;
+  manager->max_version = 3;
   manager->allow_cache = FALSE;
 }

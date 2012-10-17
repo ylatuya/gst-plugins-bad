@@ -31,10 +31,11 @@
 #define M3U8_TARGETDURATION_TAG "#EXT-X-TARGETDURATION:%d\n"
 #define M3U8_MEDIA_SEQUENCE_TAG "#EXT-X-MEDIA-SEQUENCE:%d\n"
 #define M3U8_DISCONTINUITY_TAG "#EXT-X-DISCONTINUITY\n"
-#define M3U8_INT_INF_TAG "#EXTINF:%d,%s\n%s\n"
-#define M3U8_FLOAT_INF_TAG "#EXTINF:%.2f,%s\n%s\n"
+#define M3U8_INT_INF_TAG "#EXTINF:%d,%s\n"
+#define M3U8_FLOAT_INF_TAG "#EXTINF:%.2f,%s\n"
 #define M3U8_ENDLIST_TAG "#EXT-X-ENDLIST"
 #define M3U8_VARIANT_TAG "#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=%d\n"
+#define M3U8_BYTERANGE_TAG "#EXT-X-BYTERANGE:%d@%d\n"
 
 enum
 {
@@ -44,7 +45,7 @@ enum
 
 static GstM3U8Entry *
 gst_m3u8_entry_new (gchar * url, GFile * file, gchar * title,
-    gfloat duration, gboolean discontinuous)
+    gfloat duration, guint length, guint offset, gboolean discontinuous)
 {
   GstM3U8Entry *entry;
 
@@ -57,6 +58,8 @@ gst_m3u8_entry_new (gchar * url, GFile * file, gchar * title,
   entry->title = g_strdup (title);
   entry->duration = duration;
   entry->discontinuous = discontinuous;
+  entry->length = length;
+  entry->offset = offset;
   g_object_ref (entry->file);
   return entry;
 }
@@ -83,26 +86,43 @@ gst_m3u8_entry_free (GstM3U8Entry * entry)
 }
 
 static gchar *
-gst_m3u8_entry_render (GstM3U8Entry * entry, guint version)
+gst_m3u8_entry_render (GstM3U8Entry * entry, guint version,
+    gboolean use_byterange)
 {
+  const gchar *discont;
+  gchar *byterange;
+  gchar *ret;
+
   g_return_val_if_fail (entry != NULL, NULL);
+
+  discont = entry->discontinuous ? M3U8_DISCONTINUITY_TAG : "";
+
+  if (use_byterange) {
+    byterange = g_strdup_printf (M3U8_BYTERANGE_TAG, entry->length,
+        entry->offset);
+  } else {
+    byterange = g_strdup ("");
+  }
 
   /* FIXME: Ensure the radix is always a '.' and not a ',' when printing
    * floating point number, but for now only use integers*/
   /* if (version < 3) */
-  if (TRUE)
-    return g_strdup_printf ("%s" M3U8_INT_INF_TAG,
-        entry->discontinuous ? M3U8_DISCONTINUITY_TAG : "",
-        (gint) (entry->duration / GST_SECOND), entry->title, entry->url);
+  if (TRUE) {
+    ret = g_strdup_printf ("%s" M3U8_INT_INF_TAG "%s%s\n", discont,
+        (gint) entry->duration, entry->title, byterange, entry->url);
+  } else {
+    ret = g_strdup_printf ("%s" M3U8_FLOAT_INF_TAG "%s%s\n", discont,
+        entry->duration, entry->title, byterange, entry->url);
+  }
 
-  return g_strdup_printf ("%s" M3U8_FLOAT_INF_TAG,
-      entry->discontinuous ? M3U8_DISCONTINUITY_TAG : "",
-      (entry->duration / GST_SECOND), entry->title, entry->url);
+  g_free (byterange);
+  return ret;
 }
 
 GstM3U8Playlist *
 gst_m3u8_playlist_new (gchar * name, gchar * base_url, GFile * file,
-    gint bitrate, guint version, guint window_size, gboolean allow_cache)
+    gint bitrate, guint version, guint window_size, gboolean allow_cache,
+    gboolean chunked)
 {
   GstM3U8Playlist *playlist;
 
@@ -118,6 +138,12 @@ gst_m3u8_playlist_new (gchar * name, gchar * base_url, GFile * file,
   playlist->entries = g_queue_new ();
   g_object_ref (file);
   playlist->file = file;
+
+  if (!chunked && version < 7) {
+    GST_WARNING ("Byteranges media segments are not support for versions < 7");
+    chunked = TRUE;
+  }
+  playlist->chunked = chunked;
 
   return playlist;
 }
@@ -153,7 +179,7 @@ gst_m3u8_playlist_target_duration (GstM3U8Playlist * playlist)
 {
   gint i;
   GstM3U8Entry *entry;
-  guint64 target_duration = 0;
+  gfloat target_duration = 0;
 
   for (i = 0; i < playlist->entries->length; i++) {
     entry = (GstM3U8Entry *) g_queue_peek_nth (playlist->entries, i);
@@ -161,13 +187,14 @@ gst_m3u8_playlist_target_duration (GstM3U8Playlist * playlist)
       target_duration = entry->duration;
   }
 
-  return (guint) (target_duration / GST_SECOND);
+  return target_duration;
 }
 
 GList *
 gst_m3u8_playlist_add_entry (GstM3U8Playlist * playlist,
     gchar * url, GFile * file, gchar * title,
-    gfloat duration, guint index, gboolean discontinuous)
+    gfloat duration, guint length, guint offset, guint index,
+    gboolean discontinuous)
 {
   GstM3U8Entry *entry;
   GList *old_files = NULL;
@@ -179,7 +206,8 @@ gst_m3u8_playlist_add_entry (GstM3U8Playlist * playlist,
   if (playlist->type == GST_M3U8_PLAYLIST_TYPE_VOD)
     return FALSE;
 
-  entry = gst_m3u8_entry_new (url, file, title, duration, discontinuous);
+  entry = gst_m3u8_entry_new (url, file, title, duration, length, offset,
+      discontinuous);
 
   if (playlist->window_size != 0) {
     /* Delete old entries from the playlist */
@@ -197,8 +225,6 @@ gst_m3u8_playlist_add_entry (GstM3U8Playlist * playlist,
   playlist->sequence_number = index + 1;
   g_queue_push_tail (playlist->entries, entry);
 
-  if (old_files == NULL)
-    g_print ("RETURNING OLF FILES\n");
   return old_files;
 }
 
@@ -207,7 +233,8 @@ render_entry (GstM3U8Entry * entry, GstM3U8Playlist * playlist)
 {
   gchar *entry_str;
 
-  entry_str = gst_m3u8_entry_render (entry, playlist->version);
+  entry_str = gst_m3u8_entry_render (entry, playlist->version,
+      !playlist->chunked);
   g_string_append_printf (playlist->playlist_str, "%s", entry_str);
   g_free (entry_str);
 }

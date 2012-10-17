@@ -33,6 +33,7 @@ GST_DEBUG_CATEGORY_STATIC (gst_hls_sink_debug);
 #define DEFAULT_BASE_URL "http://localhost/"
 #define DEFAULT_FRAGMENT_PREFIX "fragment"
 #define DEFAULT_TARGET_DURATION 10
+#define DEFAULT_FRAGMENT_TEMPLATE "%s-%05d.ts"
 #define DEFAULT_MAX_WINDOW 10 * DEFAULT_TARGET_DURATION
 #define DEFAULT_MAX_VERSION 3
 #define DEFAULT_IS_CHUNKED TRUE
@@ -140,11 +141,11 @@ gst_hls_sink_init (GstHlsSink * sink)
   bsink->delete_old_files = DEFAULT_DELETE_OLD_FILES;
   bsink->max_window = DEFAULT_MAX_WINDOW * GST_SECOND;
   bsink->fragment_duration = DEFAULT_TARGET_DURATION * GST_SECOND;
+  bsink->fragment_tpl = DEFAULT_FRAGMENT_TEMPLATE;
+  bsink->append_headers = TRUE;
+
   sink->max_version = DEFAULT_MAX_VERSION;
   sink->stream_title = g_strdup (DEFAULT_STREAM_TITLE);
-
-
-  bsink->append_headers = TRUE;
 }
 
 static void

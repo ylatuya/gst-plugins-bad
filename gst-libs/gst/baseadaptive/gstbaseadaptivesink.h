@@ -87,19 +87,23 @@ struct _GstBaseAdaptiveSinkClass
   GstStreamsManager * (*create_streams_manager)  (GstBaseAdaptiveSink *sink);
 
   /* signals */
-  void        (*eos)            (GstBaseAdaptiveSink *sink);
+  void                (*eos)                     (GstBaseAdaptiveSink *sink);
 
-  void        (*new_fragment)   (GstBaseAdaptiveSink *sink);
+  void                (*new_fragment)            (GstBaseAdaptiveSink *sink);
 
-  void        (*new_playlist)   (GstBaseAdaptiveSink *sink);
+  void                (*new_playlist)            (GstBaseAdaptiveSink *sink);
 
   /*< private >*/
   gpointer     _gst_reserved[GST_PADDING];
 };
 
+
 void gst_base_adaptive_sink_set_output_directory (GstBaseAdaptiveSink *sink, const gchar *output_dir);
+
 void gst_base_adaptive_sink_set_md_name (GstBaseAdaptiveSink *sink, const gchar *name);
+
 void gst_base_adaptive_sink_set_base_url (GstBaseAdaptiveSink *sink, const gchar *base_url);
+
 void gst_base_adaptive_sink_set_fragment_prefix (GstBaseAdaptiveSink *sink, const gchar *fragment_prefix);
 
 G_END_DECLS

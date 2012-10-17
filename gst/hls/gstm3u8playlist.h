@@ -38,6 +38,8 @@ struct _GstM3U8Entry
   GFile *file;
   gchar *title;
   gfloat duration;
+  guint length;
+  guint offset;
   gboolean discontinuous;
 };
 
@@ -51,6 +53,7 @@ struct _GstM3U8Playlist
   gint window_size;
   gint type;
   gboolean end_list;
+  gboolean chunked;
   guint sequence_number;
   GFile *file;
 
@@ -73,13 +76,14 @@ struct _GstM3U8VariantPlaylist
 GstM3U8Playlist *          gst_m3u8_playlist_new                  (gchar *name, gchar *base_url,
                                                                    GFile *file, gint bitrate,
                                                                    guint version, guint window_size,
-                                                                   gboolean allow_cache);
+                                                                   gboolean allow_cache, gboolean chunked);
 
 void                      gst_m3u8_playlist_free                  (GstM3U8Playlist * playlist);
 
 GList *                   gst_m3u8_playlist_add_entry             (GstM3U8Playlist * playlist,
                                                                    gchar * url, GFile * file,
                                                                    gchar *title, gfloat duration,
+								   guint length, guint offset, 
                                                                    guint index, gboolean discontinuous);
 
 gchar *                  gst_m3u8_playlist_render                 (GstM3U8Playlist * playlist);
