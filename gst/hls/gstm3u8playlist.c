@@ -192,22 +192,23 @@ gst_m3u8_playlist_target_duration (GstM3U8Playlist * playlist)
 
 GList *
 gst_m3u8_playlist_add_entry (GstM3U8Playlist * playlist,
-    gchar * url, GFile * file, gchar * title,
+    gchar * path, GFile * file, gchar * title,
     gfloat duration, guint length, guint offset, guint index,
     gboolean discontinuous)
 {
   GstM3U8Entry *entry;
+  gchar *entry_url;
   GList *old_files = NULL;
 
   g_return_val_if_fail (playlist != NULL, FALSE);
-  g_return_val_if_fail (url != NULL, FALSE);
-  g_return_val_if_fail (title != NULL, FALSE);
 
   if (playlist->type == GST_M3U8_PLAYLIST_TYPE_VOD)
     return FALSE;
 
-  entry = gst_m3u8_entry_new (url, file, title, duration, length, offset,
+  entry_url = g_build_filename (playlist->base_url, path, NULL);
+  entry = gst_m3u8_entry_new (entry_url, file, title, duration, length, offset,
       discontinuous);
+  g_free (entry_url);;
 
   if (playlist->window_size != 0) {
     /* Delete old entries from the playlist */

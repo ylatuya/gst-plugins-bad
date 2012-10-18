@@ -139,7 +139,7 @@ static void gst_base_adaptive_sink_create_empty_fragment (GstBaseAdaptiveSink *
 static GstFlowReturn gst_base_adaptive_sink_write_element (GstBaseAdaptiveSink *
     sink, WriteFunc write_func, gchar * filename, gboolean append,
     gpointer data);
-static void gst_base_adaptive_sink_parse_stream (GstBaseAdaptiveSink * sink,
+static gboolean gst_base_adaptive_sink_parse_stream (GstBaseAdaptiveSink * sink,
     GstBaseAdaptivePadData * pad_data);
 static gboolean gst_base_adaptive_process_new_stream (GstBaseAdaptiveSink *
     sink, GstPad * pad, GstBaseAdaptivePadData * pad_data);
@@ -345,7 +345,7 @@ gst_base_adaptive_sink_init (GstBaseAdaptiveSink * sink)
   sink->fragment_tpl = "%s-%s-%05d.frag";
   sink->fragment_duration = 10 * GST_SECOND;
   sink->prepend_headers = TRUE;
-  sink->min_cache = 3;
+  sink->min_cache = 1;
 
   GST_OBJECT_FLAG_SET (sink, GST_ELEMENT_FLAG_SINK);
 }
@@ -727,6 +727,8 @@ gst_base_adaptive_sink_chain (GstPad * pad, GstObject * element,
   sink = GST_BASE_ADAPTIVE_SINK (element);
   pad_data = g_hash_table_lookup (sink->pad_datas, pad);
 
+  GST_LOG_OBJECT (sink, "New buffer in chain function");
+
   /* Check if a new fragment needs to be created and save the old one updating
    * the playlist too */
   GST_PAD_DATA_LOCK (pad_data);
@@ -743,7 +745,11 @@ gst_base_adaptive_sink_chain (GstPad * pad, GstObject * element,
     if (pad_data->fragment != NULL) {
       /* Parse headers for this stream and add it to the media manager */
       if (G_UNLIKELY (!pad_data->parsed)) {
+        GST_DEBUG_OBJECT (sink, "Parsing first fragment for pad %s:%s",
+            GST_DEBUG_PAD_NAME (pad));
         if (!gst_base_adaptive_process_new_stream (sink, pad, pad_data)) {
+          GST_ERROR_OBJECT (sink, "Error parsing first fragment for pad %s:%s",
+              GST_DEBUG_PAD_NAME (pad));
           ret = GST_FLOW_ERROR;
           goto quit;
         }
@@ -754,11 +760,11 @@ gst_base_adaptive_sink_chain (GstPad * pad, GstObject * element,
       offset = meta->offset;
 
       ret = gst_base_adaptive_sink_close_fragment (sink, pad_data, ts);
-      if (sink->fragment_duration)
-        gst_base_adaptive_sink_request_new_fragment (sink, pad);
       if (ret != GST_FLOW_OK)
         goto quit;
     }
+    if (sink->fragment_duration)
+      gst_base_adaptive_sink_request_new_fragment (sink, pad);
     gst_base_adaptive_sink_create_empty_fragment (sink, pad_data, ts,
         offset, index);
   }
@@ -790,10 +796,12 @@ gst_base_adaptive_sink_set_stream_headers (GstBaseAdaptiveSink * sink,
     GstPad * pad, GstBaseAdaptivePadData * pad_data)
 {
   GstBuffer *fragment;
-  gchar *init_segment_name;
-  GstFlowReturn fret;
   GstFragmentMeta *meta;
   gboolean ret = TRUE;
+  /*
+     gchar *init_segment_name;
+     GstFlowReturn fret;
+   */
 
   if (pad_data->streamheaders != NULL)
     return TRUE;
@@ -806,29 +814,32 @@ gst_base_adaptive_sink_set_stream_headers (GstBaseAdaptiveSink * sink,
 
   /* Add initialization segment */
   gst_streams_manager_add_headers (sink->streams_manager, pad, fragment);
-  init_segment_name = meta->name;
 
-  if (sink->write_to_disk && init_segment_name != NULL) {
-    gchar *filename;
+  /* FIXME: */
+  /*
+     init_segment_name = meta->name;
 
-    GST_DEBUG_OBJECT (sink, "Writting headers fragment to disk");
-    filename = g_build_filename (sink->output_directory, init_segment_name,
-        NULL);
-    pad_data->fragment = fragment;
+     if (sink->write_to_disk && init_segment_name != NULL) {
+     gchar *filename;
 
-    fret = gst_base_adaptive_sink_write_element (sink,
-        (WriteFunc) gst_base_adaptive_sink_write_fragment, filename, FALSE,
-        pad_data);
-    g_free (filename);
+     GST_DEBUG_OBJECT (sink, "Writting headers fragment to disk");
+     filename = g_build_filename (sink->output_directory, init_segment_name,
+     NULL);
+     pad_data->fragment = fragment;
 
-    if (fret != GST_FLOW_OK) {
-      GST_ERROR_OBJECT (sink, "Could not write headers fragment to disk");
-      ret = FALSE;
-    }
-    pad_data->fragment = NULL;
-  }
+     fret = gst_base_adaptive_sink_write_element (sink,
+     (WriteFunc) gst_base_adaptive_sink_write_fragment, filename, FALSE,
+     pad_data);
+     g_free (filename);
 
-  g_object_unref (fragment);
+     if (fret != GST_FLOW_OK) {
+     GST_ERROR_OBJECT (sink, "Could not write headers fragment to disk");
+     ret = FALSE;
+     }
+     pad_data->fragment = NULL;
+     } */
+
+  gst_buffer_unref (fragment);
   return ret;
 }
 
@@ -1025,7 +1036,9 @@ gst_base_adaptive_process_new_stream (GstBaseAdaptiveSink * sink, GstPad * pad,
   GstMediaRepFile *rep_file;
   guint avg_bitrate;
 
-  gst_base_adaptive_sink_parse_stream (sink, pad_data);
+  if (!gst_base_adaptive_sink_parse_stream (sink, pad_data))
+    return FALSE;
+
   pad_data->parsed = TRUE;
 
   GST_INFO_OBJECT (sink, "Adding new stream for pad %s:%s",
@@ -1112,8 +1125,10 @@ gst_base_adaptive_sink_create_empty_fragment (GstBaseAdaptiveSink * sink,
     guint64 offset, guint index)
 {
   GstFragmentMeta *meta;
-  gchar *frag_name;
+  gchar *frag_name, *frag_filename;
 
+  GST_DEBUG_OBJECT (sink, "Creating new fragment for pad %s:%s",
+      GST_DEBUG_PAD_NAME (pad_data->pad));
   /* Create a new empty fragment */
   pad_data->fragment = gst_fragment_new ();
 
@@ -1128,10 +1143,13 @@ gst_base_adaptive_sink_create_empty_fragment (GstBaseAdaptiveSink * sink,
   /* If fragments are not chunked in files, reuse the same file (with index=0) */
   if (!sink->chunked)
     index = 0;
-  frag_name =
-      g_strdup_printf (sink->fragment_tpl, sink->fragment_prefix,
+
+  frag_name = g_strdup_printf (sink->fragment_tpl, sink->fragment_prefix,
       gst_pad_get_name (pad_data->pad), index);
-  gst_fragment_set_name (pad_data->fragment, frag_name);
+  frag_filename = g_build_path (G_DIR_SEPARATOR_S,
+      gst_pad_get_name (pad_data->pad), frag_name, NULL);
+  gst_fragment_set_name (pad_data->fragment, frag_filename);
+  g_free (frag_name);
 }
 
 static GstFlowReturn
@@ -1300,10 +1318,13 @@ on_new_decoded_pad_cb (GstElement * bin, GstPad * pad, gboolean is_last,
 {
   GstCaps *caps;
 
-  caps = gst_pad_get_current_caps (pad);
+  //return;
+  /* query caps triggers  a bug */
+  caps = gst_pad_query_caps (pad, NULL);
   pad_data->decoded_caps = g_list_append (pad_data->decoded_caps,
       gst_caps_copy (caps));
   gst_caps_unref (caps);
+
 }
 
 static void
@@ -1312,14 +1333,15 @@ on_drained_cb (GstElement * bin, GstBaseAdaptivePadData * pad_data)
   g_cond_signal (pad_data->discover_cond);
 }
 
-static void
+static gboolean
 gst_base_adaptive_sink_parse_stream (GstBaseAdaptiveSink * sink,
     GstBaseAdaptivePadData * pad_data)
 {
-  GstElement *pipeline;
-  GstElement *appsrc;
-  GstElement *decodebin;
+  GstElement *pipeline, *appsrc, *decodebin;
   GTimeVal timeout;
+  gboolean ret = TRUE;
+
+  GST_DEBUG_OBJECT (sink, "Demuxing first fragment");
 
   pipeline = gst_pipeline_new ("pipeline");
   appsrc = gst_element_factory_make ("appsrc", "appsrc");
@@ -1332,7 +1354,6 @@ gst_base_adaptive_sink_parse_stream (GstBaseAdaptiveSink * sink,
   g_signal_connect (decodebin, "pad_added",
       G_CALLBACK (on_new_decoded_pad_cb), pad_data);
 
-  g_object_set (G_OBJECT (appsrc), "is-live", TRUE, "num-buffers", 1, NULL);
   if (sink->supported_caps != NULL)
     g_object_set (G_OBJECT (decodebin), "caps", sink->supported_caps, NULL);
 
@@ -1341,18 +1362,24 @@ gst_base_adaptive_sink_parse_stream (GstBaseAdaptiveSink * sink,
 
   /* Push buffer and wait for the "drained" signal */
   g_mutex_lock (pad_data->discover_lock);
-  gst_element_set_state (pipeline, GST_STATE_PLAYING);
 
-  /* Parse the headers to get the muxed streams, needed for fragmented MP4 */
-  if (pad_data->streamheaders) {
+  /* Push the headers and the first fragment */
+  if (pad_data->streamheaders && !sink->chunked) {
+    g_object_set (G_OBJECT (appsrc), "num-buffers", 2, NULL);
     gst_buffer_ref (pad_data->streamheaders);
     gst_app_src_push_buffer (GST_APP_SRC (appsrc), pad_data->streamheaders);
+  } else {
+    g_object_set (G_OBJECT (appsrc), "num-buffers", 1, NULL);
   }
-  /* FIXME: Push first fragment too for formats with no headers like MPEGT-TS */
+  gst_buffer_ref (pad_data->fragment);
+  gst_app_src_push_buffer (GST_APP_SRC (appsrc), pad_data->fragment);
+
+  gst_element_set_state (pipeline, GST_STATE_PAUSED);
 
   if (!g_cond_timed_wait (pad_data->discover_cond, pad_data->discover_lock,
           &timeout)) {
     GST_WARNING_OBJECT (sink, "Timed out decoding the fragment");
+    ret = FALSE;
   }
   g_mutex_unlock (pad_data->discover_lock);
 
@@ -1360,4 +1387,5 @@ gst_base_adaptive_sink_parse_stream (GstBaseAdaptiveSink * sink,
   gst_element_set_state (pipeline, GST_STATE_NULL);
   gst_element_get_state (pipeline, NULL, NULL, 0);
   g_object_unref (pipeline);
+  return ret;
 }

@@ -41,6 +41,9 @@ GST_DEBUG_CATEGORY_STATIC (gst_hls_sink_debug);
 #define DEFAULT_WRITE_TO_DISK TRUE
 #define DEFAULT_DELETE_OLD_FILES TRUE
 
+#define SUPPORTED_CAPS "video/x-h264; audio/mpeg, mpegversion=2;"\
+  " audio/mpeg, mpegversion=4"
+
 enum
 {
   PROP_0,
@@ -143,6 +146,7 @@ gst_hls_sink_init (GstHlsSink * sink)
   bsink->fragment_duration = DEFAULT_TARGET_DURATION * GST_SECOND;
   bsink->fragment_tpl = DEFAULT_FRAGMENT_TEMPLATE;
   bsink->append_headers = TRUE;
+  bsink->supported_caps = gst_caps_from_string (SUPPORTED_CAPS);
 
   sink->max_version = DEFAULT_MAX_VERSION;
   sink->stream_title = g_strdup (DEFAULT_STREAM_TITLE);

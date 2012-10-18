@@ -27,16 +27,14 @@ static void gst_m3u8_manager_finalize (GObject * gobject);
 
 static GFile *
 gst_m3u8_manager_create_playlist_file (GstM3u8Manager * manager,
-    const gchar * name, const gchar * dirname)
+    const gchar * name)
 {
   gchar *filename, *path;
   GFile *file;
 
   filename = g_strdup_printf ("%s.m3u8", name);
-  if (dirname == NULL)
-    dirname = "";
-  path = g_build_path (GST_STREAMS_MANAGER (manager)->output_directory,
-      dirname, filename, NULL);
+  path = g_build_filename (GST_STREAMS_MANAGER (manager)->output_directory,
+      filename, NULL);
   file = g_file_new_for_path (path);
   g_free (filename);
   g_free (path);
@@ -65,7 +63,7 @@ gst_m3u8_manager_new (gchar * base_url, gchar * title, gchar * fragment_prefix,
   gst_streams_manager_set_base_url (bmanager, base_url);
   gst_streams_manager_set_title (bmanager, title);
   gst_streams_manager_set_fragment_prefix (bmanager, fragment_prefix);
-  file = gst_m3u8_manager_create_playlist_file (manager, variant_pl_name, NULL);
+  file = gst_m3u8_manager_create_playlist_file (manager, variant_pl_name);
   manager->variant_playlist =
       gst_m3u8_variant_playlist_new (variant_pl_name, base_url, file);
 
@@ -110,8 +108,7 @@ gst_m3u8_manager_add_stream (GstStreamsManager * bmanager, GstPad * pad,
 
   stream_name = gst_pad_get_name (pad);
 
-  file =
-      gst_m3u8_manager_create_playlist_file (manager, stream_name, stream_name);
+  file = gst_m3u8_manager_create_playlist_file (manager, stream_name);
 
   playlist = gst_m3u8_playlist_new (stream_name, bmanager->base_url, file,
       avg_bitrate, manager->max_version, bmanager->window_size / GST_SECOND,
