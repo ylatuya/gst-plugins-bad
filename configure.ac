@@ -2385,6 +2385,7 @@ gst-libs/gst/Makefile
 gst-libs/gst/basecamerabinsrc/Makefile
 gst-libs/gst/egl/Makefile
 gst-libs/gst/insertbin/Makefile
+gst-libs/gst/baseadaptive/Makefile
 gst-libs/gst/interfaces/Makefile
 gst-libs/gst/codecparsers/Makefile
 gst-libs/gst/mpegts/Makefile
