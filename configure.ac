@@ -364,6 +364,7 @@ AG_GST_CHECK_PLUGIN(bayer)
 AG_GST_CHECK_PLUGIN(camerabin2)
 AG_GST_CHECK_PLUGIN(cdxaparse)
 AG_GST_CHECK_PLUGIN(coloreffects)
+AG_GST_CHECK_PLUGIN(dash)
 AG_GST_CHECK_PLUGIN(dataurisrc)
 AG_GST_CHECK_PLUGIN(dccp)
 AG_GST_CHECK_PLUGIN(debugutils)
@@ -1062,6 +1063,17 @@ translit(dnm, m, l) AM_CONDITIONAL(USE_VOAACENC, true)
 AG_GST_CHECK_FEATURE(VOAACENC, [vo-aacenc library], vo-aacenc, [
   AG_GST_PKG_CHECK_MODULES(VOAACENC, vo-aacenc >= 0.1.0)
 ])
+
+dnl *** dashsink ***
+translit(dnm, m, l) AM_CONDITIONAL(USE_DASH, true)
+AG_GST_CHECK_FEATURE(DASH, [DASH sink], dash, [
+  PKG_CHECK_MODULES(LIBXML2, libxml-2.0 , [
+    HAVE_LIBXML2="yes" ], [
+    HAVE_LIBXML2="no"
+  ])
+])
+AC_SUBST(LIBXML2_CFLAGS)
+AC_SUBST(LIBXML2_LIBS)
 
 dnl *** apexsink ***
 translit(dnm, m, l) AM_CONDITIONAL(USE_APEXSINK, true)
@@ -2326,6 +2338,7 @@ gst/bayer/Makefile
 gst/camerabin2/Makefile
 gst/cdxaparse/Makefile
 gst/coloreffects/Makefile
+gst/dash/Makefile
 gst/dataurisrc/Makefile
 gst/dccp/Makefile
 gst/debugutils/Makefile
