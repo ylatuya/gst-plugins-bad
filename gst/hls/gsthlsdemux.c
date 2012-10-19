@@ -1074,8 +1074,8 @@ gst_hls_demux_update_playlist (GstHLSDemux * demux, gboolean update)
 
     GST_M3U8_CLIENT_LOCK (demux->client);
     last_sequence =
-        GST_M3U8_MEDIA_FILE (g_list_last (demux->client->current->
-            files)->data)->sequence;
+        GST_M3U8_MEDIA_FILE (g_list_last (demux->client->current->files)->
+        data)->sequence;
 
     if (demux->client->sequence >= last_sequence - 3) {
       GST_DEBUG_OBJECT (demux, "Sequence is beyond playlist. Moving back to %d",
