@@ -41,8 +41,9 @@ GST_DEBUG_CATEGORY_STATIC (gst_hls_sink_debug);
 #define DEFAULT_WRITE_TO_DISK TRUE
 #define DEFAULT_DELETE_OLD_FILES TRUE
 
-#define SUPPORTED_CAPS "video/x-h264; audio/mpeg, mpegversion=2;"\
-  " audio/mpeg, mpegversion=4"
+#define SUPPORTED_CAPS "video/x-h264; " \
+  "audio/mpeg, mpegversion=1, layer=3;"\
+  "audio/mpeg, mpegversion={2, 4}"
 
 enum
 {
