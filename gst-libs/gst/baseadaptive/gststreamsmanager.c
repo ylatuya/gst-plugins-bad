@@ -102,7 +102,7 @@ gst_streams_manager_render (GstStreamsManager * man, GstPad * pad,
 
 gboolean
 gst_streams_manager_add_stream (GstStreamsManager * man, GstPad * pad,
-    guint avg_bitrate, GList * substreams_caps, GstMediaRepFile ** file)
+    guint avg_bitrate, GList * substreams_caps, GstMediaRepFile ** rep_file)
 {
   GstStreamsManagerClass *bclass;
   gboolean ret = TRUE;
@@ -112,9 +112,10 @@ gst_streams_manager_add_stream (GstStreamsManager * man, GstPad * pad,
 
   bclass = GST_STREAMS_MANAGER_GET_CLASS (man);
 
+  *rep_file = NULL;
   g_mutex_lock (man->lock);
   if (bclass->add_stream != NULL)
-    ret = bclass->add_stream (man, pad, avg_bitrate, substreams_caps, file);
+    ret = bclass->add_stream (man, pad, avg_bitrate, substreams_caps, rep_file);
   g_mutex_unlock (man->lock);
 
   return ret;
@@ -129,6 +130,7 @@ gst_streams_manager_eos (GstStreamsManager * man, GstPad * pad,
 
   bclass = GST_STREAMS_MANAGER_GET_CLASS (man);
 
+  *rep_file = NULL;
   g_mutex_lock (man->lock);
   if (bclass->eos != NULL)
     ret = bclass->eos (man, pad, rep_file);
@@ -160,7 +162,7 @@ gst_streams_manager_add_headers (GstStreamsManager * man,
 
 gboolean
 gst_streams_manager_add_fragment (GstStreamsManager * man,
-    GstPad * pad, GstBuffer * fragment, GstMediaRepFile ** file,
+    GstPad * pad, GstBuffer * fragment, GstMediaRepFile ** rep_file,
     GList ** removed_fragments)
 {
   GstStreamsManagerClass *bclass;
@@ -172,9 +174,13 @@ gst_streams_manager_add_fragment (GstStreamsManager * man,
 
   bclass = GST_STREAMS_MANAGER_GET_CLASS (man);
 
+  *rep_file = NULL;
+  *removed_fragments = NULL;
+
   g_mutex_lock (man->lock);
   if (bclass->add_fragment)
-    ret = bclass->add_fragment (man, pad, fragment, file, removed_fragments);
+    ret = bclass->add_fragment (man, pad, fragment, rep_file,
+        removed_fragments);
   g_mutex_unlock (man->lock);
 
   return ret;
