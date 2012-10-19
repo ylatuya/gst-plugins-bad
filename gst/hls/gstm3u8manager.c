@@ -144,8 +144,6 @@ gst_m3u8_manager_add_fragment (GstStreamsManager * bmanager,
   playlist = gst_m3u8_variant_playlist_get_variant (manager->variant_playlist,
       gst_pad_get_name (pad));
   if (playlist == NULL) {
-    *removed_fragments = NULL;
-    *rep_file = NULL;
     return FALSE;
   }
 
@@ -189,7 +187,6 @@ gst_m3u8_manager_eos (GstStreamsManager * bmanager, GstPad * pad,
   playlist = gst_m3u8_variant_playlist_get_variant (manager->variant_playlist,
       gst_pad_get_name (pad));
   if (playlist == NULL) {
-    *rep_file = NULL;
     return FALSE;
   }
 
