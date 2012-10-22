@@ -90,6 +90,7 @@ typedef struct
   GCancellable *cancellable;
   guint count;
   GFile *init_segment;
+  gboolean is_eos;
 
   GMutex *lock;
   GMutex *discover_lock;
@@ -158,6 +159,7 @@ gst_base_adaptive_sink_pad_data_new (GstPad * pad)
   pad_data->discover_lock = g_mutex_new ();
   pad_data->discover_cond = g_cond_new ();
   pad_data->init_segment = FALSE;
+  pad_data->is_eos = FALSE;
 
   return pad_data;
 }
@@ -1293,6 +1295,25 @@ gst_base_adaptive_process_new_stream (GstBaseAdaptiveSink * sink, GstPad * pad,
 }
 
 static gboolean
+gst_base_adaptive_sink_all_pads_eos (GstBaseAdaptiveSink * sink)
+{
+  GList *pad_datas;
+  gboolean eos = TRUE;
+
+  pad_datas = g_hash_table_get_values (sink->pad_datas);
+  while (pad_datas) {
+    GstBaseAdaptivePadData *p = (GstBaseAdaptivePadData *) pad_datas->data;
+    if (!p->is_eos) {
+      eos = FALSE;
+      break;
+    }
+    pad_datas = g_list_next (pad_datas);
+  }
+
+  return eos;
+}
+
+static gboolean
 gst_base_adaptive_sink_event (GstPad * pad, GstObject * parent,
     GstEvent * event)
 {
@@ -1318,15 +1339,20 @@ gst_base_adaptive_sink_event (GstPad * pad, GstObject * parent,
   else if (GST_EVENT_TYPE (event) == GST_EVENT_EOS) {
     GstMediaRepFile *rep_file;
     GstMessage *message;
+    gboolean all_eos;
 
     gst_streams_manager_eos (sink->streams_manager, pad, &rep_file);
     gst_base_adaptive_sink_update_playlist (sink, rep_file);
-    g_signal_emit (sink, gst_base_adaptive_sink_signals[SIGNAL_EOS], 0);
-
-    /* FIXME: Check that all pad are eos */
-    GST_DEBUG_OBJECT (sink, "Posting EOS");
-    message = gst_message_new_eos (GST_OBJECT_CAST (sink));
-    gst_element_post_message (GST_ELEMENT_CAST (sink), message);
+    GST_PAD_DATA_LOCK (pad_data);
+    pad_data->is_eos = TRUE;
+    all_eos = gst_base_adaptive_sink_all_pads_eos (sink);
+    GST_PAD_DATA_UNLOCK (pad_data);
+    if (all_eos) {
+      g_signal_emit (sink, gst_base_adaptive_sink_signals[SIGNAL_EOS], 0);
+      GST_DEBUG_OBJECT (sink, "Posting EOS");
+      message = gst_message_new_eos (GST_OBJECT_CAST (sink));
+      gst_element_post_message (GST_ELEMENT_CAST (sink), message);
+    }
   }
 
   else if (GST_EVENT_TYPE (event) == GST_EVENT_CAPS) {
