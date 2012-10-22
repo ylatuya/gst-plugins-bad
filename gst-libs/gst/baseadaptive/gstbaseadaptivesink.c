@@ -737,7 +737,7 @@ gst_base_adaptive_sink_send_force_key_unit_event (GstBaseAdaptiveSink * sink,
   GstEvent *event;
 
   event = gst_video_event_new_upstream_force_key_unit (ts,
-      sink->chunked && sink->prepend_headers, count);
+      sink->prepend_headers, count);
 
   if (!gst_pad_push_event (pad, event)) {
     GST_WARNING_OBJECT (sink, "Failed to push upstream force key unit event");
