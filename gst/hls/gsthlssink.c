@@ -35,7 +35,7 @@ GST_DEBUG_CATEGORY_STATIC (gst_hls_sink_debug);
 #define DEFAULT_TARGET_DURATION 10
 #define DEFAULT_FRAGMENT_TEMPLATE "%s-%s-%05d.ts"
 #define DEFAULT_MAX_WINDOW 10 * DEFAULT_TARGET_DURATION
-#define DEFAULT_MAX_VERSION 3
+#define DEFAULT_MAX_VERSION 2
 #define DEFAULT_IS_CHUNKED TRUE
 #define DEFAULT_IS_LIVE FALSE
 #define DEFAULT_WRITE_TO_DISK TRUE
@@ -123,8 +123,8 @@ gst_hls_sink_class_init (GstHlsSinkClass * klass)
 
   g_object_class_install_property (gobject_class, PROP_MAX_VERSION,
       g_param_spec_uint ("max-version", "Max supported version",
-          "Maximum supported version of the HLS protocol (default: 3)",
-          0, 8, DEFAULT_MAX_VERSION,
+          "Maximum supported version of the HLS protocol (default: 2)",
+          0, 4, DEFAULT_MAX_VERSION,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 }
 

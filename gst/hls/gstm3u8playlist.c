@@ -139,8 +139,9 @@ gst_m3u8_playlist_new (gchar * name, gchar * base_url, GFile * file,
   g_object_ref (file);
   playlist->file = file;
 
-  if (!chunked && version < 7) {
-    GST_WARNING ("Byteranges media segments are not support for versions < 7");
+  if (!chunked && version < 4) {
+    GST_WARNING
+        ("Byteranges media segments are not supported for versions < 4");
     chunked = TRUE;
   }
   playlist->chunked = chunked;
