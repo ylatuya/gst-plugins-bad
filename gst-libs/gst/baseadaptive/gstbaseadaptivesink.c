@@ -331,8 +331,7 @@ gst_base_adaptive_sink_class_init (GstBaseAdaptiveSinkClass * klass)
    */
   g_object_class_install_property (gobject_class, PROP_MAX_WINDOW,
       g_param_spec_uint ("max-window", "Max window",
-          "Maximum window for DVR", 0, G_MAXUINT32, 10 * 10,
-          G_PARAM_READWRITE));
+          "Maximum window for DVR", 0, 0, G_PARAM_READWRITE));
 
   /**
    * GstBaseAdaptiveSink:fragment-duration
@@ -419,6 +418,7 @@ gst_base_adaptive_sink_init (GstBaseAdaptiveSink * sink)
   sink->fragment_tpl = "%s-%s-%05d.frag";
   sink->fragment_duration = 10 * GST_SECOND;
   sink->prepend_headers = TRUE;
+  sink->max_window = 0;
   /* This should be left to 1 until muxer supports properly queing force key
    * unit events */
   sink->min_cache = 1;
