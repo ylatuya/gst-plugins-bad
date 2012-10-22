@@ -62,9 +62,6 @@ gst_fragment_meta_init (GstFragmentMeta * meta, gpointer params,
     GstBuffer * buffer)
 {
   meta->download_start_time = g_get_real_time ();
-  meta->start_ts = 0;
-  meta->stop_ts = 0;
-  meta->offset = 0;
   meta->index = 0;
   meta->name = g_strdup ("");
   meta->completed = FALSE;
@@ -150,23 +147,6 @@ gst_fragment_set_name (GstBuffer * fragment, gchar * name)
   if (meta->name != NULL)
     g_free (meta->name);
   meta->name = name;
-}
-
-guint64
-gst_fragment_get_duration (GstBuffer * fragment)
-{
-  GstFragmentMeta *meta;
-
-  meta = gst_fragment_get_meta (fragment);
-  if (!meta) {
-    return FALSE;
-  }
-
-  if (!(GST_CLOCK_TIME_IS_VALID (meta->start_ts) &&
-          GST_CLOCK_TIME_IS_VALID (meta->stop_ts)))
-    return GST_CLOCK_TIME_NONE;
-
-  return meta->stop_ts - meta->start_ts;
 }
 
 gboolean

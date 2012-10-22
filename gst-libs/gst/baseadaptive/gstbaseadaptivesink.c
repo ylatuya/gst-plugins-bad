@@ -802,10 +802,8 @@ gst_base_adaptive_sink_create_empty_fragment (GstBaseAdaptiveSink * sink,
   /* Fill the fragment's metadata */
   meta = gst_buffer_get_fragment_meta (pad_data->fragment);
   meta->index = index;
-  meta->start_ts = start_ts;
-  meta->offset = offset;
-  if (pad_data->streamheaders != NULL && sink->append_headers)
-    gst_fragment_set_headers (pad_data->fragment, pad_data->streamheaders);
+  GST_BUFFER_PTS (pad_data->fragment) = start_ts;
+  GST_BUFFER_OFFSET (pad_data->fragment) = offset;
 
   /* If fragments are not chunked in files, reuse the same file (with index=0) */
   if (!sink->chunked)
@@ -827,7 +825,6 @@ gst_base_adaptive_sink_chain (GstPad * pad, GstObject * element,
 {
   GstBaseAdaptiveSink *sink;
   GstBaseAdaptivePadData *pad_data;
-  GstFragmentMeta *meta;
   GstFlowReturn ret = GST_FLOW_OK;
 
   sink = GST_BASE_ADAPTIVE_SINK (element);
@@ -857,9 +854,8 @@ gst_base_adaptive_sink_chain (GstPad * pad, GstObject * element,
         }
       }
 
-      meta = gst_buffer_get_fragment_meta (pad_data->fragment);
-      meta->offset += gst_buffer_get_size (pad_data->fragment);
-      offset = meta->offset;
+      offset = GST_BUFFER_OFFSET (pad_data->fragment) +
+          gst_buffer_get_size (pad_data->fragment);
 
       ret = gst_base_adaptive_sink_close_fragment (sink, pad_data, ts);
       if (ret != GST_FLOW_OK)
@@ -880,12 +876,12 @@ gst_base_adaptive_sink_chain (GstPad * pad, GstObject * element,
 
   GST_LOG_OBJECT (sink, "Added new buffer to fragment with timestamp: %"
       GST_TIME_FORMAT, GST_TIME_ARGS (GST_BUFFER_PTS (buffer)));
-  meta = gst_buffer_get_fragment_meta (pad_data->fragment);
-  if (G_UNLIKELY (meta->start_ts == GST_CLOCK_TIME_NONE))
-    meta->start_ts = GST_BUFFER_PTS (buffer);
-  meta->stop_ts = GST_BUFFER_PTS (buffer);
+  if (G_UNLIKELY (GST_BUFFER_PTS (pad_data->fragment) == GST_CLOCK_TIME_NONE))
+    GST_BUFFER_PTS (pad_data->fragment) = GST_BUFFER_PTS (buffer);
+  GST_BUFFER_DURATION (pad_data->fragment) =
+      GST_BUFFER_PTS (buffer) - GST_BUFFER_PTS (pad_data->fragment);
   if (GST_CLOCK_TIME_IS_VALID (GST_BUFFER_DURATION (buffer)))
-    meta->stop_ts += GST_BUFFER_DURATION (buffer);
+    GST_BUFFER_DURATION (pad_data->fragment) += GST_BUFFER_DURATION (buffer);
 
   gst_fragment_add_buffer (pad_data->fragment, buffer);
 
@@ -1184,7 +1180,6 @@ gst_base_adaptive_sink_parse_stream (GstBaseAdaptiveSink * sink,
   if (pad_data->streamheaders && !sink->chunked) {
     gst_buffer_ref (pad_data->streamheaders);
     gst_app_src_push_buffer (GST_APP_SRC (appsrc), pad_data->streamheaders);
-  } else {
   }
   gst_buffer_ref (pad_data->fragment);
   gst_app_src_push_buffer (GST_APP_SRC (appsrc), pad_data->fragment);
@@ -1380,8 +1375,9 @@ gst_base_adaptive_sink_close_fragment (GstBaseAdaptiveSink * sink,
   meta = gst_buffer_get_fragment_meta (pad_data->fragment);
   meta->completed = TRUE;
   if (GST_CLOCK_TIME_IS_VALID (stop_ts))
-    meta->stop_ts = stop_ts;
-  duration = gst_fragment_get_duration (pad_data->fragment);
+    GST_BUFFER_DURATION (pad_data->fragment) =
+        stop_ts - GST_BUFFER_PTS (pad_data->fragment);
+  duration = GST_BUFFER_DURATION (pad_data->fragment);
 
   /* Build fragment file */
   fragment_filename =

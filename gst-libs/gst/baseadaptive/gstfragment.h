@@ -42,9 +42,6 @@ struct _GstFragmentMeta
   gboolean completed;           /* Whether the fragment is complete or not */
   guint64 download_start_time;  /* Epoch time when the download started */
   guint64 download_stop_time;   /* Epoch time when the download finished */
-  guint64 start_ts;             /* Start time of the fragment */
-  guint64 stop_ts;              /* Stop time of the fragment */
-  guint64 offset;               /* Bytes offset of the fragment in the stream */
   gboolean index;               /* Index of the fragment */
   gboolean discontinuous;       /* Whether this fragment is discontinuous or not */
   GFile *file;                  /* File where this fragment is stored in disk */
@@ -56,7 +53,6 @@ GType gst_fragment_meta_api_get_type (void);
 gboolean gst_fragment_set_headers (GstBuffer *fragment, GstBuffer *headers);
 gboolean gst_fragment_add_buffer (GstBuffer *fragment, GstBuffer *buffer);
 void gst_fragment_set_name (GstBuffer *buffer, gchar *name);
-guint64 gst_fragment_get_duration (GstBuffer *fragment);
 void gst_fragment_set_file (GstBuffer *fragment, GFile *file);
 GstBuffer * gst_fragment_new (void);
 
