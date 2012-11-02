@@ -2431,23 +2431,19 @@ eglglessink_plugin_init (GstPlugin * plugin)
       GST_TYPE_EGLGLESSINK);
 }
 
-/* PACKAGE: this is usually set by autotools depending on some _INIT macro
- * in configure.ac and then written into and defined in config.h, but we can
- * just set it ourselves here in case someone doesn't use autotools to
- * compile this code. GST_PLUGIN_DEFINE needs PACKAGE to be defined.
- */
-#ifndef PACKAGE
-#define PACKAGE "EGL/GLES Sink"
-#endif
-
-#ifndef VERSION
-#define VERSION "0.911"
-#endif
-
 /* gstreamer looks for this structure to register eglglessinks */
+#ifdef GST_PLUGIN_DEFINE2
 GST_PLUGIN_DEFINE2 (GST_VERSION_MAJOR,
     GST_VERSION_MINOR,
     eglglessink,
     "EGL/GLES sink",
     eglglessink_plugin_init,
-    VERSION, "LGPL", "GStreamer", "http://gstreamer.net/")
+    VERSION, GST_LICENSE, GST_PACKAGE_NAME, GST_PACKAGE_ORIGIN)
+#else
+GST_PLUGIN_DEFINE (GST_VERSION_MAJOR,
+    GST_VERSION_MINOR,
+    "eglglessink",
+    "EGL/GLES sink",
+    eglglessink_plugin_init,
+    VERSION, GST_LICENSE, GST_PACKAGE_NAME, GST_PACKAGE_ORIGIN)
+#endif
