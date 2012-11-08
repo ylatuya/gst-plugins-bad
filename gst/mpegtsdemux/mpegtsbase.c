@@ -1333,9 +1333,18 @@ mpegts_base_sink_event (GstPad * pad, GstEvent * event)
           ", position:%" G_GINT64_FORMAT, start, stop, position);
       gst_segment_set_newsegment_full (&base->segment, update, rate,
           applied_rate, format, start, stop, position);
+
+      /* Check if we need to switch PCR/PTS handling */
+      if (base->segment.format == GST_FORMAT_TIME) {
+        base->packetizer->calculate_offset = FALSE;
+        base->packetizer->calculate_skew = TRUE;
+      } else {
+        base->packetizer->calculate_offset = TRUE;
+        base->packetizer->calculate_skew = FALSE;
+      }
       gst_event_unref (event);
-    }
       break;
+    }
     case GST_EVENT_EOS:
       res = GST_MPEGTS_BASE_GET_CLASS (base)->push_event (base, event);
       res = gst_mpegts_base_handle_eos (base);
@@ -1748,7 +1757,9 @@ mpegts_base_sink_activate_pull (GstPad * pad, gboolean active)
   MpegTSBase *base = GST_MPEGTS_BASE (GST_OBJECT_PARENT (pad));
   if (active) {
     base->mode = BASE_MODE_SCANNING;
+    /* When working pull-based, we always use offsets for estimation */
     base->packetizer->calculate_offset = TRUE;
+    base->packetizer->calculate_skew = TRUE;
     return gst_pad_start_task (pad, (GstTaskFunction) mpegts_base_loop, base);
   } else
     return gst_pad_stop_task (pad);
@@ -1759,10 +1770,8 @@ mpegts_base_sink_activate_push (GstPad * pad, gboolean active)
 {
   MpegTSBase *base = GST_MPEGTS_BASE (GST_OBJECT_PARENT (pad));
   base->mode = BASE_MODE_PUSHING;
-  base->packetizer->calculate_skew = TRUE;
   return TRUE;
 }
-
 
 static GstStateChangeReturn
 mpegts_base_change_state (GstElement * element, GstStateChange transition)
