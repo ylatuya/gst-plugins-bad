@@ -1111,6 +1111,9 @@ gst_ts_demux_stream_flush (TSDemuxStream * stream)
   stream->nb_pts_rollover = 0;
   stream->nb_dts_rollover = 0;
   stream->continuity_counter = CONTINUITY_UNSET;
+  if (stream->flow_return == GST_FLOW_WRONG_STATE) {
+    stream->flow_return = GST_FLOW_OK;
+  }
 }
 
 static void
