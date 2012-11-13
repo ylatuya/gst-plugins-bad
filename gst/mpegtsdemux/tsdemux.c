@@ -331,7 +331,7 @@ gst_ts_demux_reset (MpegTSBase * base)
   demux->program_number = -1;
   demux->calculate_update_segment = FALSE;
 
-  gst_segment_init (&demux->segment, GST_FORMAT_TIME);
+  gst_segment_init (&demux->segment, GST_FORMAT_UNDEFINED);
   if (demux->segment_event) {
     gst_event_unref (demux->segment_event);
     demux->segment_event = NULL;
@@ -1142,16 +1142,6 @@ gst_ts_demux_program_started (MpegTSBase * base, MpegTSBaseProgram * program)
      * an update newsegment */
     demux->calculate_update_segment = !program->initial_program;
 
-    /* If we have an upstream time segment and it's the initial program, just use that */
-    if (program->initial_program && base->segment.format == GST_FORMAT_TIME) {
-      demux->segment = base->segment;
-      demux->segment_event =
-          gst_event_new_new_segment_full (FALSE, base->segment.rate,
-          base->segment.applied_rate, GST_FORMAT_TIME, base->segment.start,
-          base->segment.stop, base->segment.time);
-      GST_EVENT_SRC (demux->segment_event) = gst_object_ref (demux);
-    }
-
     /* FIXME : When do we emit no_more_pads ? */
 
     /* Inform scanner we have got our program */
@@ -1437,6 +1427,24 @@ calculate_and_push_newsegment (GstTSDemux * demux, TSDemuxStream * stream)
 
   GST_DEBUG ("Creating new newsegment for stream %p", stream);
 
+  /* 0) If we don't have a time segment yet try to recover segment info from
+   *    base when it's in time otherwise just initialize segment with
+   *    defaults.
+   *    It will happen only if it's first program or after flushes. */
+  if (demux->segment.format == GST_FORMAT_UNDEFINED) {
+    if (base->segment.format == GST_FORMAT_TIME) {
+      demux->segment = base->segment;
+      /* We can shortcut and create the segment event directly */
+      demux->segment_event =
+          gst_event_new_new_segment_full (FALSE, base->segment.rate,
+          base->segment.applied_rate, GST_FORMAT_TIME, base->segment.start,
+          base->segment.stop, base->segment.time);
+      GST_EVENT_SRC (demux->segment_event) = gst_object_ref (demux);
+    } else {
+      gst_segment_init (&demux->segment, GST_FORMAT_TIME);
+    }
+  }
+
   /* 1) If we need to calculate an update newsegment, do it
    * 2) If we need to calculate a new newsegment, do it
    * 3) If an update_segment is valid, push it
@@ -1644,6 +1652,13 @@ gst_ts_demux_flush (MpegTSBase * base)
   GstTSDemux *demux = GST_TS_DEMUX_CAST (base);
 
   gst_ts_demux_flush_streams (demux);
+
+  if (demux->segment_event) {
+    gst_event_unref (demux->segment_event);
+    demux->segment_event = NULL;
+  }
+  demux->calculate_update_segment = FALSE;
+  gst_segment_init (&demux->segment, GST_FORMAT_UNDEFINED);
 }
 
 static GstFlowReturn
