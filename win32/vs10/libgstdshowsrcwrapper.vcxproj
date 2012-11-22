@@ -22,7 +22,7 @@
     <Keyword>ManagedCProj</Keyword>
     <RootNamespace>libgstdshowsrcwrapper</RootNamespace>
     <GstSource>..\..\</GstSource>
-    <GstSdkPrefix>$(GSTREAMER_SDK_ROOT)\$(Arch)\</GstSdkPrefix>
+    <GstSdkPrefix>$(GSTREAMER_SDK_ROOT)</GstSdkPrefix>
     <GstProps>$(GstSdkPrefix)\share\vs\2010\</GstProps>
     <WindowsSdkDir>C:\Program Files\Microsoft SDKs\Windows\v7.1\</WindowsSdkDir>
     <DshowBaseClasses>$(WindowsSdkDir)\Samples\Multimedia\directshow\baseclasses\</DshowBaseClasses>

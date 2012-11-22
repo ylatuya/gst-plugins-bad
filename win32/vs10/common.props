@@ -24,11 +24,8 @@
   <ImportGroup Label="PropertySheets">
     <Import Project="msvcrt.props" />
   </ImportGroup>
-  <PropertyGroup Label="UserMacros" Condition=" '$(PlatformName)' == 'Win32' ">
-    <GstSdkPrefix>$(GSTREAMER_SDK_ROOT_X86)</GstSdkPrefix>
-  </PropertyGroup>
-  <PropertyGroup Label="UserMacros" Condition=" '$(PlatformName)' == 'x64' ">
-    <GstSdkPrefix>$(GSTREAMER_SDK_ROOT_X86_64)</GstSdkPrefix>
+  <PropertyGroup Label="UserMacros">
+    <GstSdkPrefix>$(GSTREAMER_SDK_ROOT)</GstSdkPrefix>
   </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>
