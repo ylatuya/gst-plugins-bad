@@ -22,6 +22,12 @@ endif
 # CDROM_DIR=
 # endif
 
+if USE_WASAPI
+WASAPI_DIR=wasapi
+else
+WASAPI_DIR=
+endif
+
 if USE_DIRECT3D
 D3DVIDEOSINK_DIR=d3dvideosink
 else
@@ -137,7 +143,7 @@ else
 OPENSLES_DIR=
 endif
 
-SUBDIRS = $(ACM_DIR) $(ANDROID_MEDIA_DIR) $(APPLE_MEDIA_DIR) $(AVC_DIR) $(D3DVIDEOSINK_DIR) $(DECKLINK_DIR) $(DIRECTDRAW_DIR) $(DIRECTSOUND_DIR) $(DIRECTSHOW_DIR) $(DVB_DIR) $(FBDEV_DIR) $(LINSYS_DIR) $(OSX_VIDEO_DIR) $(QT_DIR) $(SHM_DIR) $(VCD_DIR) $(VDPAU_DIR) $(WININET_DIR) $(PVR_DIR) $(OPENSLES_DIR)
+SUBDIRS = $(ACM_DIR) $(ANDROID_MEDIA_DIR) $(APPLE_MEDIA_DIR) $(AVC_DIR) $(D3DVIDEOSINK_DIR) $(DECKLINK_DIR) $(DIRECTDRAW_DIR) $(DIRECTSOUND_DIR) $(DIRECTSHOW_DIR) $(DVB_DIR) $(FBDEV_DIR) $(LINSYS_DIR) $(OSX_VIDEO_DIR) $(QT_DIR) $(SHM_DIR) $(VCD_DIR) $(VDPAU_DIR) $(WININET_DIR) $(PVR_DIR) $(OPENSLES_DIR) $(WASAPI_DIR)
 
 DIST_SUBDIRS = acmenc acmmp3dec androidmedia applemedia avc d3dvideosink decklink directdraw directsound dvb linsys fbdev dshowdecwrapper dshowsrcwrapper dshowvideosink \
 		osxvideo qtwrapper shm vcd vdpau wasapi wininet winks winscreencap pvr2d opensles
