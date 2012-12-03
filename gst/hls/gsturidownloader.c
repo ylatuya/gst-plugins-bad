@@ -41,6 +41,8 @@ struct _GstUriDownloaderPrivate
   GstPad *pad;
   GTimeVal *timeout;
   GstFragment *download;
+  gint64 length;
+  GMutex *usage_lock;
   GMutex *lock;
   GCond *cond;
 };
@@ -215,6 +217,9 @@ static GstFlowReturn
 gst_uri_downloader_chain (GstPad * pad, GstBuffer * buf)
 {
   GstUriDownloader *downloader;
+  GstBuffer *frag_buf;
+  gsize sfrag, sbuf;
+  gboolean eos = FALSE;
 
   downloader = GST_URI_DOWNLOADER (gst_pad_get_element_private (pad));
 
@@ -232,11 +237,29 @@ gst_uri_downloader_chain (GstPad * pad, GstBuffer * buf)
   if (downloader->priv->download->download_start_time == GST_CLOCK_TIME_NONE)
     downloader->priv->download->download_start_time = gst_util_get_timestamp ();
 
+  frag_buf = buf;
+  sbuf = GST_BUFFER_SIZE (buf);
   GST_LOG_OBJECT (downloader, "The uri fetcher received a new buffer "
-      "of size %u", GST_BUFFER_SIZE (buf));
-  if (!gst_fragment_add_buffer (downloader->priv->download, buf))
+      "of size %u", sbuf);
+
+  if (downloader->priv->length != -1) {
+    sfrag = gst_fragment_get_total_size (downloader->priv->download);
+    GST_DEBUG_OBJECT (downloader, "Fragment size is %u/%u", sfrag,
+        (gsize) downloader->priv->length);
+    if (sfrag + sbuf > downloader->priv->length) {
+      frag_buf = gst_buffer_create_sub (buf, 0,
+          downloader->priv->length - sfrag);
+      gst_buffer_unref (buf);
+      eos = TRUE;
+    }
+  }
+
+  if (!gst_fragment_add_buffer (downloader->priv->download, frag_buf))
     GST_WARNING_OBJECT (downloader, "Could not add buffer to fragment");
   GST_OBJECT_UNLOCK (downloader);
+
+  if (eos)
+    gst_pad_send_event (downloader->priv->pad, gst_event_new_eos ());
 
 done:
   {
@@ -315,7 +338,8 @@ gst_uri_downloader_set_uri (GstUriDownloader * downloader, const gchar * uri)
 }
 
 GstFragment *
-gst_uri_downloader_fetch_uri (GstUriDownloader * downloader, const gchar * uri)
+gst_uri_downloader_fetch_uri_range (GstUriDownloader * downloader,
+    const gchar * uri, gint64 offset, gint64 length)
 {
   GstStateChangeReturn ret;
   GstFragment *download = NULL;
@@ -328,6 +352,25 @@ gst_uri_downloader_fetch_uri (GstUriDownloader * downloader, const gchar * uri)
 
   downloader->priv->download = gst_fragment_new ();
   downloader->priv->download->download_start_time = GST_CLOCK_TIME_NONE;
+
+  ret = gst_element_set_state (downloader->priv->urisrc, GST_STATE_PAUSED);
+  if (ret == GST_STATE_CHANGE_FAILURE) {
+    g_object_unref (downloader->priv->download);
+    downloader->priv->download = NULL;
+    goto quit;
+  }
+
+  downloader->priv->length = length;
+  if (offset != -1 && length != -1) {
+    GST_INFO_OBJECT (downloader, "range request offset:%" G_GUINT64_FORMAT
+        " length:%" G_GUINT64_FORMAT, offset, length);
+    if (!gst_element_seek (downloader->priv->urisrc, 1, GST_FORMAT_BYTES,
+            GST_SEEK_FLAG_ACCURATE, GST_SEEK_TYPE_SET, offset,
+            GST_SEEK_TYPE_SET, offset + length)) {
+      GST_INFO_OBJECT (downloader->priv->urisrc,
+          "This server does not support range requests");
+    }
+  }
 
   ret = gst_element_set_state (downloader->priv->urisrc, GST_STATE_PLAYING);
   if (ret == GST_STATE_CHANGE_FAILURE) {
@@ -360,4 +403,10 @@ quit:
     g_mutex_unlock (downloader->priv->lock);
     return download;
   }
+}
+
+GstFragment *
+gst_uri_downloader_fetch_uri (GstUriDownloader * downloader, const gchar * uri)
+{
+  return gst_uri_downloader_fetch_uri_range (downloader, uri, -1, -1);
 }
