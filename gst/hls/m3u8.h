@@ -65,6 +65,8 @@ struct _GstM3U8MediaFile
   GstClockTime duration;
   gchar *uri;
   guint sequence;               /* the sequence nb of this file */
+  gint64 offset;                /* offset for byte-ranges */
+  gint64 length;                /* length for byte-ranges */
 };
 
 struct _GstM3U8Client
@@ -83,7 +85,7 @@ gboolean gst_m3u8_client_update (GstM3U8Client * client, gchar * data);
 void gst_m3u8_client_set_current (GstM3U8Client * client, GstM3U8 * m3u8);
 gboolean gst_m3u8_client_get_next_fragment (GstM3U8Client * client,
     gboolean * discontinuity, const gchar ** uri, GstClockTime * duration,
-    GstClockTime * timestamp);
+    GstClockTime * timestamp, gint64 * offset, gint64 * length);
 void gst_m3u8_client_get_current_position (GstM3U8Client * client,
     GstClockTime * timestamp);
 GstClockTime gst_m3u8_client_get_duration (GstM3U8Client * client);
