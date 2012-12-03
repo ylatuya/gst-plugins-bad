@@ -49,6 +49,8 @@ struct _GstFragment
   guint64 stop_time;            /* Stop time of the fragment */
   gboolean index;               /* Index of the fragment */
   gboolean discontinuous;       /* Whether this fragment is discontinuous or not */
+  guint64 offset;               /* Offset of this fragment */
+  guint64 length;               /* Length of this fragment */
 
   GstFragmentPrivate *priv;
 };
