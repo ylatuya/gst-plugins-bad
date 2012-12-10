@@ -203,6 +203,7 @@ check_PROGRAMS = \
 	$(check_logoinsert) \
 	elements/h263parse \
 	elements/h264parse \
+	elements/hlsdemux \
 	elements/mpegtsmux \
 	elements/mpegvideoparse \
 	elements/mpeg4videoparse \
@@ -336,6 +337,11 @@ elements_mpegtsmux_LDADD = $(GST_PLUGINS_BASE_LIBS) -lgstvideo-0.10 $(GST_BASE_L
 
 elements_uvch264demux_CFLAGS = -DUVCH264DEMUX_DATADIR="$(srcdir)/elements/uvch264demux_data" \
 				$(AM_CFLAGS)
+elements_hlsdemux_CFLAGS = $(GST_BASE_CFLAGS) $(AM_CFLAGS) -I$(top_builddir)/gst/hls
+elements_hlsdemux_LDADD = $(GST_BASE_LIBS) $(LDADD) \
+			  $(top_builddir)/gst/hls/.libs/libgstfragmented_la-m3u8.o\
+			  $(top_builddir)/gst/hls/.libs/libgstfragmented_la-gstfragment.o
+elements_hlsdemux_SOURCES = elements/hlsdemux.c
 
 EXTRA_DIST = gst-plugins-bad.supp $(uvch264_dist_data)
 
