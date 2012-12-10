@@ -1611,7 +1611,7 @@ gst_video_decoder_chain_forward (GstVideoDecoder * decoder,
   if (priv->current_frame == NULL)
     priv->current_frame = gst_video_decoder_new_frame (decoder);
 
-  if (GST_BUFFER_TIMESTAMP_IS_VALID (buf)) {
+  if (GST_BUFFER_TIMESTAMP_IS_VALID (buf) && !priv->packetized) {
     gst_video_decoder_add_timestamp (decoder, buf);
   }
   priv->input_offset += GST_BUFFER_SIZE (buf);
@@ -2357,7 +2357,7 @@ gst_video_decoder_clip_and_push_buf (GstVideoDecoder * decoder, GstBuffer * buf)
   /* we got data, so note things are looking up again, reduce
    * the error count, if there is one */
   if (G_UNLIKELY (priv->error_count))
-    priv->error_count--;
+    priv->error_count = 0;
 
   ret = gst_pad_push (decoder->srcpad, buf);
 
@@ -2733,7 +2733,7 @@ gst_video_decoder_set_src_caps (GstVideoDecoder * decoder)
       state->info.par_n, state->info.par_d,
       state->info.fps_n, state->info.fps_d);
 
-  if (G_UNLIKELY (state->caps == NULL))
+  if (state->caps == NULL)
     state->caps = gst_video_info_to_caps (&state->info);
 
   GST_DEBUG_OBJECT (decoder, "setting caps %" GST_PTR_FORMAT, state->caps);
@@ -2895,6 +2895,29 @@ gst_video_decoder_get_max_decode_time (GstVideoDecoder *
   return deadline;
 }
 
+/**
+ * gst_video_decoder_get_qos_proportion:
+ * @decoder: a #GstVideoDecoder
+ *     current QoS proportion, or %NULL
+ *
+ * Returns: The current QoS proportion.
+ *
+ * Since: 1.0.3
+ */
+gdouble
+gst_video_decoder_get_qos_proportion (GstVideoDecoder * decoder)
+{
+  gdouble proportion;
+
+  g_return_val_if_fail (GST_IS_VIDEO_DECODER (decoder), 1.0);
+
+  GST_OBJECT_LOCK (decoder);
+  proportion = decoder->priv->proportion;
+  GST_OBJECT_UNLOCK (decoder);
+
+  return proportion;
+}
+
 GstFlowReturn
 _gst_video_decoder_error (GstVideoDecoder * dec, gint weight,
     GQuark domain, gint code, gchar * txt, gchar * dbg, const gchar * file,
@@ -2911,6 +2934,8 @@ _gst_video_decoder_error (GstVideoDecoder * dec, gint weight,
         domain, code, txt, dbg, file, function, line);
     return GST_FLOW_ERROR;
   } else {
+    g_free (txt);
+    g_free (dbg);
     return GST_FLOW_OK;
   }
 }
