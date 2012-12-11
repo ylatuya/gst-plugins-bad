@@ -25,6 +25,7 @@
 
 #include <gst/check/gstcheck.h>
 #include "m3u8.h"
+#include "gsthlsadaptation.h"
 
 GST_DEBUG_CATEGORY (fragmented_debug);
 
@@ -585,6 +586,23 @@ GST_START_TEST (test_get_target_duration)
 
 GST_END_TEST;
 
+GST_START_TEST (test_get_streams_bitrates)
+{
+  GstM3U8Client *client;
+  GList *bandwidths;
+
+  client = load_playlist (VARIANT_PLAYLIST, FALSE);
+  bandwidths = gst_m3u8_client_get_streams_bitrates (client);
+  assert_equals_int (g_list_length (bandwidths), 4);
+  assert_equals_int (GPOINTER_TO_UINT (g_list_nth_data (bandwidths, 0)), 65000);
+  assert_equals_int (GPOINTER_TO_UINT (g_list_nth_data (bandwidths, 3)),
+      768000);
+
+  gst_m3u8_client_free (client);
+}
+
+GST_END_TEST;
+
 GST_START_TEST (test_get_stream_for_bitrate)
 {
   GstM3U8Client *client;
@@ -925,11 +943,220 @@ GST_START_TEST (test_simulation)
 
 GST_END_TEST;
 
+GST_START_TEST (test_adaptation_add_fragments)
+{
+  GstHLSAdaptation *adaptation;
+  GstHLSAdaptationFragment *fragment;
+
+  adaptation = gst_hls_adaptation_new ();
+  adaptation->max_fragments = 3;
+  assert_equals_int (g_list_length (adaptation->fragments), 0);
+
+  gst_hls_adaptation_add_fragment (adaptation, 100000, 1 * GST_SECOND);
+  assert_equals_int (g_list_length (adaptation->fragments), 1);
+  fragment =
+      (GstHLSAdaptationFragment *) g_list_last (adaptation->fragments)->data;
+  assert_equals_int (100000, fragment->size);
+  assert_equals_uint64 (fragment->download_time, 1 * GST_SECOND);
+
+  gst_hls_adaptation_add_fragment (adaptation, 200000, 2 * GST_SECOND);
+  assert_equals_int (g_list_length (adaptation->fragments), 2);
+  fragment =
+      (GstHLSAdaptationFragment *) g_list_last (adaptation->fragments)->data;
+  assert_equals_int (fragment->size, 200000);
+  assert_equals_uint64 (fragment->download_time, 2 * GST_SECOND);
+
+  gst_hls_adaptation_add_fragment (adaptation, 300000, 3 * GST_SECOND);
+  assert_equals_int (g_list_length (adaptation->fragments), 3);
+  fragment =
+      (GstHLSAdaptationFragment *) g_list_last (adaptation->fragments)->data;
+  assert_equals_int (fragment->size, 300000);
+  assert_equals_uint64 (fragment->download_time, 3 * GST_SECOND);
+
+  gst_hls_adaptation_add_fragment (adaptation, 400000, 4 * GST_SECOND);
+  assert_equals_int (g_list_length (adaptation->fragments), 3);
+  fragment =
+      (GstHLSAdaptationFragment *) g_list_last (adaptation->fragments)->data;
+  assert_equals_int (fragment->size, 400000);
+  assert_equals_uint64 (fragment->download_time, 4 * GST_SECOND);
+  fragment =
+      (GstHLSAdaptationFragment *) g_list_first (adaptation->fragments)->data;
+  assert_equals_int (fragment->size, 200000);
+  assert_equals_uint64 (fragment->download_time, 2 * GST_SECOND);
+
+  gst_hls_adaptation_free (adaptation);
+}
+
+GST_END_TEST;
+
+GST_START_TEST (test_adaptation_reset)
+{
+  GstHLSAdaptation *adaptation;
+
+  adaptation = gst_hls_adaptation_new ();
+  adaptation->max_fragments = 3;
+  assert_equals_int (g_list_length (adaptation->fragments), 0);
+
+  gst_hls_adaptation_add_fragment (adaptation, 100000, 1 * GST_SECOND);
+  assert_equals_int (g_list_length (adaptation->fragments), 1);
+  gst_hls_adaptation_add_fragment (adaptation, 200000, 2 * GST_SECOND);
+  assert_equals_int (g_list_length (adaptation->fragments), 2);
+  gst_hls_adaptation_add_fragment (adaptation, 300000, 3 * GST_SECOND);
+  assert_equals_int (g_list_length (adaptation->fragments), 3);
+  gst_hls_adaptation_reset (adaptation);
+  assert_equals_int (g_list_length (adaptation->fragments), 0);
+
+  gst_hls_adaptation_free (adaptation);
+}
+
+GST_END_TEST;
+
+GST_START_TEST (test_adaptation_always_lowest)
+{
+  GstHLSAdaptation *adaptation;
+  guint bitrate;
+
+  adaptation = gst_hls_adaptation_new ();
+  gst_hls_adaptation_add_stream (adaptation, 50000);
+  gst_hls_adaptation_add_stream (adaptation, 100000);
+  gst_hls_adaptation_add_stream (adaptation, 400000);
+  gst_hls_adaptation_add_stream (adaptation, 1000000);
+  gst_hls_adaptation_set_algorithm_func (adaptation,
+      gst_hls_adaptation_always_lowest);
+
+  bitrate = gst_hls_adaptation_get_target_bitrate (adaptation);
+  assert_equals_int (bitrate, 50000);
+
+  gst_hls_adaptation_set_max_bitrate (adaptation, 500000);
+  bitrate = gst_hls_adaptation_get_target_bitrate (adaptation);
+  assert_equals_int (bitrate, 50000);
+
+  gst_hls_adaptation_set_connection_speed (adaptation, 500000);
+  bitrate = gst_hls_adaptation_get_target_bitrate (adaptation);
+  assert_equals_int (bitrate, 50000);
+
+  gst_hls_adaptation_free (adaptation);
+}
+
+GST_END_TEST;
+
+GST_START_TEST (test_adaptation_always_highest)
+{
+  GstHLSAdaptation *adaptation;
+  guint bitrate;
+
+  adaptation = gst_hls_adaptation_new ();
+  gst_hls_adaptation_add_stream (adaptation, 50000);
+  gst_hls_adaptation_add_stream (adaptation, 100000);
+  gst_hls_adaptation_add_stream (adaptation, 400000);
+  gst_hls_adaptation_add_stream (adaptation, 1000000);
+  gst_hls_adaptation_set_algorithm_func (adaptation,
+      gst_hls_adaptation_always_highest);
+
+  bitrate = gst_hls_adaptation_get_target_bitrate (adaptation);
+  assert_equals_int (bitrate, 1000000);
+
+  gst_hls_adaptation_set_connection_speed (adaptation, 500000);
+  bitrate = gst_hls_adaptation_get_target_bitrate (adaptation);
+  assert_equals_int (bitrate, 400000);
+
+  gst_hls_adaptation_set_max_bitrate (adaptation, 400000);
+  bitrate = gst_hls_adaptation_get_target_bitrate (adaptation);
+  assert_equals_int (bitrate, 400000);
+
+
+  gst_hls_adaptation_free (adaptation);
+}
+
+GST_END_TEST;
+
+GST_START_TEST (test_adaptation_fixed_bitrate)
+{
+  GstHLSAdaptation *adaptation;
+  guint bitrate;
+
+  adaptation = gst_hls_adaptation_new ();
+  gst_hls_adaptation_add_stream (adaptation, 50000);
+  gst_hls_adaptation_add_stream (adaptation, 100000);
+  gst_hls_adaptation_add_stream (adaptation, 400000);
+  gst_hls_adaptation_add_stream (adaptation, 1000000);
+  gst_hls_adaptation_set_algorithm_func (adaptation,
+      gst_hls_adaptation_fixed_bitrate);
+
+  bitrate = gst_hls_adaptation_get_target_bitrate (adaptation);
+  assert_equals_int (bitrate, 0);
+
+  gst_hls_adaptation_set_connection_speed (adaptation, 400000);
+  bitrate = gst_hls_adaptation_get_target_bitrate (adaptation);
+  assert_equals_int (bitrate, 400000);
+
+  gst_hls_adaptation_set_connection_speed (adaptation, 620000);
+  bitrate = gst_hls_adaptation_get_target_bitrate (adaptation);
+  assert_equals_int (bitrate, 620000);
+  gst_hls_adaptation_free (adaptation);
+}
+
+GST_END_TEST;
+GST_START_TEST (test_adaptation_bandwidth_estimation)
+{
+  GstHLSAdaptation *adaptation;
+  guint bitrate;
+
+  adaptation = gst_hls_adaptation_new ();
+  gst_hls_adaptation_add_stream (adaptation, 50000);
+  gst_hls_adaptation_add_stream (adaptation, 100000);
+  gst_hls_adaptation_add_stream (adaptation, 400000);
+  gst_hls_adaptation_add_stream (adaptation, 1000000);
+  gst_hls_adaptation_set_algorithm_func (adaptation,
+      gst_hls_adaptation_bandwidth_estimation);
+
+  bitrate = gst_hls_adaptation_get_target_bitrate (adaptation);
+  assert_equals_int (bitrate, -1);
+
+  gst_hls_adaptation_add_fragment (adaptation, 100000, 1 * GST_SECOND);
+  bitrate = gst_hls_adaptation_get_target_bitrate (adaptation);
+  assert_equals_int (bitrate, 800000);
+
+  /* The download is slower now and the average bitrate decreases */
+  gst_hls_adaptation_add_fragment (adaptation, 100000, 1.3 * GST_SECOND);
+  bitrate = gst_hls_adaptation_get_target_bitrate (adaptation);
+  assert_equals_int (bitrate, 665035);
+
+  /* The average bitrate should increase now slowly as the slow
+   * download has less and less weigth*/
+  gst_hls_adaptation_add_fragment (adaptation, 100000, 1 * GST_SECOND);
+  bitrate = gst_hls_adaptation_get_target_bitrate (adaptation);
+  assert_equals_int (bitrate, 754819);
+
+  gst_hls_adaptation_add_fragment (adaptation, 100000, 1 * GST_SECOND);
+  bitrate = gst_hls_adaptation_get_target_bitrate (adaptation);
+  assert_equals_int (bitrate, 783911);
+
+  gst_hls_adaptation_add_fragment (adaptation, 100000, 1 * GST_SECOND);
+  bitrate = gst_hls_adaptation_get_target_bitrate (adaptation);
+  assert_equals_int (bitrate, 794150);
+
+  gst_hls_adaptation_add_fragment (adaptation, 100000, 1 * GST_SECOND);
+  bitrate = gst_hls_adaptation_get_target_bitrate (adaptation);
+  assert_equals_int (bitrate, 797848);
+
+  /* We are back to original bitrate average now that the slow download is
+   * gone */
+  gst_hls_adaptation_add_fragment (adaptation, 100000, 1 * GST_SECOND);
+  bitrate = gst_hls_adaptation_get_target_bitrate (adaptation);
+  assert_equals_int (bitrate, 800000);
+
+  gst_hls_adaptation_free (adaptation);
+}
+
+GST_END_TEST;
+
 static Suite *
 hlsdemux_suite (void)
 {
   Suite *s = suite_create ("hlsdemux");
   TCase *tc_m3u8 = tcase_create ("m3u8client");
+  TCase *tc_adaptation = tcase_create ("adaptation");
 
   suite_add_tcase (s, tc_m3u8);
   tcase_add_test (tc_m3u8, test_load_main_playlist_invalid);
@@ -946,12 +1173,20 @@ hlsdemux_suite (void)
   tcase_add_test (tc_m3u8, test_get_duration);
   tcase_add_test (tc_m3u8, test_get_target_duration);
   tcase_add_test (tc_m3u8, test_get_stream_for_bitrate);
+  tcase_add_test (tc_m3u8, test_get_streams_bitrates);
   tcase_add_test (tc_m3u8, test_seek);
   tcase_add_test (tc_m3u8, test_alternate_audio_playlist);
   tcase_add_test (tc_m3u8, test_select_alternate);
   tcase_add_test (tc_m3u8, test_simulation);
   tcase_add_test (tc_m3u8, test_playlist_with_doubles_duration);
 
+  suite_add_tcase (s, tc_adaptation);
+  tcase_add_test (tc_m3u8, test_adaptation_add_fragments);
+  tcase_add_test (tc_m3u8, test_adaptation_reset);
+  tcase_add_test (tc_m3u8, test_adaptation_always_lowest);
+  tcase_add_test (tc_m3u8, test_adaptation_always_highest);
+  tcase_add_test (tc_m3u8, test_adaptation_fixed_bitrate);
+  tcase_add_test (tc_m3u8, test_adaptation_bandwidth_estimation);
   return s;
 }
 

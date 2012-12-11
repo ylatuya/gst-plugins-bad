@@ -188,6 +188,8 @@ gboolean gst_m3u8_client_check_sequence_validity      (GstM3U8Client * client);
 GstM3U8Stream * gst_m3u8_client_get_stream_for_bitrate (GstM3U8Client * client,
                                                         guint bitrate);
 
+GList * gst_m3u8_client_get_streams_bitrates           (GstM3U8Client *client);
+
 GstM3U8Stream * gst_m3u8_client_get_previous_stream    (GstM3U8Client * client);
 
 GstM3U8Stream * gst_m3u8_client_get_next_stream        (GstM3U8Client * client);

@@ -6,6 +6,7 @@ libgstfragmented_la_SOURCES =			\
 	gsthlsdemux.c				\
 	gstfragment.c				\
 	gsturidownloader.c			\
+	gsthlsadaptation.c			\
 	gstfragmentedplugin.c
 
 libgstfragmented_la_CFLAGS = $(GST_CFLAGS) $(GST_BASE_CFLAGS) $(SOUP_CFLAGS)
@@ -21,6 +22,7 @@ noinst_HEADERS = 			\
 	gstfragment.h				\
 	gsthlsdemux.h			\
 	gsturidownloader.h			\
+	gsthlsadaptation.h				\
 	m3u8.h
 
 Android.mk: Makefile.am $(BUILT_SOURCES)

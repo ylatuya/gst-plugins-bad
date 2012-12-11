@@ -29,6 +29,7 @@
 #include "m3u8.h"
 #include "gstfragmented.h"
 #include "gsturidownloader.h"
+#include "gsthlsadaptation.h"
 
 G_BEGIN_DECLS
 #define GST_TYPE_HLS_DEMUX \
@@ -67,11 +68,14 @@ struct _GstHLSDemux
   gboolean need_cache;          /* Wheter we need to cache some fragments before starting to push data */
   gboolean end_of_playlist;
   gboolean do_typefind;         /* Whether we need to typefind the next buffer */
+  GstHLSAdaptation *adaptation;
+  GstHLSAdaptationAlgorithmFunc algo_func;
 
   /* Properties */
   guint fragments_cache;        /* number of fragments needed to be cached to start playing */
   gfloat bitrate_limit;         /* limit of the available bitrate to use */
   guint connection_speed;       /* Network connection speed in kbps (0 = unknown) */
+  gint adaptation_algo;         /* Algorithm used to select the active stream */
 
   /* Streaming task */
   GstTask *stream_task;
@@ -96,6 +100,9 @@ struct _GstHLSDemuxClass
 };
 
 GType gst_hls_demux_get_type (void);
+
+void gst_hls_demux_set_adaptation_algorithm_func (GstHLSDemux *demux,
+                                                  GstHLSAdaptationAlgorithmFunc func);
 
 G_END_DECLS
 #endif /* __GST_HLS_DEMUX_H__ */
