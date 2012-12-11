@@ -53,14 +53,17 @@ struct _GstHLSDemux
 {
   GstElement parent;
 
-  GstPad *srcpad;
+  GstPad *video_srcpad;
+  GstPad *audio_srcpad;
   GstPad *sinkpad;
 
   GstBuffer *playlist;
-  GstCaps *input_caps;
+  GstCaps *video_input_caps;
+  GstCaps *audio_input_caps;
   GstUriDownloader *downloader;
   GstM3U8Client *client;        /* M3U8 client */
-  GQueue *queue;                /* Queue storing the fetched fragments */
+  GQueue *video_queue;          /* Queue storing the fetched fragments */
+  GQueue *audio_queue;          /* Queue storing the fetched fragments */
   gboolean need_cache;          /* Wheter we need to cache some fragments before starting to push data */
   gboolean end_of_playlist;
   gboolean do_typefind;         /* Whether we need to typefind the next buffer */
