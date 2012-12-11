@@ -76,8 +76,43 @@ enum
   PROP_ALT_AUDIO,
   PROP_SET_ALT_VIDEO,
   PROP_SET_ALT_AUDIO,
+  PROP_ADAPTATION_ALGORITHM,
   PROP_LAST
 };
+
+enum
+{
+  GST_HLS_ADAPTATION_ALWAYS_LOWEST,
+  GST_HLS_ADAPTATION_ALWAYS_HIGHEST,
+  GST_HLS_ADAPTATION_BANDWIDTH_ESTIMATION,
+  GST_HLS_ADAPTATION_FIXED_BITRATE,
+  GST_HLS_ADAPTATION_DISABLED,
+  GST_HLS_ADAPTATION_CUSTOM,
+};
+
+#define GST_HLS_ADAPTATION_ALGORITHM_TYPE (gst_hls_adaptation_algorithm_get_type())
+static GType
+gst_hls_adaptation_algorithm_get_type (void)
+{
+  static GType algorithm_type = 0;
+
+  static const GEnumValue algorithm_types[] = {
+    {GST_HLS_ADAPTATION_ALWAYS_LOWEST, "Always lowest bitrate", "lowest"},
+    {GST_HLS_ADAPTATION_ALWAYS_HIGHEST, "Always highest bitrate", "highest"},
+    {GST_HLS_ADAPTATION_BANDWIDTH_ESTIMATION, "Based on bandwidth estimation",
+        "bandwidth"},
+    {GST_HLS_ADAPTATION_FIXED_BITRATE,
+        "Fixed bitrate using the connection speed", "fixed"},
+    {GST_HLS_ADAPTATION_DISABLED, "Disables adaptive switching", "disabled"},
+    {0, NULL, NULL}
+  };
+
+  if (!algorithm_type) {
+    algorithm_type =
+        g_enum_register_static ("GstHLSAdaptionAlgorithm", algorithm_types);
+  }
+  return algorithm_type;
+}
 
 static const float update_interval_factor[] = { 1, 0.5, 1.5, 3 };
 
@@ -85,6 +120,7 @@ static const float update_interval_factor[] = { 1, 0.5, 1.5, 3 };
 #define DEFAULT_FAILED_COUNT 3
 #define DEFAULT_BITRATE_LIMIT 0.8
 #define DEFAULT_CONNECTION_SPEED    0
+#define DEFAULT_ADAPTATION_ALGORITHM GST_HLS_ADAPTATION_BANDWIDTH_ESTIMATION
 
 /* GObject */
 static void gst_hls_demux_set_property (GObject * object, guint prop_id,
@@ -117,6 +153,7 @@ static void gst_hls_demux_reset (GstHLSDemux * demux, gboolean dispose);
 static gboolean gst_hls_demux_set_location (GstHLSDemux * demux,
     const gchar * uri);
 static gchar *gst_hls_src_buf_to_utf8_playlist (GstBuffer * buf);
+static void gst_hls_demux_update_adaptation_algorithm (GstHLSDemux * demux);
 
 static void
 _do_init (GType type)
@@ -192,6 +229,11 @@ gst_hls_demux_dispose (GObject * obj)
   g_queue_free (demux->video_queue);
   g_queue_free (demux->audio_queue);
 
+  if (demux->adaptation != NULL) {
+    gst_hls_adaptation_free (demux->adaptation);
+    demux->adaptation = NULL;
+  }
+
   G_OBJECT_CLASS (parent_class)->dispose (obj);
 }
 
@@ -246,6 +288,14 @@ gst_hls_demux_class_init (GstHLSDemuxClass * klass)
       g_param_spec_string ("set-alt-video", "Set alternative video",
           "Set the alternative video renditions.", NULL,
           G_PARAM_READABLE | G_PARAM_STATIC_STRINGS));
+
+  g_object_class_install_property (gobject_class, PROP_ADAPTATION_ALGORITHM,
+      g_param_spec_enum ("adaptation-algorithm", "Adaptation Algorithm",
+          "Algorithm used for the stream bitrate selection",
+          GST_HLS_ADAPTATION_ALGORITHM_TYPE,
+          DEFAULT_ADAPTATION_ALGORITHM,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
   gstelement_class->change_state =
       GST_DEBUG_FUNCPTR (gst_hls_demux_change_state);
 }
@@ -263,6 +313,12 @@ gst_hls_demux_init (GstHLSDemux * demux, GstHLSDemuxClass * klass)
 
   /* Downloader */
   demux->downloader = gst_uri_downloader_new ();
+
+  /* Streams adaptation */
+  demux->adaptation = gst_hls_adaptation_new ();
+  gst_hls_adaptation_set_max_bitrate (demux->adaptation, DEFAULT_BITRATE_LIMIT);
+  gst_hls_adaptation_set_connection_speed (demux->adaptation,
+      DEFAULT_CONNECTION_SPEED);
 
   demux->do_typefind = TRUE;
 
@@ -300,9 +356,13 @@ gst_hls_demux_set_property (GObject * object, guint prop_id,
       break;
     case PROP_BITRATE_LIMIT:
       demux->bitrate_limit = g_value_get_float (value);
+      gst_hls_adaptation_set_max_bitrate (demux->adaptation,
+          demux->bitrate_limit);
       break;
     case PROP_CONNECTION_SPEED:
       demux->connection_speed = g_value_get_uint (value) * 1000;
+      gst_hls_adaptation_set_connection_speed (demux->adaptation,
+          demux->connection_speed);
       break;
     case PROP_SET_ALT_VIDEO:
       if (demux->client)
@@ -313,6 +373,10 @@ gst_hls_demux_set_property (GObject * object, guint prop_id,
       if (demux->client)
         gst_m3u8_client_set_alternate (demux->client, GST_M3U8_MEDIA_TYPE_AUDIO,
             g_value_get_string (value));
+      break;
+    case PROP_ADAPTATION_ALGORITHM:
+      demux->adaptation_algo = g_value_get_enum (value);
+      gst_hls_demux_update_adaptation_algorithm (demux);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -351,6 +415,9 @@ gst_hls_demux_get_property (GObject * object, guint prop_id, GValue * value,
                 GST_M3U8_MEDIA_TYPE_AUDIO));
       else
         g_value_set_pointer (value, NULL);
+      break;
+    case PROP_ADAPTATION_ALGORITHM:
+      g_value_set_enum (value, demux->adaptation_algo);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -533,6 +600,7 @@ gst_hls_demux_sink_event (GstPad * pad, GstEvent * event)
   switch (event->type) {
     case GST_EVENT_EOS:{
       gchar *playlist = NULL;
+      GList *walk;
 
       if (demux->playlist == NULL) {
         GST_WARNING_OBJECT (demux, "Received EOS without a playlist.");
@@ -565,6 +633,16 @@ gst_hls_demux_sink_event (GstPad * pad, GstEvent * event)
         return FALSE;
       }
 
+      for (walk = demux->client->main->streams; walk; walk = walk->next) {
+        GstM3U8Stream *stream;
+
+        if (walk == NULL)
+          break;
+        stream = GST_M3U8_STREAM (walk->data);
+        gst_hls_adaptation_add_stream (demux->adaptation, stream->bandwidth,
+            stream->width * stream->height);
+      }
+
       if (!ret && gst_m3u8_client_is_live (demux->client)) {
         GST_ELEMENT_ERROR (demux, RESOURCE, NOT_FOUND,
             ("Failed querying the playlist uri, "
@@ -583,6 +661,15 @@ gst_hls_demux_sink_event (GstPad * pad, GstEvent * event)
       gst_event_unref (event);
       gst_object_unref (demux);
       return TRUE;
+    case GST_EVENT_QOS:{
+      gdouble proportion;
+      GstClockTimeDiff diff;
+      GstClockTime timestamp;
+
+      gst_event_parse_qos (event, &proportion, &diff, &timestamp);
+      gst_hls_adaptation_update_qos_proportion (demux->adaptation, proportion);
+      break;
+    }
     default:
       break;
   }
@@ -673,6 +760,41 @@ gst_hls_demux_chain (GstPad * pad, GstBuffer * buf)
   gst_object_unref (demux);
 
   return GST_FLOW_OK;
+}
+
+static void
+gst_hls_demux_update_adaptation_algorithm (GstHLSDemux * demux)
+{
+  switch (demux->adaptation_algo) {
+    case GST_HLS_ADAPTATION_ALWAYS_LOWEST:
+      demux->algo_func = gst_hls_adaptation_always_lowest;
+      break;
+    case GST_HLS_ADAPTATION_ALWAYS_HIGHEST:
+      demux->algo_func = gst_hls_adaptation_always_highest;
+      break;
+    case GST_HLS_ADAPTATION_BANDWIDTH_ESTIMATION:
+      demux->algo_func = gst_hls_adaptation_bandwidth_estimation;
+      break;
+    case GST_HLS_ADAPTATION_FIXED_BITRATE:
+      demux->algo_func = gst_hls_adaptation_fixed_bitrate;
+      break;
+    case GST_HLS_ADAPTATION_DISABLED:
+      demux->algo_func = gst_hls_adaptation_disabled;
+      break;
+    case GST_HLS_ADAPTATION_CUSTOM:
+      return;
+    default:
+      g_assert_not_reached ();
+  }
+  gst_hls_adaptation_set_algorithm_func (demux->adaptation, demux->algo_func);
+}
+
+void
+gst_hls_demux_set_adaptation_algorithm_func (GstHLSDemux * demux,
+    GstHLSAdaptationAlgorithmFunc func)
+{
+  demux->adaptation_algo = GST_HLS_ADAPTATION_CUSTOM;
+  gst_hls_adaptation_set_algorithm_func (demux->adaptation, demux->algo_func);
 }
 
 static void
@@ -791,8 +913,9 @@ gst_hls_demux_push_fragment (GstHLSDemux * demux, gboolean is_video,
     pad = demux->audio_srcpad;
   }
 
-  if (g_queue_is_empty (queue))
+  if (g_queue_is_empty (queue)) {
     return TRUE;
+  }
 
   GST_LOG_OBJECT (demux, "Pushing %s fragment.", is_video ? "video" : "audio");
 
@@ -952,6 +1075,8 @@ gst_hls_demux_reset (GstHLSDemux * demux, gboolean dispose)
 
   demux->position_shift = 0;
   demux->need_segment = TRUE;
+
+  gst_hls_adaptation_reset (demux->adaptation);
 }
 
 static gboolean
@@ -1071,13 +1196,19 @@ gst_hls_demux_cache_fragments (GstHLSDemux * demux)
 {
   gint i;
   GstM3U8Stream *stream = NULL;
+  guint target_bitrate;
 
   /* If this playlist is a variant playlist, select the first one
    * and update it */
 
-  stream = gst_m3u8_client_get_stream_for_bitrate (demux->client,
-      demux->connection_speed);
-  gst_m3u8_client_set_current (demux->client, stream);
+  target_bitrate = gst_hls_adaptation_get_target_bitrate (demux->adaptation);
+  /* If we set the connection speed, use it for the first fragments. Otherwise
+   * use the default stream selected by the client */
+  if (target_bitrate != 0) {
+    stream = gst_m3u8_client_get_stream_for_bitrate (demux->client,
+        target_bitrate);
+    gst_m3u8_client_set_current (demux->client, stream);
+  }
 
   if (!gst_hls_demux_update_playlist (demux, FALSE)) {
     return FALSE;
@@ -1120,7 +1251,6 @@ gst_hls_demux_cache_fragments (GstHLSDemux * demux)
 
   demux->need_cache = FALSE;
   return TRUE;
-
 }
 
 static gchar *
@@ -1212,18 +1342,13 @@ gst_hls_demux_update_playlist (GstHLSDemux * demux, gboolean update)
 }
 
 static gboolean
-gst_hls_demux_change_playlist (GstHLSDemux * demux, guint max_bitrate)
+gst_hls_demux_change_playlist (GstHLSDemux * demux, guint target_bitrate)
 {
   GstM3U8Stream *previous_stream, *current_stream;
   gint old_bandwidth, new_bandwidth;
 
-  /* If user specifies a connection speed never use a playlist with a bandwidth
-   * superior than it */
-  if (demux->connection_speed != 0 && max_bitrate > demux->connection_speed)
-    max_bitrate = demux->connection_speed;
-
   current_stream = gst_m3u8_client_get_stream_for_bitrate (demux->client,
-      max_bitrate);
+      target_bitrate);
   previous_stream = demux->client->selected_stream;
 
 retry_failover_protection:
@@ -1237,8 +1362,8 @@ retry_failover_protection:
 
   gst_m3u8_client_set_current (demux->client, current_stream);
 
-  GST_INFO_OBJECT (demux, "Client was on %dbps, max allowed is %dbps, switching"
-      " to bitrate %dbps", old_bandwidth, max_bitrate, new_bandwidth);
+  GST_INFO_OBJECT (demux, "Client was on %dbps, target is %dbps, switching"
+      " to bitrate %dbps", old_bandwidth, target_bitrate, new_bandwidth);
 
   if (gst_hls_demux_update_playlist (demux, FALSE)) {
     GstStructure *s;
@@ -1310,38 +1435,15 @@ gst_hls_demux_schedule (GstHLSDemux * demux)
 static gboolean
 gst_hls_demux_switch_playlist (GstHLSDemux * demux)
 {
-  GTimeVal now;
-  GstClockTime diff;
-  gsize size = 0;
-  gint bitrate;
-  GstFragment *v_fragment = NULL, *a_fragment = NULL;
-
-  v_fragment = g_queue_peek_tail (demux->video_queue);
-  a_fragment = g_queue_peek_tail (demux->audio_queue);
-
-  GST_M3U8_CLIENT_LOCK (demux->client);
-  if (g_list_length (demux->client->main->streams) <= 1) {
-    GST_M3U8_CLIENT_UNLOCK (demux->client);
-    return TRUE;
-  }
-  GST_M3U8_CLIENT_UNLOCK (demux->client);
-
-  /* compare the time when the fragment was downloaded with the time when it was
-   * scheduled */
-  g_get_current_time (&now);
-  diff = (GST_TIMEVAL_TO_TIME (now) - GST_TIMEVAL_TO_TIME (demux->next_update));
-  if (v_fragment != NULL) {
-    size += gst_fragment_get_total_size (v_fragment);
-  }
-  if (a_fragment != NULL) {
-    size += gst_fragment_get_total_size (a_fragment);
-  }
-  bitrate = (size * 8) / ((double) diff / GST_SECOND);
+  gint target_bitrate;
 
   GST_DEBUG ("Downloaded %" G_GSIZE_FORMAT " bytes in %" GST_TIME_FORMAT
       ". Bitrate is : %d", size, GST_TIME_ARGS (diff), bitrate);
+  target_bitrate = gst_hls_adaptation_get_target_bitrate (demux->adaptation);
+  if (target_bitrate == -1)
+    return TRUE;
 
-  return gst_hls_demux_change_playlist (demux, bitrate * demux->bitrate_limit);
+  return gst_hls_demux_change_playlist (demux, target_bitrate);
 }
 
 static gboolean
@@ -1373,6 +1475,10 @@ gst_hls_demux_fetch_fragment (GstHLSDemux * demux, GstFragment * fragment,
 
   if (download == NULL)
     return FALSE;
+
+  gst_hls_adaptation_add_fragment (demux->adaptation,
+      gst_fragment_get_total_size (download),
+      download->download_stop_time - download->download_start_time);
 
   buffer_list = gst_fragment_get_buffer_list (download);
   buf = gst_buffer_list_get (buffer_list, 0, 0);

@@ -1551,3 +1551,22 @@ exit:
   GST_M3U8_CLIENT_UNLOCK (client);
   return ret;
 }
+
+GList *
+gst_m3u8_client_get_streams_bitrates (GstM3U8Client * client)
+{
+  GList *bitrates = NULL;
+  GList *walk;
+
+  GST_M3U8_CLIENT_LOCK (client);
+  for (walk = client->main->streams; walk; walk = walk->next) {
+    if (walk == NULL)
+      break;
+    bitrates =
+        g_list_append (bitrates,
+        GUINT_TO_POINTER (GST_M3U8_STREAM (walk->data)->bandwidth));
+  }
+  GST_M3U8_CLIENT_UNLOCK (client);
+
+  return bitrates;
+}
