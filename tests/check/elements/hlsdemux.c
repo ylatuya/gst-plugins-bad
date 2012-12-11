@@ -695,13 +695,13 @@ GST_START_TEST (test_alternate_audio_playlist)
   assert_equals_int (g_hash_table_size (client->selected_stream->
           audio_alternates), 3);
   /* Check the list of audio alternates */
-  alternates =
-      g_list_sort (gst_m3u8_client_get_alternates (client,
-          GST_M3U8_MEDIA_TYPE_AUDIO), (GCompareFunc) g_strcmp0);
+  alternates = gst_m3u8_client_get_alternates (client,
+      GST_M3U8_MEDIA_TYPE_AUDIO);
   assert_equals_int (g_list_length (alternates), 3);
-  assert_equals_string (g_list_nth_data (alternates, 0), "Commentary");
-  assert_equals_string (g_list_nth_data (alternates, 1), "Deutsche");
-  assert_equals_string (g_list_nth_data (alternates, 2), "English");
+  /* Default comes always first */
+  assert_equals_string (g_list_nth_data (alternates, 0), "English");
+  assert_equals_string (g_list_nth_data (alternates, 1), "Commentary");
+  assert_equals_string (g_list_nth_data (alternates, 2), "Deutsche");
 
   gst_m3u8_client_free (client);
 }
