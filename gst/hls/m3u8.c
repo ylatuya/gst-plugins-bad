@@ -1459,7 +1459,7 @@ gst_m3u8_client_get_alternates (GstM3U8Client * client,
     GstM3U8MediaType media_type)
 {
   GHashTable *alternates = NULL;
-  GList *names = NULL;
+  GList *names = NULL, *walk;
 
   GST_M3U8_CLIENT_LOCK (client);
   if (media_type == GST_M3U8_MEDIA_TYPE_VIDEO) {
@@ -1472,7 +1472,14 @@ gst_m3u8_client_get_alternates (GstM3U8Client * client,
         media_type == GST_M3U8_MEDIA_TYPE_VIDEO ? "video" : "audio");
     goto exit;
   }
-  names = g_hash_table_get_keys (alternates);
+
+  for (walk = g_hash_table_get_values (alternates); walk; walk = walk->next) {
+    GstM3U8Media *media = GST_M3U8_MEDIA (walk->data);
+    if (media->is_default)
+      names = g_list_prepend (names, media->name);
+    else
+      names = g_list_append (names, media->name);
+  }
 
 exit:
   GST_M3U8_CLIENT_UNLOCK (client);
