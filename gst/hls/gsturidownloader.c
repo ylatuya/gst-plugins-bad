@@ -39,6 +39,7 @@ struct _GstUriDownloaderPrivate
   GstPad *pad;
   GTimeVal *timeout;
   GstFragment *download;
+  GMutex *usage_lock;
   GMutex *lock;
   GCond *cond;
 };
@@ -96,6 +97,7 @@ gst_uri_downloader_init (GstUriDownloader * downloader)
   /* Create a bus to handle error and warning message from the source element */
   downloader->priv->bus = gst_bus_new ();
 
+  downloader->priv->usage_lock = g_mutex_new ();
   downloader->priv->lock = g_mutex_new ();
   downloader->priv->cond = g_cond_new ();
 }
@@ -133,6 +135,7 @@ gst_uri_downloader_finalize (GObject * object)
 {
   GstUriDownloader *downloader = GST_URI_DOWNLOADER (object);
 
+  g_mutex_free (downloader->priv->usage_lock);
   g_mutex_free (downloader->priv->lock);
   g_cond_free (downloader->priv->cond);
 
@@ -313,6 +316,8 @@ gst_uri_downloader_fetch_uri (GstUriDownloader * downloader, const gchar * uri)
   GstStateChangeReturn ret;
   GstFragment *download = NULL;
 
+  g_mutex_lock (downloader->priv->usage_lock);
+
   g_mutex_lock (downloader->priv->lock);
 
   if (!gst_uri_downloader_set_uri (downloader, uri)) {
@@ -335,6 +340,7 @@ gst_uri_downloader_fetch_uri (GstUriDownloader * downloader, const gchar * uri)
    */
   GST_DEBUG_OBJECT (downloader, "Waiting to fetch the URI");
   g_cond_wait (downloader->priv->cond, downloader->priv->lock);
+  g_mutex_unlock (downloader->priv->lock);
 
   GST_OBJECT_LOCK (downloader);
   download = downloader->priv->download;
@@ -349,7 +355,7 @@ gst_uri_downloader_fetch_uri (GstUriDownloader * downloader, const gchar * uri)
 quit:
   {
     gst_uri_downloader_stop (downloader);
-    g_mutex_unlock (downloader->priv->lock);
+    g_mutex_unlock (downloader->priv->usage_lock);
     return download;
   }
 }
