@@ -330,95 +330,53 @@ bool_from_string (gchar * ptr, gboolean * val)
 }
 
 static gboolean
-long_from_string (gchar * ptr, gchar ** endptr, glong * val)
+uint64_from_string (gchar * ptr, gchar ** endptr, guint64 * val)
 {
-  gchar *end;
-  glong ret;
+  gchar *priv_endptr;
 
-  g_return_val_if_fail (ptr != NULL, FALSE);
-  g_return_val_if_fail (val != NULL, FALSE);
-
-  errno = 0;
-  ret = strtol (ptr, &end, 10);
-  if ((errno == ERANGE && (ret == LONG_MAX || ret == LONG_MIN))
-      || (errno != 0 && ret == 0)) {
-    GST_WARNING ("%s", g_strerror (errno));
-    return FALSE;
-  }
+  *val = g_ascii_strtoull (ptr, &priv_endptr, 0);
 
   if (endptr)
-    *endptr = end;
+    *endptr = priv_endptr;
 
-  *val = ret;
-
-  return end != ptr;
-}
-
-static gboolean
-int_from_string (gchar * ptr, gchar ** endptr, gint * val)
-{
-  glong ret;
-  gchar *end;
-
-  long_from_string (ptr, &end, &ret);
-
-  if (ret > G_MAXINT) {
-    GST_WARNING ("%s", g_strerror (ERANGE));
-    return FALSE;
-  }
-
-  *val = (gint) ret;
-
-  if (endptr)
-    *endptr = end;
-
-  return end != ptr;
+  return ptr != priv_endptr;
 }
 
 static gboolean
 int64_from_string (gchar * ptr, gchar ** endptr, gint64 * val)
 {
-  glong ret;
-  gchar *end;
+  gchar *priv_endptr;
 
-  long_from_string (ptr, &end, &ret);
-
-  *val = (gint64) ret;
+  *val = g_ascii_strtoll (ptr, &priv_endptr, 0);
 
   if (endptr)
-    *endptr = end;
+    *endptr = priv_endptr;
 
-  return end != ptr;
+  return ptr != priv_endptr;
+}
+
+static gboolean
+int_from_string (gchar * ptr, gchar ** endptr, gint * val)
+{
+  guint64 v;
+  gboolean ret;
+
+  ret = uint64_from_string (ptr, endptr, &v);
+  *val = (gint) v;
+  return ret;
 }
 
 static gboolean
 double_from_string (gchar * ptr, gchar ** endptr, gdouble * val)
 {
-  gchar *end;
-  gdouble ret;
+  gchar *priv_endptr;
 
-  g_return_val_if_fail (ptr != NULL, FALSE);
-  g_return_val_if_fail (val != NULL, FALSE);
-
-  errno = 0;
-  ret = strtod (ptr, &end);
-  if ((errno == ERANGE && (ret == HUGE_VAL || ret == -HUGE_VAL))
-      || (errno != 0 && ret == 0)) {
-    GST_WARNING ("%s", g_strerror (errno));
-    return FALSE;
-  }
-
-  if (!isfinite (ret)) {
-    GST_WARNING ("%s", g_strerror (ERANGE));
-    return FALSE;
-  }
+  *val = g_ascii_strtod (ptr, &priv_endptr);
 
   if (endptr)
-    *endptr = end;
+    *endptr = priv_endptr;
 
-  *val = (gint) ret;
-
-  return end != ptr;
+  return ptr != priv_endptr;
 }
 
 static gboolean
