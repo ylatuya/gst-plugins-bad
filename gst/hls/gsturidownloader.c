@@ -230,6 +230,9 @@ gst_uri_downloader_chain (GstPad * pad, GstBuffer * buf)
     goto done;
   }
 
+  if (downloader->priv->download->download_start_time == GST_CLOCK_TIME_NONE)
+    downloader->priv->download->download_start_time = gst_util_get_timestamp ();
+
   GST_LOG_OBJECT (downloader, "The uri fetcher received a new buffer "
       "of size %u", GST_BUFFER_SIZE (buf));
   if (!gst_fragment_add_buffer (downloader->priv->download, buf))
@@ -327,6 +330,7 @@ gst_uri_downloader_fetch_uri (GstUriDownloader * downloader, const gchar * uri)
   }
 
   downloader->priv->download = gst_fragment_new ();
+  downloader->priv->download->download_start_time = GST_CLOCK_TIME_NONE;
 
   ret = gst_element_set_state (downloader->priv->urisrc, GST_STATE_PLAYING);
   if (ret == GST_STATE_CHANGE_FAILURE) {
