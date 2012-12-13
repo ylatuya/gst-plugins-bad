@@ -42,6 +42,18 @@ http://media.example.com/003.ts\n\
 http://media.example.com/004.ts\n\
 #EXT-X-ENDLIST";
 
+static const gchar *DOUBLES_PLAYLIST = "#EXTM3U \n\
+#EXT-X-TARGETDURATION:10\n\
+#EXTINF:10.321,Test\n\
+http://media.example.com/001.ts\n\
+#EXTINF:9.6789,Test\n\
+http://media.example.com/002.ts\n\
+#EXTINF:10.2344,Test\n\
+http://media.example.com/003.ts\n\
+#EXTINF:9.92,Test\n\
+http://media.example.com/004.ts\n\
+#EXT-X-ENDLIST";
+
 static const gchar *LIVE_PLAYLIST = "#EXTM3U\n\
 #EXT-X-TARGETDURATION:8\n\
 #EXT-X-MEDIA-SEQUENCE:2680\n\
@@ -345,6 +357,29 @@ GST_START_TEST (test_live_playlist)
       "https://priv.example.com/fileSequence2683.ts");
   assert_equals_int (file->sequence, 2683);
 
+  gst_m3u8_client_free (client);
+}
+
+GST_END_TEST;
+
+GST_START_TEST (test_playlist_with_doubles_duration)
+{
+  GstM3U8Client *client;
+  GstM3U8Playlist *pl;
+  GstM3U8MediaFile *file;
+
+  client = load_playlist (DOUBLES_PLAYLIST, FALSE);
+
+  pl = client->selected_stream->selected_video;
+  /* Check first media segments */
+  file = GST_M3U8_MEDIA_FILE (g_list_nth_data (pl->files, 0));
+  assert_equals_uint64 (file->duration, 10.321 * GST_SECOND);
+  file = GST_M3U8_MEDIA_FILE (g_list_nth_data (pl->files, 1));
+  assert_equals_uint64 (file->duration, 9.6789 * GST_SECOND);
+  file = GST_M3U8_MEDIA_FILE (g_list_nth_data (pl->files, 2));
+  assert_equals_uint64 (file->duration, 10.2344 * GST_SECOND);
+  file = GST_M3U8_MEDIA_FILE (g_list_nth_data (pl->files, 3));
+  assert_equals_uint64 (file->duration, 9.92 * GST_SECOND);
   gst_m3u8_client_free (client);
 }
 
@@ -915,6 +950,7 @@ hlsdemux_suite (void)
   tcase_add_test (tc_m3u8, test_alternate_audio_playlist);
   tcase_add_test (tc_m3u8, test_select_alternate);
   tcase_add_test (tc_m3u8, test_simulation);
+  tcase_add_test (tc_m3u8, test_playlist_with_doubles_duration);
 
   return s;
 }
