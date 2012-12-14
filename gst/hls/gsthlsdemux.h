@@ -71,6 +71,12 @@ struct _GstHLSDemux
   GstHLSAdaptation *adaptation;
   GstHLSAdaptationAlgorithmFunc algo_func;
 
+  /* Stream selection */
+  GHashTable *audio_streams;        /* ID:alt-name for audio streams */
+  GHashTable *video_streams;        /* ID:alt-name for video streams */
+  gint current_video;
+  gint current_audio;
+
   /* Properties */
   guint fragments_cache;        /* number of fragments needed to be cached to start playing */
   gfloat bitrate_limit;         /* limit of the available bitrate to use */
@@ -97,6 +103,19 @@ struct _GstHLSDemux
 struct _GstHLSDemuxClass
 {
   GstElementClass parent_class;
+
+  /* inform that a stream has been set */
+  void (*video_changed) (GstHLSDemux * demux);
+  void (*audio_changed) (GstHLSDemux * demux);
+  //void (*text_changed) (GstHLSDemux * demux);
+
+  /* inform that the streams metadata have changed */
+  void (*streams_changed) (GstHLSDemux * demux);
+
+  /* get audio/video/text tags for a stream */
+  GstTagList *(*get_video_tags) (GstHLSDemux * demux, gint stream);
+  GstTagList *(*get_audio_tags) (GstHLSDemux * demux, gint stream);
+  //GstTagList *(*get_text_tags) (GstHLSDemux * demux, gint stream);
 };
 
 GType gst_hls_demux_get_type (void);
