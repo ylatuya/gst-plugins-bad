@@ -1569,3 +1569,65 @@ gst_m3u8_client_get_streams_bitrates (GstM3U8Client * client)
 
   return bitrates;
 }
+
+gboolean
+gst_m3u8_client_video_stream_info (GstM3U8Client * client, gchar * name,
+    guint * bitrate, gchar ** title)
+{
+  gboolean ret = FALSE;
+
+  GST_M3U8_CLIENT_LOCK (client);
+
+  if (client->selected_stream == NULL)
+    goto exit;
+
+  if (bitrate)
+    *bitrate = client->selected_stream->bandwidth;
+
+  if (client->video_alternate != NULL) {
+    GstM3U8Media *media;
+
+    media = g_hash_table_lookup (client->selected_stream->video_alternates,
+        name);
+    if (media != NULL) {
+      if (title != NULL)
+        *title = g_strdup (media->name);
+    }
+  }
+  ret = TRUE;
+
+exit:
+  GST_M3U8_CLIENT_UNLOCK (client);
+  return ret;
+}
+
+gboolean
+gst_m3u8_client_audio_stream_info (GstM3U8Client * client, gchar * name,
+    gchar ** lang, gchar ** title)
+{
+  gboolean ret = FALSE;
+
+  GST_M3U8_CLIENT_LOCK (client);
+
+  if (client->selected_stream == NULL ||
+      client->selected_stream->audio_alternates == NULL)
+    goto exit;
+
+  if (client->audio_alternate != NULL) {
+    GstM3U8Media *media;
+
+    media = g_hash_table_lookup (client->selected_stream->audio_alternates,
+        name);
+    if (media != NULL) {
+      if (lang != NULL)
+        *lang = g_strdup (media->language);
+      if (title != NULL)
+        *title = g_strdup (media->name);
+    }
+  }
+  ret = TRUE;
+
+exit:
+  GST_M3U8_CLIENT_UNLOCK (client);
+  return ret;
+}
