@@ -1781,6 +1781,7 @@ gst_hls_demux_fetch_fragment (GstHLSDemux * demux, GstFragment * fragment,
   buf = gst_buffer_list_get (buffer_list, 0, 0);
   GST_BUFFER_DURATION (buf) = fragment->stop_time - fragment->start_time;
   GST_BUFFER_TIMESTAMP (buf) = fragment->start_time;
+  GST_BUFFER_OFFSET (buf) = 0;
 
   /* We actually need to do this every time we switch bitrate */
   if (G_UNLIKELY (demux->do_typefind)) {
