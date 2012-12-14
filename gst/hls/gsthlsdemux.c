@@ -1198,12 +1198,18 @@ gst_hls_demux_push_fragment (GstHLSDemux * demux, gboolean is_video,
     return TRUE;
   }
 
-  GST_LOG_OBJECT (demux, "Pushing %s fragment.", is_video ? "video" : "audio");
 
   fragment = g_queue_pop_head (queue);
   buffer_list = gst_fragment_get_buffer_list (fragment);
   /* Work with the first buffer of the list */
   buf = gst_buffer_list_get (buffer_list, 0, 0);
+
+  GST_LOG_OBJECT (demux, "Pushing %s fragment ts:%" GST_TIME_FORMAT
+      " dur:%" GST_TIME_FORMAT,
+      is_video ? "video" : "audio",
+      GST_TIME_ARGS (GST_BUFFER_TIMESTAMP (buf)),
+      GST_TIME_ARGS (GST_BUFFER_DURATION (buf))
+      );
 
   /* Figure out if we need to create/switch pads */
   if (G_UNLIKELY (!pad || !gst_caps_is_equal_fixed (GST_BUFFER_CAPS (buf),
