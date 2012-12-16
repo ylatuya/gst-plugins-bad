@@ -82,6 +82,7 @@ struct _GstHLSDemux
   gfloat bitrate_limit;         /* limit of the available bitrate to use */
   guint connection_speed;       /* Network connection speed in kbps (0 = unknown) */
   gint adaptation_algo;         /* Algorithm used to select the active stream */
+  gchar *max_resolution;        /* Maximum resolution allowed */
 
   /* Streaming task */
   GstTask *stream_task;

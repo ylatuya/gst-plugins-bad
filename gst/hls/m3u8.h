@@ -144,6 +144,7 @@ struct _GstM3U8Client
   gchar *audio_alternate;          /* selected audio alternate */
   guint update_failed_count;
   gint sequence;                   /* the next sequence for this client */
+  guint max_resolution;            /* Maximum resolution (width x height) */
   GMutex *lock;
 };
 
@@ -211,6 +212,9 @@ gboolean gst_m3u8_client_audio_stream_info            (GstM3U8Client *client, gc
                                                        gchar **lang, gchar **title);
 
 guint64 gst_m3u8_client_get_current_fragment_duration (GstM3U8Client *client);
+
+void gst_m3u8_client_set_max_resolution               (GstM3U8Client * client,
+                                                       gchar * resolution);
 
 G_END_DECLS
 #endif /* __M3U8_H__ */

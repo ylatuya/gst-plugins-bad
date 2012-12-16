@@ -1356,11 +1356,34 @@ gst_m3u8_client_is_live (GstM3U8Client * client)
   return ret;
 }
 
+void
+gst_m3u8_client_set_max_resolution (GstM3U8Client * client, gchar * resolution)
+{
+  gchar **values;
+  gint width, height;
+
+  GST_M3U8_CLIENT_LOCK (client);
+
+  if (resolution == NULL) {
+    client->max_resolution = 0;
+  } else {
+    values = g_strsplit (resolution, "x", 2);
+
+    width = g_ascii_strtoll (values[0], NULL, 0);
+    height = g_ascii_strtoll (values[1], NULL, 0);
+
+    client->max_resolution = width * height;
+  }
+
+  GST_M3U8_CLIENT_UNLOCK (client);
+}
+
 GstM3U8Stream *
 gst_m3u8_client_get_stream_for_bitrate (GstM3U8Client * client, guint bitrate)
 {
   GList *list;
   GstM3U8Stream *stream, *target_stream;
+  guint resolution;
 
   GST_M3U8_CLIENT_LOCK (client);
   list = g_list_first (client->main->streams);
@@ -1374,6 +1397,17 @@ gst_m3u8_client_get_stream_for_bitrate (GstM3U8Client * client, guint bitrate)
       break;
     stream = GST_M3U8_STREAM (list->data);
   }
+
+  if (client->max_resolution != 0) {
+    resolution = stream->width * stream->height;
+    /* Check that this stream mets the resolution constraints */
+    while (resolution > client->max_resolution) {
+      list = g_list_previous (list);
+      stream = GST_M3U8_STREAM (g_list_previous (list)->data);
+      resolution = stream->width * stream->height;
+    }
+  }
+
   GST_DEBUG ("Selected stream with bitrate %d for %d", stream->bandwidth,
       bitrate);
   GST_M3U8_CLIENT_UNLOCK (client);
