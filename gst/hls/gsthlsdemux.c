@@ -1717,8 +1717,8 @@ gst_hls_demux_schedule (GstHLSDemux * demux)
   /* schedule the next update using the target duration field of the
    * playlist */
   g_time_val_add (&demux->next_update,
-      gst_m3u8_client_get_target_duration (demux->client)
-      / GST_SECOND * G_USEC_PER_SEC * update_factor);
+      gst_m3u8_client_get_current_fragment_duration (demux->client)
+      / (gdouble) GST_SECOND * G_USEC_PER_SEC * update_factor);
   GST_DEBUG_OBJECT (demux, "Next update scheduled at %s",
       g_time_val_to_iso8601 (&demux->next_update));
 
