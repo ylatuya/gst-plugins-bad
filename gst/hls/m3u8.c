@@ -1631,3 +1631,28 @@ exit:
   GST_M3U8_CLIENT_UNLOCK (client);
   return ret;
 }
+
+guint64
+gst_m3u8_client_get_current_fragment_duration (GstM3U8Client * client)
+{
+  guint64 dur;
+  GstM3U8Playlist *pl;
+  GList *list;
+
+  g_return_val_if_fail (client != NULL, FALSE);
+  g_return_val_if_fail (client->selected_stream != NULL, FALSE);
+
+  GST_M3U8_CLIENT_LOCK (client);
+
+  pl = gst_m3u8_client_get_current_playlist (client);
+  list = g_list_find_custom (pl->files, GUINT_TO_POINTER (client->sequence - 1),
+      (GCompareFunc) _find_next);
+  if (list == NULL) {
+    dur = -1;
+  } else {
+    dur = GST_M3U8_MEDIA_FILE (list->data)->duration;
+  }
+
+  GST_M3U8_CLIENT_UNLOCK (client);
+  return dur;
+}
