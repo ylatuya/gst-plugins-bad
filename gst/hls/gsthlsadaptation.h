@@ -47,7 +47,6 @@ struct _GstHLSAdaptationFragment
 struct _GstHLSAdaptationStream
 {
   guint bandwidth;
-  guint resolution;
 };
 
 struct _GstHLSAdaptation
@@ -60,7 +59,6 @@ struct _GstHLSAdaptation
   GstHLSAdaptationAlgorithmFunc adaptation_func;
   guint max_fragments;
   gint max_bitrate;
-  gint max_resolution;
   guint connection_speed;
 
   GMutex *lock;
@@ -72,7 +70,7 @@ void gst_hls_adaptation_free                    (GstHLSAdaptation *adaptation);
 
 void gst_hls_adaptation_reset                   (GstHLSAdaptation *adaptation);
 
-void gst_hls_adaptation_add_stream              (GstHLSAdaptation *adaptation, guint bandwidth, guint resolution);
+void gst_hls_adaptation_add_stream              (GstHLSAdaptation *adaptation, guint bandwidth);
 
 void gst_hls_adaptation_add_fragment            (GstHLSAdaptation *adaptation, gsize size,
                                                  guint64 download_time);
@@ -84,7 +82,7 @@ void gst_hls_adaptation_set_connection_speed    (GstHLSAdaptation *adaptation, g
 
 void gst_hls_adaptation_set_max_bitrate         (GstHLSAdaptation *adaptation, guint max_bitrate);
 
-void gst_hls_adaptation_set_max_resolution      (GstHLSAdaptation *adaptation, guint max_resolution);
+void gst_hls_adaptation_set_max_resolution      (GstHLSAdaptation *adaptation, gchar *resolution);
 
 void gst_hls_adaptation_update_qos_proportion   (GstHLSAdaptation *adaptation, gdouble proportion);
 
