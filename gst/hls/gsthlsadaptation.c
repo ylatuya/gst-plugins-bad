@@ -46,13 +46,12 @@ gst_hls_adaptation_fragment_free (GstHLSAdaptationFragment * frag)
 }
 
 static GstHLSAdaptationStream *
-gst_hls_adaptation_stream_new (guint bandwidth, guint resolution)
+gst_hls_adaptation_stream_new (guint bandwidth)
 {
   GstHLSAdaptationStream *stream;
 
   stream = g_new0 (GstHLSAdaptationStream, 1);
   stream->bandwidth = bandwidth;
-  stream->resolution = resolution;
 
   return stream;
 }
@@ -124,13 +123,12 @@ gst_hls_adaptation_reset (GstHLSAdaptation * adaptation)
 }
 
 void
-gst_hls_adaptation_add_stream (GstHLSAdaptation * adaptation, guint bandwidth,
-    guint resolution)
+gst_hls_adaptation_add_stream (GstHLSAdaptation * adaptation, guint bandwidth)
 {
   GST_HLS_ADAPTATION_LOCK (adaptation);
 
   adaptation->streams = g_list_insert_sorted (adaptation->streams,
-      gst_hls_adaptation_stream_new (bandwidth, resolution),
+      gst_hls_adaptation_stream_new (bandwidth),
       (GCompareFunc) _compare_bandwidths);
 
   GST_HLS_ADAPTATION_UNLOCK (adaptation);
@@ -221,8 +219,8 @@ gst_hls_adaptation_always_lowest (GstHLSAdaptation * adaptation)
   if (adaptation->streams == NULL)
     return -1;
 
-  return GST_HLS_ADAPTATION_STREAM (g_list_first (adaptation->streams)->
-      data)->bandwidth;
+  return GST_HLS_ADAPTATION_STREAM (g_list_first (adaptation->streams)->data)->
+      bandwidth;
 }
 
 /* Returns always the highest bitrate, but smaller than connection
@@ -236,8 +234,8 @@ gst_hls_adaptation_always_highest (GstHLSAdaptation * adaptation)
     return -1;
 
   bitrate =
-      GST_HLS_ADAPTATION_STREAM (g_list_last (adaptation->streams)->
-      data)->bandwidth;
+      GST_HLS_ADAPTATION_STREAM (g_list_last (adaptation->streams)->data)->
+      bandwidth;
 
   /* If user specifies a connection speed never use a playlist with a bandwidth
    * superior than it */

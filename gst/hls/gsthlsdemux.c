@@ -84,6 +84,7 @@ enum
   PROP_FRAGMENTS_CACHE,
   PROP_BITRATE_LIMIT,
   PROP_CONNECTION_SPEED,
+  PROP_MAX_RESOLUTION,
   PROP_ADAPTATION_ALGORITHM,
   PROP_N_VIDEO,
   PROP_CURRENT_VIDEO,
@@ -137,6 +138,7 @@ static guint gst_hls_demux_signals[LAST_SIGNAL] = { 0 };
 #define DEFAULT_BITRATE_LIMIT 0.8
 #define DEFAULT_CONNECTION_SPEED    0
 #define DEFAULT_ADAPTATION_ALGORITHM GST_HLS_ADAPTATION_BANDWIDTH_ESTIMATION
+#define DEFAULT_MAX_RESOLUTION NULL
 
 /* GObject */
 static void gst_hls_demux_set_property (GObject * object, guint prop_id,
@@ -266,6 +268,11 @@ gst_hls_demux_dispose (GObject * obj)
     demux->adaptation = NULL;
   }
 
+  if (demux->max_resolution != NULL) {
+    g_free (demux->max_resolution);
+    demux->max_resolution = NULL;
+  }
+
 
   G_OBJECT_CLASS (parent_class)->dispose (obj);
 }
@@ -306,6 +313,11 @@ gst_hls_demux_class_init (GstHLSDemuxClass * klass)
           "Network connection speed in kbps (0 = unknown)",
           0, G_MAXUINT / 1000, DEFAULT_CONNECTION_SPEED,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
+  g_object_class_install_property (gobject_class, PROP_MAX_RESOLUTION,
+      g_param_spec_string ("max-resolution", "Max resolution",
+          "Maximum supported resolution in \"WxH\" format (NULL = no limit)",
+          NULL, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
   /**
    * GstHLSDemux:n-video
@@ -478,6 +490,7 @@ gst_hls_demux_init (GstHLSDemux * demux, GstHLSDemuxClass * klass)
   demux->fragments_cache = DEFAULT_FRAGMENTS_CACHE;
   demux->bitrate_limit = DEFAULT_BITRATE_LIMIT;
   demux->connection_speed = DEFAULT_CONNECTION_SPEED;
+  demux->max_resolution = DEFAULT_MAX_RESOLUTION;
 
   demux->video_queue = g_queue_new ();
   demux->audio_queue = g_queue_new ();
@@ -528,6 +541,10 @@ gst_hls_demux_set_property (GObject * object, guint prop_id,
       demux->current_audio = g_value_get_int (value);
       gst_hls_demux_select_stream (demux, GST_M3U8_MEDIA_TYPE_AUDIO);
       break;
+    case PROP_MAX_RESOLUTION:
+      demux->max_resolution = g_value_dup_string (value);
+      gst_m3u8_client_set_max_resolution (demux->client, demux->max_resolution);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -564,6 +581,9 @@ gst_hls_demux_get_property (GObject * object, guint prop_id, GValue * value,
       break;
     case PROP_ADAPTATION_ALGORITHM:
       g_value_set_enum (value, demux->adaptation_algo);
+      break;
+    case PROP_MAX_RESOLUTION:
+      g_value_set_string (value, demux->max_resolution);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -1110,8 +1130,7 @@ gst_hls_demux_create_streams (GstHLSDemux * demux)
 
   for (walk = demux->client->main->streams; walk; walk = walk->next) {
     GstM3U8Stream *stream = GST_M3U8_STREAM (walk->data);
-    gst_hls_adaptation_add_stream (demux->adaptation, stream->bandwidth,
-        stream->width * stream->height);
+    gst_hls_adaptation_add_stream (demux->adaptation, stream->bandwidth);
   }
 
   /* trigger the streams changed */
@@ -1378,6 +1397,7 @@ gst_hls_demux_set_location (GstHLSDemux * demux, const gchar * uri)
   if (demux->client)
     gst_m3u8_client_free (demux->client);
   demux->client = gst_m3u8_client_new (uri);
+  gst_m3u8_client_set_max_resolution (demux->client, demux->max_resolution);
   GST_INFO_OBJECT (demux, "Changed location: %s", uri);
   return TRUE;
 }
