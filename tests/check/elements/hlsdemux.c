@@ -178,6 +178,23 @@ http://media.example.com/audio/german-003.ts\n\
 http://media.example.com/audio/german-004.ts\n\
 #EXT-X-ENDLIST";
 
+static const gchar *SUBTITLES_PLAYLIST = "#EXTM3U\n\
+#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID=\"subs\",NAME=\"English\",\
+  DEFAULT=YES,LANGUAGE=\"en\",\
+  URI=\"http://localhost/main/subs-en.m3u8\"\n\
+#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID=\"subs\",NAME=\"Deutsche\",\
+  DEFAULT=NO,LANGUAGE=\"de\",\
+  URI=\"http://localhost/main/subs-de.m3u8\"\n\
+#EXT-X-MEDIA:TYPE=SUBTITLES,GROUP-ID=\"subs\",NAME=\"Spanish\",\
+  DEFAULT=NO,LANGUAGE=\"es\",\
+  URI=\"http://localhost/main/subs-es.m3u8\"\n\
+#EXT-X-STREAM-INF:BANDWIDTH=128000,CODECS=\"avc1.42001f, mp4a.40.5\",SUBTITLES=\"subs\"\n\
+low/video-audio.m3u8\n\
+#EXT-X-STREAM-INF:BANDWIDTH=256000,CODECS=\"avc1.42001f, mp4a.40.5\",SUBTITLES=\"subs\"\n\
+mid/video-audio.m3u8\n\
+#EXT-X-STREAM-INF:BANDWIDTH=768000,CODECS=\"avc1.42001f, mp4a.40.5\",SUBTITLES=\"subs\"\n\
+hi/video-audio.m3u8";
+
 static GstM3U8Client *
 load_playlist (const gchar * data, gboolean with_audio_only)
 {
@@ -231,8 +248,8 @@ GST_START_TEST (test_load_main_playlist_rendition)
   assert_equals_int (g_hash_table_size (client->main->audio_rendition_groups),
       0);
 
-  assert_equals_int (g_list_length (client->selected_stream->
-          selected_video->files), 4);
+  assert_equals_int (g_list_length (client->selected_stream->selected_video->
+          files), 4);
   assert_equals_int (client->sequence, 0);
 
   gst_m3u8_client_free (client);
@@ -396,7 +413,7 @@ GST_START_TEST (test_update_invalid_playlist)
   client = load_playlist (ON_DEMAN_PLAYLIST, FALSE);
   pl = client->selected_stream->selected_video;
   assert_equals_int (g_list_length (pl->files), 4);
-  ret = gst_m3u8_client_update (client, g_strdup ("#INVALID"), NULL);
+  ret = gst_m3u8_client_update (client, g_strdup ("#INVALID"), NULL, NULL);
   assert_equals_int (ret, FALSE);
 
   gst_m3u8_client_free (client);
@@ -415,7 +432,8 @@ GST_START_TEST (test_update_playlist)
   client = load_playlist (ON_DEMAN_PLAYLIST, FALSE);
   pl = client->selected_stream->selected_video;
   assert_equals_int (g_list_length (pl->files), 4);
-  ret = gst_m3u8_client_update (client, g_strdup (ON_DEMAN_PLAYLIST), NULL);
+  ret =
+      gst_m3u8_client_update (client, g_strdup (ON_DEMAN_PLAYLIST), NULL, NULL);
   assert_equals_int (ret, TRUE);
   assert_equals_int (g_list_length (pl->files), 4);
   gst_m3u8_client_free (client);
@@ -427,11 +445,11 @@ GST_START_TEST (test_update_playlist)
   /* Add a new entry to the playlist and check the update */
   live_pl = g_strdup_printf ("%s\n%s\n%s", LIVE_PLAYLIST, "#EXTINF:8",
       "https://priv.example.com/fileSequence2683.ts");
-  ret = gst_m3u8_client_update (client, live_pl, NULL);
+  ret = gst_m3u8_client_update (client, live_pl, NULL, NULL);
   assert_equals_int (ret, TRUE);
   assert_equals_int (g_list_length (pl->files), 5);
   /* Test sliding window */
-  ret = gst_m3u8_client_update (client, g_strdup (LIVE_PLAYLIST), NULL);
+  ret = gst_m3u8_client_update (client, g_strdup (LIVE_PLAYLIST), NULL, NULL);
   assert_equals_int (ret, TRUE);
   assert_equals_int (g_list_length (pl->files), 4);
   gst_m3u8_client_free (client);
@@ -499,12 +517,13 @@ GST_END_TEST;
 GST_START_TEST (test_get_next_fragment)
 {
   GstM3U8Client *client;
-  GstFragment *v_frag = NULL, *a_frag = NULL;
+  GstFragment *v_frag = NULL, *a_frag = NULL, *s_frag = NULL;
 
   client = load_playlist (BYTE_RANGES_PLAYLIST, FALSE);
 
   /* Check the next fragment */
-  gst_m3u8_client_get_next_fragment (client, &v_frag, &a_frag);
+  gst_m3u8_client_get_next_fragment (client, &v_frag, &a_frag, &s_frag);
+  assert_equals_int (s_frag == NULL, TRUE);
   assert_equals_int (a_frag == NULL, TRUE);
   assert_equals_int (v_frag != NULL, TRUE);
   assert_equals_int (v_frag->discontinuous, FALSE);
@@ -515,8 +534,8 @@ GST_START_TEST (test_get_next_fragment)
   assert_equals_uint64 (v_frag->length, 1000);
 
   /* Check next media segments */
-  gst_m3u8_client_get_next_fragment (client, &v_frag, &a_frag);
-  assert_equals_int (a_frag == NULL, TRUE);
+  gst_m3u8_client_get_next_fragment (client, &v_frag, &a_frag, &s_frag);
+  assert_equals_int (s_frag == NULL, TRUE);
   assert_equals_int (v_frag != NULL, TRUE);
   assert_equals_int (v_frag->discontinuous, FALSE);
   assert_equals_string (v_frag->name, "http://media.example.com/all.ts");
@@ -534,7 +553,7 @@ GST_START_TEST (test_get_current_position)
 {
   GstM3U8Client *client;
   GstClockTime pos;
-  GstFragment *v_frag = NULL, *a_frag = NULL;
+  GstFragment *v_frag = NULL, *a_frag = NULL, *s_frag = NULL;
 
   client = load_playlist (BYTE_RANGES_PLAYLIST, FALSE);
 
@@ -542,11 +561,11 @@ GST_START_TEST (test_get_current_position)
   gst_m3u8_client_get_current_position (client, &pos);
   assert_equals_uint64 (pos, 0);
 
-  gst_m3u8_client_get_next_fragment (client, &v_frag, &a_frag);
+  gst_m3u8_client_get_next_fragment (client, &v_frag, &a_frag, &s_frag);
   gst_m3u8_client_get_current_position (client, &pos);
   assert_equals_uint64 (pos, 10 * GST_SECOND);
 
-  gst_m3u8_client_get_next_fragment (client, &v_frag, &a_frag);
+  gst_m3u8_client_get_next_fragment (client, &v_frag, &a_frag, &s_frag);
   gst_m3u8_client_get_current_position (client, &pos);
   assert_equals_uint64 (pos, 20 * GST_SECOND);
 
@@ -692,10 +711,10 @@ GST_START_TEST (test_alternate_audio_playlist)
       0);
   assert_equals_int (g_hash_table_size (client->main->audio_rendition_groups),
       1);
-  assert_equals_int (g_hash_table_size (client->selected_stream->
-          audio_alternates), 3);
-  assert_equals_int (g_hash_table_size (client->selected_stream->
-          video_alternates), 0);
+  assert_equals_int (g_hash_table_size (client->
+          selected_stream->audio_alternates), 3);
+  assert_equals_int (g_hash_table_size (client->
+          selected_stream->video_alternates), 0);
 
   alternates =
       g_hash_table_lookup (client->main->audio_rendition_groups, "aac");
@@ -710,8 +729,8 @@ GST_START_TEST (test_alternate_audio_playlist)
   assert_equals_int (media->is_default, TRUE);
   assert_equals_int (media->autoselect, TRUE);
 
-  assert_equals_int (g_hash_table_size (client->selected_stream->
-          audio_alternates), 3);
+  assert_equals_int (g_hash_table_size (client->
+          selected_stream->audio_alternates), 3);
   /* Check the list of audio alternates */
   alternates = gst_m3u8_client_get_alternates (client,
       GST_M3U8_MEDIA_TYPE_AUDIO);
@@ -726,40 +745,142 @@ GST_START_TEST (test_alternate_audio_playlist)
 
 GST_END_TEST;
 
+GST_START_TEST (test_subtitles_playlist)
+{
+  GstM3U8Client *client;
+  GstM3U8Media *media;
+  GList *alternates;
+
+  client = load_playlist (SUBTITLES_PLAYLIST, FALSE);
+
+  assert_equals_int (g_list_length (client->main->streams), 3);
+  assert_equals_int (g_hash_table_size (client->main->video_rendition_groups),
+      0);
+  assert_equals_int (g_hash_table_size (client->main->audio_rendition_groups),
+      0);
+  assert_equals_int (g_hash_table_size (client->main->subtt_rendition_groups),
+      1);
+  assert_equals_int (g_hash_table_size (client->
+          selected_stream->audio_alternates), 0);
+  assert_equals_int (g_hash_table_size (client->
+          selected_stream->video_alternates), 0);
+  assert_equals_int (g_hash_table_size (client->
+          selected_stream->subtt_alternates), 3);
+
+  alternates =
+      g_hash_table_lookup (client->main->subtt_rendition_groups, "subs");
+  assert_equals_int (alternates != NULL, TRUE);
+  media = GST_M3U8_MEDIA (g_list_nth_data (alternates, 0));
+  assert_equals_int (media->media_type, GST_M3U8_MEDIA_TYPE_SUBTITLES);
+  assert_equals_string (media->group_id, "subs");
+  assert_equals_string (media->name, "English");
+  assert_equals_string (media->language, "en");
+  assert_equals_string (media->uri, "http://localhost/main/subs-en.m3u8");
+  assert_equals_string (media->uri, GST_M3U8 (media->playlist)->uri);
+  assert_equals_int (media->is_default, TRUE);
+  assert_equals_int (media->autoselect, FALSE);
+
+  /* Check the list of subtitles */
+  alternates = gst_m3u8_client_get_alternates (client,
+      GST_M3U8_MEDIA_TYPE_SUBTITLES);
+  assert_equals_int (g_list_length (alternates), 3);
+  assert_equals_string (g_list_nth_data (alternates, 0), "Deutsche");
+  assert_equals_string (g_list_nth_data (alternates, 1), "Spanish");
+  assert_equals_string (g_list_nth_data (alternates, 2), "English");
+
+  gst_m3u8_client_free (client);
+}
+
+GST_END_TEST;
+GST_START_TEST (test_select_subs_alternate)
+{
+  GstM3U8Client *client;
+  const gchar *a_uri, *v_uri, *s_uri;
+  gboolean ret;
+
+  /* Check with a playlist with alternative audio renditions where the video
+   * stream is video-only and therefor we always have 2 playlists, one for
+   * video and another one for audio */
+  client = load_playlist (SUBTITLES_PLAYLIST, FALSE);
+  gst_m3u8_client_get_current_uri (client, &v_uri, &a_uri, &s_uri);
+  assert_equals_int (a_uri == NULL, TRUE);
+  assert_equals_int (s_uri == NULL, TRUE);
+  assert_equals_int (v_uri != NULL, TRUE);
+  assert_equals_string (v_uri, "http://localhost/low/video-audio.m3u8");
+
+  ret =
+      gst_m3u8_client_set_alternate (client, GST_M3U8_MEDIA_TYPE_SUBTITLES,
+      "English");
+  assert_equals_int (ret, TRUE);
+  gst_m3u8_client_get_current_uri (client, &v_uri, &a_uri, &s_uri);
+  assert_equals_int (a_uri == NULL, TRUE);
+  assert_equals_int (v_uri != NULL, TRUE);
+  assert_equals_string (v_uri, "http://localhost/low/video-audio.m3u8");
+  assert_equals_int (s_uri != NULL, TRUE);
+  assert_equals_string (s_uri, "http://localhost/main/subs-en.m3u8");
+
+  ret =
+      gst_m3u8_client_set_alternate (client, GST_M3U8_MEDIA_TYPE_SUBTITLES,
+      "Spanish");
+  assert_equals_int (ret, TRUE);
+  gst_m3u8_client_get_current_uri (client, &v_uri, &a_uri, &s_uri);
+  assert_equals_int (a_uri == NULL, TRUE);
+  assert_equals_int (v_uri != NULL, TRUE);
+  assert_equals_string (v_uri, "http://localhost/low/video-audio.m3u8");
+  assert_equals_int (s_uri != NULL, TRUE);
+  assert_equals_string (s_uri, "http://localhost/main/subs-es.m3u8");
+
+  ret =
+      gst_m3u8_client_set_alternate (client, GST_M3U8_MEDIA_TYPE_SUBTITLES,
+      NULL);
+  assert_equals_int (ret, TRUE);
+  gst_m3u8_client_get_current_uri (client, &v_uri, &a_uri, &s_uri);
+  assert_equals_int (a_uri == NULL, TRUE);
+  assert_equals_int (v_uri != NULL, TRUE);
+  assert_equals_string (v_uri, "http://localhost/low/video-audio.m3u8");
+  assert_equals_int (s_uri == NULL, TRUE);
+
+  gst_m3u8_client_free (client);
+}
+
+GST_END_TEST;
 GST_START_TEST (test_select_alternate)
 {
   GstM3U8Client *client;
-  const gchar *a_uri, *v_uri;
+  const gchar *a_uri, *v_uri, *s_uri;
   gboolean ret;
 
   /* Check with a playlist with alternative audio renditions where the video
    * stream is video-only and therefor we always have 2 playlists, one for
    * video and another one for audio */
   client = load_playlist (ALTERNATE_AUDIO_PLAYLIST, TRUE);
-  gst_m3u8_client_get_current_uri (client, &v_uri, &a_uri);
+  gst_m3u8_client_get_current_uri (client, &v_uri, &a_uri, &s_uri);
   assert_equals_int (a_uri != NULL, TRUE);
   assert_equals_string (a_uri, "http://localhost/main/english-audio.m3u8");
   assert_equals_int (v_uri != NULL, TRUE);
   assert_equals_string (v_uri, "http://localhost/low/video-only.m3u8");
+  assert_equals_int (s_uri == NULL, TRUE);
 
   ret =
       gst_m3u8_client_set_alternate (client, GST_M3U8_MEDIA_TYPE_AUDIO,
       "Deutsche");
   assert_equals_int (ret, TRUE);
-  gst_m3u8_client_get_current_uri (client, &v_uri, &a_uri);
+  gst_m3u8_client_get_current_uri (client, &v_uri, &a_uri, &s_uri);
   assert_equals_int (a_uri != NULL, TRUE);
   assert_equals_string (a_uri, "http://localhost/main/german-audio.m3u8");
   assert_equals_int (v_uri != NULL, TRUE);
   assert_equals_string (v_uri, "http://localhost/low/video-only.m3u8");
+  assert_equals_int (s_uri == NULL, TRUE);
 
   /* Check that selecting the audio-only fallback stream we only have the audio
    * uri */
   gst_m3u8_client_set_current (client,
       GST_M3U8_STREAM (client->main->streams->data));
-  gst_m3u8_client_get_current_uri (client, &v_uri, &a_uri);
+  gst_m3u8_client_get_current_uri (client, &v_uri, &a_uri, &s_uri);
   assert_equals_int (a_uri != NULL, TRUE);
   assert_equals_string (a_uri, "http://localhost/main/german-audio.m3u8");
   assert_equals_int (v_uri == NULL, TRUE);
+  assert_equals_int (s_uri == NULL, TRUE);
 
   gst_m3u8_client_free (client);
 
@@ -768,19 +889,21 @@ GST_START_TEST (test_select_alternate)
    * only have 2 playlists when the audio alternative rendition is not the
    * default one */
   client = load_playlist (ALT_AUDIO_PLAYLIST_WITH_VIDEO_AUDIO, TRUE);
-  gst_m3u8_client_get_current_uri (client, &v_uri, &a_uri);
+  gst_m3u8_client_get_current_uri (client, &v_uri, &a_uri, &s_uri);
   assert_equals_int (a_uri == NULL, TRUE);
   assert_equals_int (v_uri != NULL, TRUE);
   assert_equals_string (v_uri, "http://localhost/low/video-audio.m3u8");
+  assert_equals_int (s_uri == NULL, TRUE);
 
   /* Check that selecting the audio-only fallback stream we only have the audio
    * uri */
   gst_m3u8_client_set_current (client,
       GST_M3U8_STREAM (client->main->streams->data));
-  gst_m3u8_client_get_current_uri (client, &v_uri, &a_uri);
+  gst_m3u8_client_get_current_uri (client, &v_uri, &a_uri, &s_uri);
   assert_equals_int (a_uri != NULL, TRUE);
   assert_equals_string (a_uri, "http://localhost/main/english-audio.m3u8");
   assert_equals_int (v_uri == NULL, TRUE);
+  assert_equals_int (s_uri == NULL, TRUE);
 
   /* Get back to the audio-video stream */
   gst_m3u8_client_set_current (client,
@@ -790,11 +913,12 @@ GST_START_TEST (test_select_alternate)
       gst_m3u8_client_set_alternate (client, GST_M3U8_MEDIA_TYPE_AUDIO,
       "Deutsche");
   assert_equals_int (ret, TRUE);
-  gst_m3u8_client_get_current_uri (client, &v_uri, &a_uri);
+  gst_m3u8_client_get_current_uri (client, &v_uri, &a_uri, &s_uri);
   assert_equals_int (a_uri != NULL, TRUE);
   assert_equals_string (a_uri, "http://localhost/main/german-audio.m3u8");
   assert_equals_int (v_uri != NULL, TRUE);
   assert_equals_string (v_uri, "http://localhost/low/video-audio.m3u8");
+  assert_equals_int (s_uri == NULL, TRUE);
 
   gst_m3u8_client_free (client);
 }
@@ -804,31 +928,32 @@ GST_END_TEST;
 GST_START_TEST (test_simulation)
 {
   GstM3U8Client *client;
-  const gchar *a_uri, *v_uri;
-  GstFragment *a_frag, *v_frag;
+  const gchar *a_uri, *v_uri, *s_uri;
+  GstFragment *a_frag, *v_frag, *s_frag;
   gboolean ret;
 
   client = load_playlist (ALTERNATE_AUDIO_PLAYLIST, TRUE);
   /* The default selection should be audio-only, which only has audio and not
    * video */
-  gst_m3u8_client_get_current_uri (client, &v_uri, &a_uri);
+  gst_m3u8_client_get_current_uri (client, &v_uri, &a_uri, &s_uri);
   assert_equals_int (a_uri != NULL, TRUE);
   assert_equals_string (a_uri, "http://localhost/main/english-audio.m3u8");
   assert_equals_int (v_uri != NULL, TRUE);
   assert_equals_string (v_uri, "http://localhost/low/video-only.m3u8");
+  assert_equals_int (s_uri == NULL, TRUE);
 
   /* Update the playlists */
   ret = gst_m3u8_client_update (client,
       g_strdup (ON_DEMAN_LOW_VIDEO_ONLY_PLAYLIST),
-      g_strdup (ON_DEMAN_ENGLISH_PLAYLIST));
+      g_strdup (ON_DEMAN_ENGLISH_PLAYLIST), NULL);
   assert_equals_int (ret, TRUE);
-  assert_equals_int (g_list_length (client->selected_stream->
-          selected_video->files), 4);
-  assert_equals_int (g_list_length (client->selected_stream->
-          selected_audio->files), 4);
+  assert_equals_int (g_list_length (client->selected_stream->selected_video->
+          files), 4);
+  assert_equals_int (g_list_length (client->selected_stream->selected_audio->
+          files), 4);
 
   /* Get the first fragment */
-  gst_m3u8_client_get_next_fragment (client, &v_frag, &a_frag);
+  gst_m3u8_client_get_next_fragment (client, &v_frag, &a_frag, &s_frag);
   assert_equals_int (v_frag != NULL, TRUE);
   assert_equals_int (a_frag != NULL, TRUE);
   assert_equals_string (v_frag->name,
@@ -837,7 +962,7 @@ GST_START_TEST (test_simulation)
       "http://media.example.com/audio/english-001.ts");
 
   /* Get the next fragment */
-  gst_m3u8_client_get_next_fragment (client, &v_frag, &a_frag);
+  gst_m3u8_client_get_next_fragment (client, &v_frag, &a_frag, &s_frag);
   assert_equals_int (v_frag != NULL, TRUE);
   assert_equals_int (a_frag != NULL, TRUE);
   assert_equals_string (v_frag->name,
@@ -851,18 +976,20 @@ GST_START_TEST (test_simulation)
       "Deutsche");
   assert_equals_int (ret, TRUE);
   /* Get the new uri's */
-  gst_m3u8_client_get_current_uri (client, &v_uri, &a_uri);
+  gst_m3u8_client_get_current_uri (client, &v_uri, &a_uri, &s_uri);
   assert_equals_int (a_uri != NULL, TRUE);
   assert_equals_string (a_uri, "http://localhost/main/german-audio.m3u8");
   assert_equals_int (v_uri != NULL, TRUE);
   assert_equals_string (v_uri, "http://localhost/low/video-only.m3u8");
+  assert_equals_int (s_uri == NULL, TRUE);
   /* Update the new uri's */
   ret =
       gst_m3u8_client_update (client,
       g_strdup (ON_DEMAN_LOW_VIDEO_ONLY_PLAYLIST),
-      g_strdup (ON_DEMAN_GERMAN_PLAYLIST));
+      g_strdup (ON_DEMAN_GERMAN_PLAYLIST), NULL);
   assert_equals_int (ret, TRUE);
-  gst_m3u8_client_get_next_fragment (client, &v_frag, &a_frag);
+  gst_m3u8_client_get_next_fragment (client, &v_frag, &a_frag, &s_frag);
+  assert_equals_int (s_frag == NULL, TRUE);
   assert_equals_int (v_frag != NULL, TRUE);
   assert_equals_int (a_frag != NULL, TRUE);
   assert_equals_string (a_frag->name,
@@ -873,17 +1000,19 @@ GST_START_TEST (test_simulation)
   /* Switch to a higher bitrate */
   gst_m3u8_client_set_current (client,
       gst_m3u8_client_get_stream_for_bitrate (client, 260000));
-  gst_m3u8_client_get_current_uri (client, &v_uri, &a_uri);
+  gst_m3u8_client_get_current_uri (client, &v_uri, &a_uri, &s_uri);
   assert_equals_int (a_uri != NULL, TRUE);
   assert_equals_string (a_uri, "http://localhost/main/german-audio.m3u8");
   assert_equals_int (v_uri != NULL, TRUE);
   assert_equals_string (v_uri, "http://localhost/mid/video-only.m3u8");
+  assert_equals_int (s_uri == NULL, TRUE);
   ret =
       gst_m3u8_client_update (client,
       g_strdup (ON_DEMAN_MID_VIDEO_ONLY_PLAYLIST),
-      g_strdup (ON_DEMAN_GERMAN_PLAYLIST));
+      g_strdup (ON_DEMAN_GERMAN_PLAYLIST), NULL);
   assert_equals_int (ret, TRUE);
-  gst_m3u8_client_get_next_fragment (client, &v_frag, &a_frag);
+  gst_m3u8_client_get_next_fragment (client, &v_frag, &a_frag, &s_frag);
+  assert_equals_int (s_frag == NULL, TRUE);
   assert_equals_int (a_frag != NULL, TRUE);
   assert_equals_int (v_frag != NULL, TRUE);
   assert_equals_string (a_frag->name,
@@ -893,7 +1022,8 @@ GST_START_TEST (test_simulation)
 
   /* Seek to the beginning */
   gst_m3u8_client_seek (client, 0);
-  gst_m3u8_client_get_next_fragment (client, &v_frag, &a_frag);
+  gst_m3u8_client_get_next_fragment (client, &v_frag, &a_frag, &s_frag);
+  assert_equals_int (s_frag == NULL, TRUE);
   assert_equals_int (a_frag != NULL, TRUE);
   assert_equals_int (v_frag != NULL, TRUE);
   assert_equals_string (a_frag->name,
@@ -906,7 +1036,8 @@ GST_START_TEST (test_simulation)
       gst_m3u8_client_set_alternate (client, GST_M3U8_MEDIA_TYPE_AUDIO,
       "English");
   assert_equals_int (ret, TRUE);
-  gst_m3u8_client_get_next_fragment (client, &v_frag, &a_frag);
+  gst_m3u8_client_get_next_fragment (client, &v_frag, &a_frag, &s_frag);
+  assert_equals_int (s_frag == NULL, TRUE);
   assert_equals_int (a_frag != NULL, TRUE);
   assert_equals_int (v_frag != NULL, TRUE);
   assert_equals_string (a_frag->name,
@@ -917,7 +1048,8 @@ GST_START_TEST (test_simulation)
   /* Go to the audio-only fallback */
   gst_m3u8_client_set_current (client,
       gst_m3u8_client_get_stream_for_bitrate (client, 20000));
-  gst_m3u8_client_get_next_fragment (client, &v_frag, &a_frag);
+  gst_m3u8_client_get_next_fragment (client, &v_frag, &a_frag, &s_frag);
+  assert_equals_int (s_frag == NULL, TRUE);
   assert_equals_int (a_frag != NULL, TRUE);
   assert_equals_int (v_frag == NULL, TRUE);
   assert_equals_string (a_frag->name,
@@ -926,7 +1058,8 @@ GST_START_TEST (test_simulation)
   /* Go to mid again */
   gst_m3u8_client_set_current (client,
       gst_m3u8_client_get_stream_for_bitrate (client, 260000));
-  gst_m3u8_client_get_next_fragment (client, &v_frag, &a_frag);
+  gst_m3u8_client_get_next_fragment (client, &v_frag, &a_frag, &s_frag);
+  assert_equals_int (s_frag == NULL, TRUE);
   assert_equals_int (a_frag != NULL, TRUE);
   assert_equals_int (v_frag != NULL, TRUE);
   assert_equals_string (a_frag->name,
@@ -935,7 +1068,7 @@ GST_START_TEST (test_simulation)
       "http://media.example.com/mid/video-only-004.ts");
 
   /* End of stream */
-  ret = gst_m3u8_client_get_next_fragment (client, &v_frag, &a_frag);
+  ret = gst_m3u8_client_get_next_fragment (client, &v_frag, &a_frag, &s_frag);
   assert_equals_int (ret, FALSE);
 
   gst_m3u8_client_free (client);
@@ -1060,7 +1193,7 @@ GST_START_TEST (test_adaptation_always_highest)
   bitrate = gst_hls_adaptation_get_target_bitrate (adaptation);
   assert_equals_int (bitrate, 400000);
 
-  gst_hls_adaptation_set_max_bitrate (adaptation, 400000);
+  gst_hls_adaptation_set_max_bitrate (adaptation, 1.2);
   bitrate = gst_hls_adaptation_get_target_bitrate (adaptation);
   assert_equals_int (bitrate, 400000);
 
@@ -1176,7 +1309,9 @@ hlsdemux_suite (void)
   tcase_add_test (tc_m3u8, test_get_streams_bitrates);
   tcase_add_test (tc_m3u8, test_seek);
   tcase_add_test (tc_m3u8, test_alternate_audio_playlist);
+  tcase_add_test (tc_m3u8, test_subtitles_playlist);
   tcase_add_test (tc_m3u8, test_select_alternate);
+  tcase_add_test (tc_m3u8, test_select_subs_alternate);
   tcase_add_test (tc_m3u8, test_simulation);
   tcase_add_test (tc_m3u8, test_playlist_with_doubles_duration);
 

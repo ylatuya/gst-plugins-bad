@@ -109,10 +109,13 @@ struct _GstM3U8Stream
 
   gchar * default_audio;
   gchar * default_video;
+  gchar * default_subtt;
   GHashTable *video_alternates;     /* Key:Name Value:GstM3U8Media* */
   GHashTable *audio_alternates;     /* Key:Name Value:GstM3U8Media* */
+  GHashTable *subtt_alternates;     /* Key:Name Value:GstM3U8Media* */
   GstM3U8Playlist *selected_video;
   GstM3U8Playlist *selected_audio;
+  GstM3U8Playlist *selected_subtt;
 };
 
 struct _GstM3U8VariantPlaylist
@@ -122,6 +125,7 @@ struct _GstM3U8VariantPlaylist
   GList *streams;                      /* list of GstM3U8Stream* in the main playlist */
   GHashTable *video_rendition_groups;  /* Key:Group-ID Value:GstM3U8Media* */
   GHashTable *audio_rendition_groups;  /* Key:Group-ID Value:GstM3U8Media* */
+  GHashTable *subtt_rendition_groups;  /* Key:Group-ID Value:GstM3U8Media* */
 
   GList *playlists;                /* Internal list of playlists ceated to be freed */
 };
@@ -142,6 +146,7 @@ struct _GstM3U8Client
   GstM3U8Stream *selected_stream;  /* currently selected stream */
   gchar *video_alternate;          /* selected video alternate */
   gchar *audio_alternate;          /* selected audio alternate */
+  gchar *subtt_alternate;          /* selected subtitles alternate */
   guint update_failed_count;
   gint sequence;                   /* the next sequence for this client */
   guint max_resolution;            /* Maximum resolution (width x height) */
@@ -160,14 +165,16 @@ gboolean gst_m3u8_client_parse_main_playlist          (GstM3U8Client * self,
 
 gboolean gst_m3u8_client_update                       (GstM3U8Client * client,
                                                        gchar * video_pl,
-                                                       gchar *audio_pl);
+                                                       gchar * audio_pl,
+                                                       gchar * subtt_pl);
 
 void gst_m3u8_client_set_current                      (GstM3U8Client * client,
                                                        GstM3U8Stream * m3u8);
 
 gboolean gst_m3u8_client_get_next_fragment            (GstM3U8Client * client,
                                                        GstFragment **video_fragment,
-                                                       GstFragment **audio_fragment);
+                                                       GstFragment **audio_fragment,
+                                                       GstFragment **subs_fragment);
 
 void gst_m3u8_client_get_current_position             (GstM3U8Client * client,
                                                        GstClockTime * timestamp);
@@ -180,7 +187,8 @@ const gchar *gst_m3u8_client_get_uri                  (GstM3U8Client * client);
 
 void gst_m3u8_client_get_current_uri                  (GstM3U8Client * client,
                                                        const gchar **video_uri,
-                                                       const gchar **audio_uri);
+                                                       const gchar **audio_uri,
+                                                       const gchar **subtitles);
 
 gboolean gst_m3u8_client_is_live                      (GstM3U8Client * client);
 
@@ -209,6 +217,9 @@ gboolean gst_m3u8_client_video_stream_info            (GstM3U8Client *client, gc
                                                        guint *bitrate, gchar **title);
 
 gboolean gst_m3u8_client_audio_stream_info            (GstM3U8Client *client, gchar * name,
+                                                       gchar **lang, gchar **title);
+
+gboolean gst_m3u8_client_subs_stream_info            (GstM3U8Client *client, gchar * name,
                                                        gchar **lang, gchar **title);
 
 guint64 gst_m3u8_client_get_current_fragment_duration (GstM3U8Client *client);

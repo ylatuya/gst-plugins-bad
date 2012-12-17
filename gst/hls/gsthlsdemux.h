@@ -56,15 +56,18 @@ struct _GstHLSDemux
 
   GstPad *video_srcpad;
   GstPad *audio_srcpad;
+  GstPad *subtt_srcpad;
   GstPad *sinkpad;
 
   GstBuffer *playlist;
   GstCaps *video_input_caps;
   GstCaps *audio_input_caps;
+  GstCaps *subtt_input_caps;
   GstUriDownloader *downloader;
   GstM3U8Client *client;        /* M3U8 client */
   GQueue *video_queue;          /* Queue storing the fetched fragments */
   GQueue *audio_queue;          /* Queue storing the fetched fragments */
+  GQueue *subtt_queue;          /* Queue storing the fetched fragments */
   gboolean need_cache;          /* Wheter we need to cache some fragments before starting to push data */
   gboolean end_of_playlist;
   gboolean do_typefind;         /* Whether we need to typefind the next buffer */
@@ -74,8 +77,10 @@ struct _GstHLSDemux
   /* Stream selection */
   GHashTable *audio_streams;        /* ID:alt-name for audio streams */
   GHashTable *video_streams;        /* ID:alt-name for video streams */
+  GHashTable *subtt_streams;        /* ID:alt-name for subtitles streams */
   gint current_video;
   gint current_audio;
+  gint current_subtt;
 
   /* Properties */
   guint fragments_cache;        /* number of fragments needed to be cached to start playing */
@@ -108,7 +113,7 @@ struct _GstHLSDemuxClass
   /* inform that a stream has been set */
   void (*video_changed) (GstHLSDemux * demux);
   void (*audio_changed) (GstHLSDemux * demux);
-  //void (*text_changed) (GstHLSDemux * demux);
+  void (*text_changed) (GstHLSDemux * demux);
 
   /* inform that the streams metadata have changed */
   void (*streams_changed) (GstHLSDemux * demux);
@@ -116,7 +121,7 @@ struct _GstHLSDemuxClass
   /* get audio/video/text tags for a stream */
   GstTagList *(*get_video_tags) (GstHLSDemux * demux, gint stream);
   GstTagList *(*get_audio_tags) (GstHLSDemux * demux, gint stream);
-  //GstTagList *(*get_text_tags) (GstHLSDemux * demux, gint stream);
+  GstTagList *(*get_text_tags) (GstHLSDemux * demux, gint stream);
 };
 
 GType gst_hls_demux_get_type (void);
