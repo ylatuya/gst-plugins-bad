@@ -1343,22 +1343,30 @@ gst_hls_demux_push_fragment (GstHLSDemux * demux, GstM3U8MediaType type,
   GQueue *queue;
   GstPad *pad;
   const gchar *desc;
+  gboolean do_typefind;
+  GstCaps **input_caps;
 
   switch (type) {
     case GST_M3U8_MEDIA_TYPE_VIDEO:
       queue = demux->video_queue;
       pad = demux->video_srcpad;
       desc = "video";
+      input_caps = &demux->video_input_caps;
+      do_typefind = demux->do_typefind;
       break;
     case GST_M3U8_MEDIA_TYPE_AUDIO:
       queue = demux->audio_queue;
       pad = demux->audio_srcpad;
       desc = "audio";
+      input_caps = &demux->audio_input_caps;
+      do_typefind = demux->audio_input_caps == NULL;
       break;
     case GST_M3U8_MEDIA_TYPE_SUBTITLES:
       queue = demux->subtt_queue;
       pad = demux->subtt_srcpad;
       desc = "subtitles";
+      input_caps = &demux->subtt_input_caps;
+      do_typefind = demux->subtt_input_caps == NULL;
       break;
     default:
       return FALSE;
@@ -1379,6 +1387,25 @@ gst_hls_demux_push_fragment (GstHLSDemux * demux, GstM3U8MediaType type,
       GST_TIME_ARGS (GST_BUFFER_TIMESTAMP (buf)),
       GST_TIME_ARGS (GST_BUFFER_DURATION (buf))
       );
+
+  /* We actually need to do this every time we switch bitrate in the video
+   * pad */
+  if (G_UNLIKELY (do_typefind)) {
+    GstCaps *caps;
+
+    GST_BUFFER_OFFSET (buf) = 0;
+    caps = gst_type_find_helper_for_buffer (NULL, buf, NULL);
+
+    if (!*input_caps || !gst_caps_is_equal (caps, *input_caps)) {
+      gst_caps_replace (input_caps, caps);
+      /* gst_pad_set_caps (demux->srcpad, demux->input_caps); */
+      GST_INFO_OBJECT (demux, "Input source caps: %" GST_PTR_FORMAT,
+          *input_caps);
+      demux->do_typefind = FALSE;
+    }
+    gst_caps_unref (caps);
+  }
+  gst_buffer_set_caps (buf, *input_caps);
 
   /* Figure out if we need to create/switch pads */
   if (G_UNLIKELY (!pad || !gst_caps_is_equal_fixed (GST_BUFFER_CAPS (buf),
@@ -1942,27 +1969,18 @@ gst_hls_demux_fetch_fragment (GstHLSDemux * demux, GstFragment * fragment,
   GstBufferList *buffer_list;
   GstBuffer *buf;
   GQueue *queue;
-  GstCaps **input_caps;
 
   if (fragment == NULL)
     return TRUE;
 
-  switch (type) {
-    case GST_M3U8_MEDIA_TYPE_VIDEO:
-      queue = demux->video_queue;
-      input_caps = &demux->video_input_caps;
-      break;
-    case GST_M3U8_MEDIA_TYPE_AUDIO:
-      queue = demux->audio_queue;
-      input_caps = &demux->audio_input_caps;
-      break;
-    case GST_M3U8_MEDIA_TYPE_SUBTITLES:
-      queue = demux->subtt_queue;
-      input_caps = &demux->subtt_input_caps;
-      break;
-    default:
-      return FALSE;
-  }
+  if (type == GST_M3U8_MEDIA_TYPE_VIDEO)
+    queue = demux->video_queue;
+  else if (type == GST_M3U8_MEDIA_TYPE_AUDIO)
+    queue = demux->audio_queue;
+  else if (type == GST_M3U8_MEDIA_TYPE_SUBTITLES)
+    queue = demux->subtt_queue;
+  else
+    return FALSE;
 
   GST_INFO_OBJECT (demux, "Fetching next fragment %s %d@%d", fragment->name,
       fragment->offset, fragment->length);
@@ -1983,22 +2001,6 @@ gst_hls_demux_fetch_fragment (GstHLSDemux * demux, GstFragment * fragment,
   GST_BUFFER_TIMESTAMP (buf) = fragment->start_time;
   GST_BUFFER_OFFSET (buf) = 0;
 
-  /* We actually need to do this every time we switch bitrate */
-  if (G_UNLIKELY (demux->do_typefind)) {
-    GstCaps *caps;
-
-    caps = gst_type_find_helper_for_buffer (NULL, buf, NULL);
-
-    if (!*input_caps || !gst_caps_is_equal (caps, *input_caps)) {
-      gst_caps_replace (input_caps, caps);
-      /* gst_pad_set_caps (demux->srcpad, demux->input_caps); */
-      GST_INFO_OBJECT (demux, "Input source caps: %" GST_PTR_FORMAT,
-          *input_caps);
-      demux->do_typefind = FALSE;
-    }
-    gst_caps_unref (caps);
-  }
-  gst_buffer_set_caps (buf, *input_caps);
 
   if (fragment->discontinuous) {
     GST_DEBUG_OBJECT (demux, "Marking fragment as discontinuous");
