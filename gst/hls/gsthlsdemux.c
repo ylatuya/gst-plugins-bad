@@ -58,6 +58,16 @@ static GstStaticPadTemplate srctemplate = GST_STATIC_PAD_TEMPLATE ("src%d",
     GST_PAD_SOMETIMES,
     GST_STATIC_CAPS_ANY);
 
+static GstStaticPadTemplate audiosrctemplate = GST_STATIC_PAD_TEMPLATE ("audio",
+    GST_PAD_SRC,
+    GST_PAD_SOMETIMES,
+    GST_STATIC_CAPS_ANY);
+
+static GstStaticPadTemplate subssrctemplate = GST_STATIC_PAD_TEMPLATE ("subs",
+    GST_PAD_SRC,
+    GST_PAD_SOMETIMES,
+    GST_STATIC_CAPS ("application/x-subtitle-webvtt"));
+
 static GstStaticPadTemplate sinktemplate = GST_STATIC_PAD_TEMPLATE ("sink",
     GST_PAD_SINK,
     GST_PAD_ALWAYS,
@@ -181,6 +191,7 @@ static void gst_hls_demux_select_stream (GstHLSDemux * demux,
 static void gst_hls_demux_create_streams (GstHLSDemux * demux);
 static GstTagList *gst_hls_demux_get_audio_tags (GstHLSDemux * demux, gint id);
 static GstTagList *gst_hls_demux_get_video_tags (GstHLSDemux * demux, gint id);
+static GstTagList *gst_hls_demux_get_text_tags (GstHLSDemux * demux, gint id);
 
 
 static void
@@ -199,6 +210,10 @@ gst_hls_demux_base_init (gpointer g_class)
   GstElementClass *element_class = GST_ELEMENT_CLASS (g_class);
 
   gst_element_class_add_static_pad_template (element_class, &srctemplate);
+
+  gst_element_class_add_static_pad_template (element_class, &audiosrctemplate);
+
+  gst_element_class_add_static_pad_template (element_class, &subssrctemplate);
 
   gst_element_class_add_static_pad_template (element_class, &sinktemplate);
 
@@ -256,6 +271,7 @@ gst_hls_demux_dispose (GObject * obj)
 
   g_queue_free (demux->video_queue);
   g_queue_free (demux->audio_queue);
+  g_queue_free (demux->subtt_queue);
 
   if (demux->video_streams) {
     g_hash_table_unref (demux->video_streams);
@@ -265,6 +281,11 @@ gst_hls_demux_dispose (GObject * obj)
   if (demux->audio_streams) {
     g_hash_table_unref (demux->audio_streams);
     demux->audio_streams = NULL;
+  }
+
+  if (demux->subtt_streams) {
+    g_hash_table_unref (demux->subtt_streams);
+    demux->subtt_streams = NULL;
   }
 
   if (demux->adaptation != NULL) {
@@ -298,6 +319,7 @@ gst_hls_demux_class_init (GstHLSDemuxClass * klass)
 
   hlsdemux_class->get_audio_tags = gst_hls_demux_get_audio_tags;
   hlsdemux_class->get_video_tags = gst_hls_demux_get_video_tags;
+  hlsdemux_class->get_text_tags = gst_hls_demux_get_text_tags;
 
   g_object_class_install_property (gobject_class, PROP_FRAGMENTS_CACHE,
       g_param_spec_uint ("fragments-cache", "Fragments cache",
@@ -373,6 +395,27 @@ gst_hls_demux_class_init (GstHLSDemuxClass * klass)
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
   /**
+   * GstHLSDemux:n-text
+   *
+   * Get the total number of available text streams.
+   */
+  g_object_class_install_property (gobject_class, PROP_N_TEXT,
+      g_param_spec_int ("n-text", "Number Text",
+          "Total number of text streams", 0, G_MAXINT, 0,
+          G_PARAM_READABLE | G_PARAM_STATIC_STRINGS));
+
+  /**
+   * GstHLSDemux:current-text
+   *
+   * Get or set the currently playing text stream. By default no text stream
+   * stream will be played.
+   */
+  g_object_class_install_property (gobject_class, PROP_CURRENT_TEXT,
+      g_param_spec_int ("current-text", "Current Text",
+          "Currently playing text stream (-1 = auto)",
+          -1, G_MAXINT, -1, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
+  /**
    * GstHLSDemux::video-changed
    * @hlsdemux: a #GstHLSDemux
    *
@@ -406,6 +449,24 @@ gst_hls_demux_class_init (GstHLSDemuxClass * klass)
       g_signal_new ("audio-changed", G_TYPE_FROM_CLASS (klass),
       G_SIGNAL_RUN_LAST,
       G_STRUCT_OFFSET (GstHLSDemuxClass, audio_changed), NULL, NULL,
+      gst_marshal_VOID__VOID, G_TYPE_NONE, 0, G_TYPE_NONE);
+
+  /**
+   * GstHLSDemux::text-changed
+   * @hlsdemux: a #GstHLSDemux
+   *
+   * This signal is emitted whenever the number or order of the text
+   * streams has changed. The application will most likely want to select
+   * a new text stream.
+   *
+   * This signal may be emitted from the context of a GStreamer streaming thread.
+   * You can use gst_message_new_application() and gst_element_post_message()
+   * to notify your application's main thread.
+   */
+  gst_hls_demux_signals[SIGNAL_TEXT_CHANGED] =
+      g_signal_new ("text-changed", G_TYPE_FROM_CLASS (klass),
+      G_SIGNAL_RUN_LAST,
+      G_STRUCT_OFFSET (GstHLSDemuxClass, text_changed), NULL, NULL,
       gst_marshal_VOID__VOID, G_TYPE_NONE, 0, G_TYPE_NONE);
 
   /**
@@ -460,6 +521,23 @@ gst_hls_demux_class_init (GstHLSDemuxClass * klass)
       G_STRUCT_OFFSET (GstHLSDemuxClass, get_audio_tags), NULL, NULL,
       gst_hls_demux_marshal_BOXED__INT, GST_TYPE_TAG_LIST, 1, G_TYPE_INT);
 
+  /**
+   * GstPlayBin2::get-text-tags
+   * @hlsdemux: a #GstHLSDemux
+   * @stream: a text stream number
+   *
+   * Action signal to retrieve the tags of a specific text stream number.
+   * This information can be used to select a stream.
+   *
+   * Returns: a GstTagList with tags or NULL when the stream number does not
+   * exist.
+   */
+  gst_hls_demux_signals[SIGNAL_GET_TEXT_TAGS] =
+      g_signal_new ("get-text-tags", G_TYPE_FROM_CLASS (klass),
+      G_SIGNAL_RUN_LAST | G_SIGNAL_ACTION,
+      G_STRUCT_OFFSET (GstHLSDemuxClass, get_text_tags), NULL, NULL,
+      gst_hls_demux_marshal_BOXED__INT, GST_TYPE_TAG_LIST, 1, G_TYPE_INT);
+
   gstelement_class->change_state =
       GST_DEBUG_FUNCPTR (gst_hls_demux_change_state);
 }
@@ -481,6 +559,7 @@ gst_hls_demux_init (GstHLSDemux * demux, GstHLSDemuxClass * klass)
   /* Streams list */
   demux->video_streams = g_hash_table_new (g_direct_hash, g_direct_equal);
   demux->audio_streams = g_hash_table_new (g_direct_hash, g_direct_equal);
+  demux->subtt_streams = g_hash_table_new (g_direct_hash, g_direct_equal);
 
   /* Streams adaptation */
   demux->adaptation = gst_hls_adaptation_new ();
@@ -498,6 +577,7 @@ gst_hls_demux_init (GstHLSDemux * demux, GstHLSDemuxClass * klass)
 
   demux->video_queue = g_queue_new ();
   demux->audio_queue = g_queue_new ();
+  demux->subtt_queue = g_queue_new ();
 
   /* Updates task */
   g_static_rec_mutex_init (&demux->updates_lock);
@@ -545,10 +625,13 @@ gst_hls_demux_set_property (GObject * object, guint prop_id,
       demux->current_audio = g_value_get_int (value);
       gst_hls_demux_select_stream (demux, GST_M3U8_MEDIA_TYPE_AUDIO);
       break;
+    case PROP_CURRENT_TEXT:
+      demux->current_subtt = g_value_get_int (value);
+      gst_hls_demux_select_stream (demux, GST_M3U8_MEDIA_TYPE_SUBTITLES);
+      break;
     case PROP_MAX_RESOLUTION:
       demux->max_resolution = g_value_dup_string (value);
       gst_m3u8_client_set_max_resolution (demux->client, demux->max_resolution);
-      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -577,11 +660,17 @@ gst_hls_demux_get_property (GObject * object, guint prop_id, GValue * value,
     case PROP_N_VIDEO:
       g_value_set_int (value, g_hash_table_size (demux->video_streams));
       break;
+    case PROP_N_TEXT:
+      g_value_set_int (value, g_hash_table_size (demux->subtt_streams));
+      break;
     case PROP_CURRENT_VIDEO:
       g_value_set_int (value, demux->current_video);
       break;
     case PROP_CURRENT_AUDIO:
       g_value_set_int (value, demux->current_audio);
+      break;
+    case PROP_CURRENT_TEXT:
+      g_value_set_int (value, demux->current_subtt);
       break;
     case PROP_ADAPTATION_ALGORITHM:
       g_value_set_enum (value, demux->adaptation_algo);
@@ -742,6 +831,12 @@ gst_hls_demux_src_event (GstPad * pad, GstEvent * event)
         gst_buffer_list_unref (buf_list);
       }
       g_queue_clear (demux->audio_queue);
+
+      while (!g_queue_is_empty (demux->subtt_queue)) {
+        GstBufferList *buf_list = g_queue_pop_head (demux->subtt_queue);
+        gst_buffer_list_unref (buf_list);
+      }
+      g_queue_clear (demux->subtt_queue);
 
       gst_m3u8_client_get_current_position (demux->client, &position);
       demux->position_shift = start - position;
@@ -1017,17 +1112,26 @@ gst_hls_demux_select_stream (GstHLSDemux * demux, GstM3U8MediaType type)
   GHashTable *streams;
   gint id;
   guint *signal;
+  const gchar *desc, *alt_name;
 
   switch (type) {
     case GST_M3U8_MEDIA_TYPE_AUDIO:
       streams = demux->audio_streams;
       id = demux->current_audio;
       signal = &gst_hls_demux_signals[SIGNAL_AUDIO_CHANGED];
+      desc = "audio";
       break;
     case GST_M3U8_MEDIA_TYPE_VIDEO:
       streams = demux->video_streams;
       id = demux->current_video;
       signal = &gst_hls_demux_signals[SIGNAL_VIDEO_CHANGED];
+      desc = "video";
+      break;
+    case GST_M3U8_MEDIA_TYPE_SUBTITLES:
+      streams = demux->subtt_streams;
+      id = demux->current_subtt;
+      signal = &gst_hls_demux_signals[SIGNAL_TEXT_CHANGED];
+      desc = "subtitles";
       break;
     default:
       return;
@@ -1043,8 +1147,10 @@ gst_hls_demux_select_stream (GstHLSDemux * demux, GstM3U8MediaType type)
     id = 0;
   }
 
-  gst_m3u8_client_set_alternate (demux->client, type,
-      (const gchar *) (g_hash_table_lookup (streams, GINT_TO_POINTER (id))));
+  alt_name = g_hash_table_lookup (streams, GINT_TO_POINTER (id));
+  GST_INFO_OBJECT (demux, "Switch to %s stream %s", desc, alt_name);
+  gst_m3u8_client_set_alternate (demux->client, type, alt_name);
+
 
   g_signal_emit (demux, *signal, 0);
 }
@@ -1112,6 +1218,30 @@ gst_hls_demux_get_video_tags (GstHLSDemux * demux, gint id)
   return list;
 }
 
+static GstTagList *
+gst_hls_demux_get_text_tags (GstHLSDemux * demux, gint id)
+{
+  GstTagList *list;
+  gchar *alt, *lang = NULL, *title = NULL;
+
+  list = gst_tag_list_new ();
+
+  alt = g_hash_table_lookup (demux->subtt_streams, GINT_TO_POINTER (id));
+  if (!alt)
+    return list;
+
+  if (!gst_m3u8_client_subs_stream_info (demux->client, alt, &lang, &title))
+    return list;
+
+  gst_hls_demux_add_tags (demux, list, title, 0, lang);
+  if (lang)
+    g_free (lang);
+  if (title)
+    g_free (title);
+
+  return list;
+}
+
 static void
 gst_hls_demux_create_streams (GstHLSDemux * demux)
 {
@@ -1132,6 +1262,13 @@ gst_hls_demux_create_streams (GstHLSDemux * demux)
         g_strdup ((gchar *) walk->data));
   }
 
+  for (walk = gst_m3u8_client_get_alternates (demux->client,
+          GST_M3U8_MEDIA_TYPE_SUBTITLES); walk; walk = walk->next) {
+    index = g_hash_table_size (demux->subtt_streams);
+    g_hash_table_insert (demux->subtt_streams, GINT_TO_POINTER (index),
+        g_strdup ((gchar *) walk->data));
+  }
+
   for (walk = demux->client->main->streams; walk; walk = walk->next) {
     GstM3U8Stream *stream = GST_M3U8_STREAM (walk->data);
     gst_hls_adaptation_add_stream (demux->adaptation, stream->bandwidth);
@@ -1142,17 +1279,22 @@ gst_hls_demux_create_streams (GstHLSDemux * demux)
 }
 
 static void
-switch_pads (GstHLSDemux * demux, gboolean is_video, GstCaps * newcaps)
+switch_pads (GstHLSDemux * demux, GstM3U8MediaType type, GstCaps * newcaps)
 {
   GstPad *pad;
   GstPad *oldpad;
 
-  if (is_video) {
-    pad = demux->video_srcpad;
-  } else {
-    pad = demux->audio_srcpad;
-  }
-  oldpad = pad;
+  if (type == GST_M3U8_MEDIA_TYPE_VIDEO) {
+    oldpad = demux->video_srcpad;
+    pad = gst_pad_new_from_static_template (&srctemplate, NULL);
+  } else if (type == GST_M3U8_MEDIA_TYPE_AUDIO) {
+    oldpad = demux->audio_srcpad;
+    pad = gst_pad_new_from_static_template (&audiosrctemplate, NULL);
+  } else if (type == GST_M3U8_MEDIA_TYPE_SUBTITLES) {
+    oldpad = demux->subtt_srcpad;
+    pad = gst_pad_new_from_static_template (&subssrctemplate, NULL);
+  } else
+    return;
 
   GST_DEBUG ("Switching pads (oldpad:%p) with caps: %" GST_PTR_FORMAT, oldpad,
       newcaps);
@@ -1166,11 +1308,10 @@ switch_pads (GstHLSDemux * demux, gboolean is_video, GstCaps * newcaps)
    * current running time to newly created sinks and is
    * fixed in 0.11 with the new segments.
    */
-  if (pad)
-    gst_pad_push_event (pad, gst_event_new_flush_stop ());
+  if (oldpad)
+    gst_pad_push_event (oldpad, gst_event_new_flush_stop ());
 
   /* First create and activate new pad */
-  pad = gst_pad_new_from_static_template (&srctemplate, NULL);
   gst_pad_set_event_function (pad, GST_DEBUG_FUNCPTR (gst_hls_demux_src_event));
   gst_pad_set_query_function (pad, GST_DEBUG_FUNCPTR (gst_hls_demux_src_query));
   gst_pad_set_element_private (pad, demux);
@@ -1180,11 +1321,12 @@ switch_pads (GstHLSDemux * demux, gboolean is_video, GstCaps * newcaps)
 
   gst_element_no_more_pads (GST_ELEMENT (demux));
 
-  if (is_video) {
+  if (type == GST_M3U8_MEDIA_TYPE_VIDEO)
     demux->video_srcpad = pad;
-  } else {
+  else if (type == GST_M3U8_MEDIA_TYPE_AUDIO)
     demux->audio_srcpad = pad;
-  }
+  else if (type == GST_M3U8_MEDIA_TYPE_SUBTITLES)
+    demux->subtt_srcpad = pad;
 
   if (oldpad) {
     /* Push out EOS */
@@ -1195,7 +1337,7 @@ switch_pads (GstHLSDemux * demux, gboolean is_video, GstCaps * newcaps)
 }
 
 static gboolean
-gst_hls_demux_push_fragment (GstHLSDemux * demux, gboolean is_video,
+gst_hls_demux_push_fragment (GstHLSDemux * demux, GstM3U8MediaType type,
     gboolean need_segment)
 {
   GstFragment *fragment;
@@ -1204,13 +1346,26 @@ gst_hls_demux_push_fragment (GstHLSDemux * demux, gboolean is_video,
   GstFlowReturn ret;
   GQueue *queue;
   GstPad *pad;
+  const gchar *desc;
 
-  if (is_video) {
-    queue = demux->video_queue;
-    pad = demux->video_srcpad;
-  } else {
-    queue = demux->audio_queue;
-    pad = demux->audio_srcpad;
+  switch (type) {
+    case GST_M3U8_MEDIA_TYPE_VIDEO:
+      queue = demux->video_queue;
+      pad = demux->video_srcpad;
+      desc = "video";
+      break;
+    case GST_M3U8_MEDIA_TYPE_AUDIO:
+      queue = demux->audio_queue;
+      pad = demux->audio_srcpad;
+      desc = "audio";
+      break;
+    case GST_M3U8_MEDIA_TYPE_SUBTITLES:
+      queue = demux->subtt_queue;
+      pad = demux->subtt_srcpad;
+      desc = "subtitles";
+      break;
+    default:
+      return FALSE;
   }
 
   if (g_queue_is_empty (queue)) {
@@ -1224,8 +1379,7 @@ gst_hls_demux_push_fragment (GstHLSDemux * demux, gboolean is_video,
   buf = gst_buffer_list_get (buffer_list, 0, 0);
 
   GST_LOG_OBJECT (demux, "Pushing %s fragment ts:%" GST_TIME_FORMAT
-      " dur:%" GST_TIME_FORMAT,
-      is_video ? "video" : "audio",
+      " dur:%" GST_TIME_FORMAT, desc,
       GST_TIME_ARGS (GST_BUFFER_TIMESTAMP (buf)),
       GST_TIME_ARGS (GST_BUFFER_DURATION (buf))
       );
@@ -1233,16 +1387,18 @@ gst_hls_demux_push_fragment (GstHLSDemux * demux, gboolean is_video,
   /* Figure out if we need to create/switch pads */
   if (G_UNLIKELY (!pad || !gst_caps_is_equal_fixed (GST_BUFFER_CAPS (buf),
               GST_PAD_CAPS (pad)) || demux->need_segment)) {
-    switch_pads (demux, is_video, GST_BUFFER_CAPS (buf));
+    switch_pads (demux, type, GST_BUFFER_CAPS (buf));
     demux->need_segment = TRUE;
   }
   g_object_unref (fragment);
 
-  if (is_video) {
+  /* The pad might have changed */
+  if (type == GST_M3U8_MEDIA_TYPE_VIDEO)
     pad = demux->video_srcpad;
-  } else {
+  else if (type == GST_M3U8_MEDIA_TYPE_AUDIO)
     pad = demux->audio_srcpad;
-  }
+  else if (type == GST_M3U8_MEDIA_TYPE_SUBTITLES)
+    pad = demux->subtt_srcpad;
 
   if (demux->need_segment || need_segment) {
     GstClockTime start = GST_BUFFER_TIMESTAMP (buf);
@@ -1304,9 +1460,14 @@ gst_hls_demux_stream_loop (GstHLSDemux * demux)
   }
 
   need_segment = demux->need_segment;
-  if (!gst_hls_demux_push_fragment (demux, TRUE, need_segment))
+  if (!gst_hls_demux_push_fragment (demux, GST_M3U8_MEDIA_TYPE_VIDEO,
+          need_segment))
     return;
-  gst_hls_demux_push_fragment (demux, FALSE, need_segment);
+  if (!gst_hls_demux_push_fragment (demux, GST_M3U8_MEDIA_TYPE_AUDIO,
+          need_segment))
+    return;
+  gst_hls_demux_push_fragment (demux, GST_M3U8_MEDIA_TYPE_SUBTITLES,
+      need_segment);
   return;
 
 end_of_playlist:
@@ -1351,6 +1512,11 @@ gst_hls_demux_reset (GstHLSDemux * demux, gboolean dispose)
   if (demux->audio_input_caps) {
     gst_caps_unref (demux->audio_input_caps);
     demux->audio_input_caps = NULL;
+  }
+
+  if (demux->subtt_input_caps) {
+    gst_caps_unref (demux->subtt_input_caps);
+    demux->subtt_input_caps = NULL;
   }
 
   if (demux->playlist) {
@@ -1625,10 +1791,12 @@ gst_hls_demux_update_playlist (GstHLSDemux * demux, gboolean update)
 {
   GstFragment *download;
   gboolean updated = FALSE;
-  gchar *v_playlist = NULL, *a_playlist = NULL;
+  gchar *v_playlist = NULL, *a_playlist = NULL, *s_playlist = NULL;
   const gchar *video_uri = NULL, *audio_uri = NULL;
+  const gchar *subtt_uri = NULL;
 
-  gst_m3u8_client_get_current_uri (demux->client, &video_uri, &audio_uri);
+  gst_m3u8_client_get_current_uri (demux->client, &video_uri, &audio_uri,
+      &subtt_uri);
 
   if (video_uri != NULL) {
     GST_DEBUG_OBJECT (demux, "Updating video playlist %s", video_uri);
@@ -1646,7 +1814,15 @@ gst_hls_demux_update_playlist (GstHLSDemux * demux, gboolean update)
     a_playlist = gst_hls_demux_get_playlist_from_fragment (demux, download);
   }
 
-  updated = gst_m3u8_client_update (demux->client, v_playlist, a_playlist);
+  if (subtt_uri != NULL) {
+    GST_DEBUG_OBJECT (demux, "Updating subtitles playlist %s", subtt_uri);
+    download = gst_uri_downloader_fetch_uri (demux->downloader, subtt_uri);
+    if (download == NULL)
+      return FALSE;
+    s_playlist = gst_hls_demux_get_playlist_from_fragment (demux, download);
+  }
+  updated = gst_m3u8_client_update (demux->client, v_playlist, a_playlist,
+      s_playlist);
 
   /*  If it's a live source, do not let the sequence number go beyond
    * three fragments before the end of the list */
@@ -1684,12 +1860,13 @@ retry_failover_protection:
 
   if (gst_hls_demux_update_playlist (demux, FALSE)) {
     GstStructure *s;
-    const gchar *v_uri, *a_uri;
+    const gchar *v_uri, *a_uri, *s_uri;
 
-    gst_m3u8_client_get_current_uri (demux->client, &v_uri, &a_uri);
+    gst_m3u8_client_get_current_uri (demux->client, &v_uri, &a_uri, &s_uri);
     s = gst_structure_new ("playlist",
         "uri", G_TYPE_STRING, v_uri,
         "uri-alt", G_TYPE_STRING, a_uri,
+        "uri-subtitles", G_TYPE_STRING, s_uri,
         "bitrate", G_TYPE_INT, new_bandwidth, NULL);
     gst_element_post_message (GST_ELEMENT_CAST (demux),
         gst_message_new_element (GST_OBJECT_CAST (demux), s));
@@ -1707,8 +1884,8 @@ retry_failover_protection:
     gst_m3u8_client_set_current (demux->client, current_stream);
     /*  Try a lower bitrate (or stop if we just tried the lowest) */
     if (new_bandwidth ==
-        GST_M3U8_STREAM (g_list_first (demux->client->main->streams)->
-            data)->bandwidth)
+        GST_M3U8_STREAM (g_list_first (demux->client->main->streams)->data)->
+        bandwidth)
       return FALSE;
     else
       return gst_hls_demux_change_playlist (demux, new_bandwidth - 1);
@@ -1765,7 +1942,7 @@ gst_hls_demux_switch_playlist (GstHLSDemux * demux)
 
 static gboolean
 gst_hls_demux_fetch_fragment (GstHLSDemux * demux, GstFragment * fragment,
-    gboolean is_video)
+    GstM3U8MediaType type)
 {
   GstFragment *download;
   GstBufferList *buffer_list;
@@ -1776,12 +1953,21 @@ gst_hls_demux_fetch_fragment (GstHLSDemux * demux, GstFragment * fragment,
   if (fragment == NULL)
     return TRUE;
 
-  if (is_video) {
-    queue = demux->video_queue;
-    input_caps = &demux->video_input_caps;
-  } else {
-    queue = demux->audio_queue;
-    input_caps = &demux->audio_input_caps;
+  switch (type) {
+    case GST_M3U8_MEDIA_TYPE_VIDEO:
+      queue = demux->video_queue;
+      input_caps = &demux->video_input_caps;
+      break;
+    case GST_M3U8_MEDIA_TYPE_AUDIO:
+      queue = demux->audio_queue;
+      input_caps = &demux->audio_input_caps;
+      break;
+    case GST_M3U8_MEDIA_TYPE_SUBTITLES:
+      queue = demux->subtt_queue;
+      input_caps = &demux->subtt_input_caps;
+      break;
+    default:
+      return FALSE;
   }
 
   GST_INFO_OBJECT (demux, "Fetching next fragment %s %d@%d", fragment->name,
@@ -1834,10 +2020,10 @@ gst_hls_demux_fetch_fragment (GstHLSDemux * demux, GstFragment * fragment,
 static gboolean
 gst_hls_demux_get_next_fragment (GstHLSDemux * demux, gboolean caching)
 {
-  GstFragment *v_fragment, *a_fragment;
+  GstFragment *v_fragment, *a_fragment, *s_fragment;
 
   if (!gst_m3u8_client_get_next_fragment (demux->client, &v_fragment,
-          &a_fragment)) {
+          &a_fragment, &s_fragment)) {
     GST_INFO_OBJECT (demux, "This playlist doesn't contain more fragments");
     demux->end_of_playlist = TRUE;
     gst_task_start (demux->stream_task);
@@ -1845,10 +2031,16 @@ gst_hls_demux_get_next_fragment (GstHLSDemux * demux, gboolean caching)
   }
 
   /* Fetch video fragment */
-  if (!gst_hls_demux_fetch_fragment (demux, v_fragment, TRUE))
+  if (!gst_hls_demux_fetch_fragment (demux, v_fragment,
+          GST_M3U8_MEDIA_TYPE_VIDEO))
     goto error;
   /* Fetch audio fragment */
-  if (!gst_hls_demux_fetch_fragment (demux, a_fragment, FALSE))
+  if (!gst_hls_demux_fetch_fragment (demux, a_fragment,
+          GST_M3U8_MEDIA_TYPE_AUDIO))
+    goto error;
+  /* Fetch subtitles fragment */
+  if (!gst_hls_demux_fetch_fragment (demux, s_fragment,
+          GST_M3U8_MEDIA_TYPE_SUBTITLES))
     goto error;
   if (!caching) {
     GST_TASK_SIGNAL (demux->updates_task);
