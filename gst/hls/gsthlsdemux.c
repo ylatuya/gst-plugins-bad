@@ -1863,6 +1863,9 @@ gst_hls_demux_change_playlist (GstHLSDemux * demux, guint target_bitrate)
   GstM3U8Stream *previous_stream, *current_stream;
   gint old_bandwidth, new_bandwidth;
 
+  if (target_bitrate == -1)
+    return TRUE;
+
   current_stream = gst_m3u8_client_get_stream_for_bitrate (demux->client,
       target_bitrate);
   previous_stream = demux->client->selected_stream;
@@ -1957,8 +1960,6 @@ gst_hls_demux_switch_playlist (GstHLSDemux * demux)
   GST_DEBUG ("Downloaded %" G_GSIZE_FORMAT " bytes in %" GST_TIME_FORMAT
       ". Bitrate is : %d", size, GST_TIME_ARGS (diff), bitrate);
   target_bitrate = gst_hls_adaptation_get_target_bitrate (demux->adaptation);
-  if (target_bitrate == -1)
-    return TRUE;
 
   return gst_hls_demux_change_playlist (demux, target_bitrate);
 }
