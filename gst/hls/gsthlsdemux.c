@@ -1732,10 +1732,10 @@ gst_hls_demux_cache_fragments (GstHLSDemux * demux)
   }
 
   /* Cache the first fragments */
-  for (i = 0; i < demux->fragments_cache; i++) {
+  for (i = 0; i < demux->fragments_cache - 1; i++) {
     gst_element_post_message (GST_ELEMENT (demux),
         gst_message_new_buffering (GST_OBJECT (demux),
-            100 * i / demux->fragments_cache));
+            100 * i / (demux->fragments_cache - 1)));
     g_get_current_time (&demux->next_update);
     if (!gst_hls_demux_get_next_fragment (demux, TRUE)) {
       if (demux->end_of_playlist)
@@ -1754,6 +1754,11 @@ gst_hls_demux_cache_fragments (GstHLSDemux * demux)
       gst_message_new_buffering (GST_OBJECT (demux), 100));
 
   g_get_current_time (&demux->next_update);
+  /* We have chached the first fragments - 1 to start playing and cache the last
+   * one while playing the first */
+  g_time_val_add (&demux->next_update,
+      -(gst_m3u8_client_get_current_fragment_duration (demux->client)
+          / (gdouble) GST_SECOND * G_USEC_PER_SEC));
 
   demux->need_cache = FALSE;
   return TRUE;
