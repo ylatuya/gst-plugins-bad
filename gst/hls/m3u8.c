@@ -126,8 +126,10 @@ gst_m3u8_stream_new (void)
   stream = g_new0 (GstM3U8Stream, 1);
   stream->video_alternates = g_hash_table_new (g_str_hash, g_str_equal);
   stream->audio_alternates = g_hash_table_new (g_str_hash, g_str_equal);
+  stream->subtt_alternates = g_hash_table_new (g_str_hash, g_str_equal);
   stream->selected_video = NULL;
   stream->selected_audio = NULL;
+  stream->selected_subtt = NULL;
   stream->video_codec = GST_M3U8_MEDIA_CODEC_NONE;
   stream->audio_codec = GST_M3U8_MEDIA_CODEC_NONE;
   return stream;
@@ -142,8 +144,12 @@ gst_m3u8_stream_free (GstM3U8Stream * stream)
   if (stream->default_audio != NULL)
     g_free (stream->default_audio);
 
+  if (stream->default_subtt != NULL)
+    g_free (stream->default_subtt);
+
   g_hash_table_unref (stream->video_alternates);
   g_hash_table_unref (stream->audio_alternates);
+  g_hash_table_unref (stream->subtt_alternates);
 
   g_free (stream);
 }
@@ -178,11 +184,20 @@ gst_m3u8_stream_find_next (GstM3U8Stream * stream, guint sequence,
   GstM3U8Playlist *pl;
   GList *list;
 
-  if (media_type == GST_M3U8_MEDIA_TYPE_VIDEO) {
-    pl = stream->selected_video;
-  } else if (media_type == GST_M3U8_MEDIA_TYPE_AUDIO) {
-    pl = stream->selected_audio;
+  switch (media_type) {
+    case GST_M3U8_MEDIA_TYPE_VIDEO:
+      pl = stream->selected_video;
+      break;
+    case GST_M3U8_MEDIA_TYPE_AUDIO:
+      pl = stream->selected_audio;
+      break;
+    case GST_M3U8_MEDIA_TYPE_SUBTITLES:
+      pl = stream->selected_subtt;
+      break;
+    default:
+      return NULL;
   }
+
   if (pl == NULL)
     return NULL;
 
@@ -247,6 +262,7 @@ gst_m3u8_variant_playlist_new (void)
   m3u8->streams = NULL;
   m3u8->video_rendition_groups = g_hash_table_new (g_str_hash, g_str_equal);
   m3u8->audio_rendition_groups = g_hash_table_new (g_str_hash, g_str_equal);
+  m3u8->subtt_rendition_groups = g_hash_table_new (g_str_hash, g_str_equal);
   GST_M3U8 (m3u8)->uri = NULL;
 
   return m3u8;
@@ -278,6 +294,10 @@ gst_m3u8_variant_playlist_free (GstM3U8VariantPlaylist * self)
   g_hash_table_foreach (self->audio_rendition_groups, (GHFunc) _free_medias,
       NULL);
   g_hash_table_unref (self->audio_rendition_groups);
+
+  g_hash_table_foreach (self->subtt_rendition_groups, (GHFunc) _free_medias,
+      NULL);
+  g_hash_table_unref (self->subtt_rendition_groups);
 
   if (self->playlists != NULL) {
     g_list_foreach (self->playlists, (GFunc) gst_m3u8_playlist_free, NULL);
@@ -521,6 +541,7 @@ gst_m3u8_variant_playlist_parse (GstM3U8VariantPlaylist * self, gchar * data)
   GstM3U8Stream *stream = NULL;
   gchar *audio_alternate = NULL;
   gchar *video_alternate = NULL;
+  gchar *subtt_alternate = NULL;
 
   if (!g_str_has_prefix (data, "#EXTM3U")) {
     GST_WARNING ("Data doesn't start with #EXTM3U");
@@ -616,6 +637,18 @@ gst_m3u8_variant_playlist_parse (GstM3U8VariantPlaylist * self, gchar * data)
           stream->selected_audio = pl;
         }
       }
+      if (subtt_alternate != NULL) {
+        /* This stream has subtitles already listed in a rendition group.
+         * Fill the stream's alternate subtitles playlists */
+        GList *walk =
+            g_hash_table_lookup (self->subtt_rendition_groups, subtt_alternate);
+        for (walk = walk; walk; walk = walk->next) {
+          GstM3U8Media *media;
+
+          media = GST_M3U8_MEDIA (walk->data);
+          g_hash_table_insert (stream->subtt_alternates, media->name, media);
+        }
+      }
 
       if (audio_alternate == NULL && video_alternate == NULL) {
         /* No alternative renditions, this URI is the only one used for this
@@ -651,9 +684,7 @@ gst_m3u8_variant_playlist_parse (GstM3U8VariantPlaylist * self, gchar * data)
           } else if (g_str_equal (v, "VIDEO")) {
             media->media_type = GST_M3U8_MEDIA_TYPE_VIDEO;
           } else if (g_str_equal (v, "SUBTITLES")) {
-            GST_WARNING ("Subtitles are not supported");
-            not_supported = TRUE;
-            goto next_line;
+            media->media_type = GST_M3U8_MEDIA_TYPE_SUBTITLES;
           } else {
             GST_WARNING ("Error while reading TYPE");
             error = TRUE;
@@ -695,6 +726,8 @@ gst_m3u8_variant_playlist_parse (GstM3U8VariantPlaylist * self, gchar * data)
         groups = self->video_rendition_groups;
       } else if (media->media_type == GST_M3U8_MEDIA_TYPE_AUDIO) {
         groups = self->audio_rendition_groups;
+      } else if (media->media_type == GST_M3U8_MEDIA_TYPE_SUBTITLES) {
+        groups = self->subtt_rendition_groups;
       }
       if (groups != NULL && g_hash_table_contains (groups, media->group_id)) {
         group = g_hash_table_lookup (groups, media->group_id);
@@ -763,6 +796,10 @@ gst_m3u8_variant_playlist_parse (GstM3U8VariantPlaylist * self, gchar * data)
           if (audio_alternate != NULL)
             g_free (audio_alternate);
           audio_alternate = gst_m3u8_strip_quotes (v);
+        } else if (g_str_equal (a, "SUBTITLES")) {
+          if (subtt_alternate != NULL)
+            g_free (subtt_alternate);
+          subtt_alternate = gst_m3u8_strip_quotes (v);
         } else if (g_str_equal (a, "RESOLUTION")) {
           if (!int_from_string (v, &v, &stream->width))
             GST_WARNING ("Error while reading RESOLUTION width");
@@ -960,6 +997,8 @@ gst_m3u8_client_select_defaults (GstM3U8Client * client)
     GST_M3U8_CLIENT_LOCK (client);
   }
 
+  client->selected_stream->default_subtt = NULL;
+
   if (client->selected_stream->selected_video == NULL) {
     /* The first stream should never be the audio-only fallback */
     if (g_list_length (client->main->streams) > 0)
@@ -1034,6 +1073,14 @@ gst_m3u8_client_update_alternate (GstM3U8Client * client)
           stream->selected_audio = pl;
         }
       }
+    }
+    if (client->subtt_alternate != NULL) {
+      pl = GST_M3U8_MEDIA (g_hash_table_lookup (stream->subtt_alternates,
+              client->subtt_alternate))->playlist;
+      if (pl != NULL)
+        stream->selected_subtt = pl;
+    } else {
+      stream->selected_subtt = NULL;
     }
   }
 }
@@ -1130,7 +1177,7 @@ out:
 
 gboolean
 gst_m3u8_client_update (GstM3U8Client * self, gchar * video_data,
-    gchar * audio_data)
+    gchar * audio_data, gchar * subtt_data)
 {
   gboolean updated = TRUE;
   gboolean ret = FALSE;
@@ -1154,6 +1201,15 @@ gst_m3u8_client_update (GstM3U8Client * self, gchar * video_data,
   if (selected->selected_audio != NULL && audio_data != NULL) {
     if (!gst_m3u8_playlist_update (selected->selected_audio,
             audio_data, &updated))
+      goto out;
+    if (!updated) {
+      self->update_failed_count++;
+      goto out;
+    }
+  }
+  if (selected->selected_subtt != NULL && subtt_data != NULL) {
+    if (!gst_m3u8_playlist_update (selected->selected_subtt,
+            subtt_data, &updated))
       goto out;
     if (!updated) {
       self->update_failed_count++;
@@ -1206,23 +1262,32 @@ gst_m3u8_client_get_current_position (GstM3U8Client * client,
 
 gboolean
 gst_m3u8_client_get_next_fragment (GstM3U8Client * client,
-    GstFragment ** video_fragment, GstFragment ** audio_fragment)
+    GstFragment ** video_fragment, GstFragment ** audio_fragment,
+    GstFragment ** subtt_fragment)
 {
-  GstM3U8MediaFile *video_file, *audio_file;
+  GstM3U8MediaFile *video_file, *audio_file, *subtt_file;
   GstClockTime timestamp;
+  gboolean updated = FALSE;
 
   g_return_val_if_fail (client != NULL, FALSE);
   g_return_val_if_fail (client->selected_stream != NULL, FALSE);
+  g_return_val_if_fail (video_fragment != NULL || audio_fragment != NULL
+      || subtt_fragment != NULL, FALSE);
 
   GST_M3U8_CLIENT_LOCK (client);
+
   GST_DEBUG ("Looking for fragment %d", client->sequence);
   *video_fragment = NULL;
   *audio_fragment = NULL;
+  *subtt_fragment = NULL;
   video_file = gst_m3u8_stream_find_next (client->selected_stream,
       client->sequence, GST_M3U8_MEDIA_TYPE_VIDEO);
   audio_file = gst_m3u8_stream_find_next (client->selected_stream,
       client->sequence, GST_M3U8_MEDIA_TYPE_AUDIO);
-  if (video_file == NULL && audio_file == NULL) {
+  subtt_file = gst_m3u8_stream_find_next (client->selected_stream,
+      client->sequence, GST_M3U8_MEDIA_TYPE_SUBTITLES);
+
+  if (video_file == NULL && audio_file == NULL && subtt_file == NULL) {
     GST_M3U8_CLIENT_UNLOCK (client);
     return FALSE;
   }
@@ -1239,6 +1304,7 @@ gst_m3u8_client_get_next_fragment (GstM3U8Client * client,
     frag->length = video_file->length;
     *video_fragment = frag;
     client->sequence = video_file->sequence + 1;
+    updated = TRUE;
   }
 
   if (audio_file != NULL) {
@@ -1250,7 +1316,24 @@ gst_m3u8_client_get_next_fragment (GstM3U8Client * client,
     frag->offset = audio_file->offset;
     frag->length = audio_file->length;
     *audio_fragment = frag;
-    client->sequence = audio_file->sequence + 1;
+    if (!updated) {
+      client->sequence = audio_file->sequence + 1;
+      updated = TRUE;
+    }
+  }
+
+  if (subtt_file != NULL) {
+    GstFragment *frag = gst_fragment_new ();
+    frag->discontinuous = client->sequence != subtt_file->sequence;
+    frag->name = subtt_file->uri;
+    frag->start_time = timestamp;
+    frag->stop_time = timestamp + subtt_file->duration;
+    frag->offset = subtt_file->offset;
+    frag->length = subtt_file->length;
+    *subtt_fragment = frag;
+    if (!updated) {
+      client->sequence = subtt_file->sequence + 1;
+    }
   }
 
   GST_M3U8_CLIENT_UNLOCK (client);
@@ -1319,12 +1402,14 @@ gst_m3u8_client_get_uri (GstM3U8Client * client)
 
 void
 gst_m3u8_client_get_current_uri (GstM3U8Client * client,
-    const gchar ** video_uri, const gchar ** audio_uri)
+    const gchar ** video_uri, const gchar ** audio_uri,
+    const gchar ** subtt_uri)
 {
   g_return_if_fail (client != NULL);
 
   *video_uri = NULL;
   *audio_uri = NULL;
+  *subtt_uri = NULL;
 
   GST_M3U8_CLIENT_LOCK (client);
   if (client->selected_stream->selected_video != NULL) {
@@ -1332,6 +1417,9 @@ gst_m3u8_client_get_current_uri (GstM3U8Client * client,
   }
   if (client->selected_stream->selected_audio != NULL) {
     *audio_uri = GST_M3U8 (client->selected_stream->selected_audio)->uri;
+  }
+  if (client->selected_stream->selected_subtt != NULL) {
+    *subtt_uri = GST_M3U8 (client->selected_stream->selected_subtt)->uri;
   }
   GST_M3U8_CLIENT_UNLOCK (client);
 }
@@ -1500,6 +1588,8 @@ gst_m3u8_client_get_alternates (GstM3U8Client * client,
     alternates = client->selected_stream->video_alternates;
   } else if (media_type == GST_M3U8_MEDIA_TYPE_AUDIO) {
     alternates = client->selected_stream->audio_alternates;
+  } else if (media_type == GST_M3U8_MEDIA_TYPE_SUBTITLES) {
+    alternates = client->selected_stream->subtt_alternates;
   }
   if (alternates == NULL) {
     GST_DEBUG ("This streams has no alternative %s rendition",
@@ -1509,7 +1599,7 @@ gst_m3u8_client_get_alternates (GstM3U8Client * client,
 
   for (walk = g_hash_table_get_values (alternates); walk; walk = walk->next) {
     GstM3U8Media *media = GST_M3U8_MEDIA (walk->data);
-    if (media->is_default)
+    if (media->is_default && media_type != GST_M3U8_MEDIA_TYPE_SUBTITLES)
       names = g_list_prepend (names, media->name);
     else
       names = g_list_append (names, media->name);
@@ -1526,30 +1616,40 @@ gst_m3u8_client_set_alternate (GstM3U8Client * client,
 {
   GHashTable *groups = NULL;
   gboolean ret = FALSE;
+  gchar *alt_name = NULL;
 
   GST_M3U8_CLIENT_LOCK (client);
   if (media_type == GST_M3U8_MEDIA_TYPE_VIDEO)
     groups = client->selected_stream->video_alternates;
   else if (media_type == GST_M3U8_MEDIA_TYPE_AUDIO)
     groups = client->selected_stream->audio_alternates;
+  else if (media_type == GST_M3U8_MEDIA_TYPE_SUBTITLES)
+    groups = client->selected_stream->subtt_alternates;
 
-  if (groups != NULL && !g_hash_table_contains (groups, name)) {
-    GST_WARNING ("Could not find and alternative %s rendition named %s",
-        media_type == GST_M3U8_MEDIA_TYPE_VIDEO ? "video" : "audio", name);
+  if (name != NULL)
+    alt_name = g_strdup (name);
+
+  if (alt_name != NULL && !g_hash_table_contains (groups, alt_name)) {
+    GST_WARNING ("Could not find and alternative %s rendition alt_named %s",
+        media_type == GST_M3U8_MEDIA_TYPE_VIDEO ? "video" : "audio", alt_name);
     goto exit;
   }
 
   if (media_type == GST_M3U8_MEDIA_TYPE_VIDEO) {
     if (client->video_alternate != NULL)
       g_free (client->video_alternate);
-    client->video_alternate = g_strdup (name);
+    client->video_alternate = alt_name;
   } else if (media_type == GST_M3U8_MEDIA_TYPE_AUDIO) {
     if (client->audio_alternate != NULL)
       g_free (client->audio_alternate);
-    client->audio_alternate = g_strdup (name);
+    client->audio_alternate = alt_name;
+  } else if (media_type == GST_M3U8_MEDIA_TYPE_SUBTITLES) {
+    if (client->subtt_alternate != NULL)
+      g_free (client->subtt_alternate);
+    client->subtt_alternate = alt_name;
   }
   GST_DEBUG ("Selected alternative %s rendition: %s",
-      media_type == GST_M3U8_MEDIA_TYPE_VIDEO ? "video" : "audio", name);
+      media_type == GST_M3U8_MEDIA_TYPE_VIDEO ? "video" : "audio", alt_name);
   gst_m3u8_client_update_alternate (client);
   ret = TRUE;
 
@@ -1655,9 +1755,37 @@ gst_m3u8_client_audio_stream_info (GstM3U8Client * client, gchar * name,
     if (media != NULL) {
       if (lang != NULL)
         *lang = g_strdup (media->language);
-      if (title != NULL)
+      if (title != NULL) {
         *title = g_strdup (media->name);
+      }
     }
+  }
+  ret = TRUE;
+
+exit:
+  GST_M3U8_CLIENT_UNLOCK (client);
+  return ret;
+}
+
+gboolean
+gst_m3u8_client_subs_stream_info (GstM3U8Client * client, gchar * name,
+    gchar ** lang, gchar ** title)
+{
+  gboolean ret = FALSE;
+  GstM3U8Media *media;
+
+  GST_M3U8_CLIENT_LOCK (client);
+
+  if (client->selected_stream == NULL ||
+      client->selected_stream->subtt_alternates == NULL)
+    goto exit;
+
+  media = g_hash_table_lookup (client->selected_stream->subtt_alternates, name);
+  if (media != NULL) {
+    if (lang != NULL)
+      *lang = g_strdup (media->language);
+    if (title != NULL)
+      *title = g_strdup (media->name);
   }
   ret = TRUE;
 
