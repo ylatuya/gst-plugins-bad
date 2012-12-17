@@ -53,7 +53,7 @@
 #include "gsthlsdemux.h"
 #include "gsthlsdemux-marshal.h"
 
-static GstStaticPadTemplate srctemplate = GST_STATIC_PAD_TEMPLATE ("src%d",
+static GstStaticPadTemplate srctemplate = GST_STATIC_PAD_TEMPLATE ("avsrc",
     GST_PAD_SRC,
     GST_PAD_SOMETIMES,
     GST_STATIC_CAPS_ANY);
@@ -1286,13 +1286,13 @@ switch_pads (GstHLSDemux * demux, GstM3U8MediaType type, GstCaps * newcaps)
 
   if (type == GST_M3U8_MEDIA_TYPE_VIDEO) {
     oldpad = demux->video_srcpad;
-    pad = gst_pad_new_from_static_template (&srctemplate, NULL);
+    pad = gst_pad_new_from_static_template (&srctemplate, "avsrc");
   } else if (type == GST_M3U8_MEDIA_TYPE_AUDIO) {
     oldpad = demux->audio_srcpad;
-    pad = gst_pad_new_from_static_template (&audiosrctemplate, NULL);
+    pad = gst_pad_new_from_static_template (&audiosrctemplate, "audio");
   } else if (type == GST_M3U8_MEDIA_TYPE_SUBTITLES) {
     oldpad = demux->subtt_srcpad;
-    pad = gst_pad_new_from_static_template (&subssrctemplate, NULL);
+    pad = gst_pad_new_from_static_template (&subssrctemplate, "subs");
   } else
     return;
 
