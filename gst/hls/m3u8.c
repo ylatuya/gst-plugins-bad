@@ -1405,21 +1405,34 @@ gst_m3u8_client_get_current_uri (GstM3U8Client * client,
     const gchar ** video_uri, const gchar ** audio_uri,
     const gchar ** subtt_uri)
 {
+  GstM3U8Playlist *pl;
+  gboolean is_live;
+
   g_return_if_fail (client != NULL);
 
   *video_uri = NULL;
   *audio_uri = NULL;
   *subtt_uri = NULL;
 
+  is_live = gst_m3u8_client_is_live (client);
+
+  /* Update only playlists for live streams or if the playlist hasn't been
+   * loaded yet */
   GST_M3U8_CLIENT_LOCK (client);
   if (client->selected_stream->selected_video != NULL) {
-    *video_uri = GST_M3U8 (client->selected_stream->selected_video)->uri;
+    pl = GST_M3U8_PLAYLIST (client->selected_stream->selected_video);
+    if (is_live || pl->last_data == NULL)
+      *video_uri = GST_M3U8 (pl)->uri;
   }
   if (client->selected_stream->selected_audio != NULL) {
-    *audio_uri = GST_M3U8 (client->selected_stream->selected_audio)->uri;
+    pl = GST_M3U8_PLAYLIST (client->selected_stream->selected_audio);
+    if (is_live || pl->last_data == NULL)
+      *audio_uri = GST_M3U8 (pl)->uri;
   }
   if (client->selected_stream->selected_subtt != NULL) {
-    *subtt_uri = GST_M3U8 (client->selected_stream->selected_subtt)->uri;
+    pl = GST_M3U8_PLAYLIST (client->selected_stream->selected_subtt);
+    if (is_live || pl->last_data == NULL)
+      *subtt_uri = GST_M3U8 (pl)->uri;
   }
   GST_M3U8_CLIENT_UNLOCK (client);
 }
