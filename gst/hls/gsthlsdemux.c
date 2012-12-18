@@ -96,6 +96,7 @@ enum
   PROP_CONNECTION_SPEED,
   PROP_MAX_RESOLUTION,
   PROP_ADAPTATION_ALGORITHM,
+  PROP_BITRATES,
   PROP_N_VIDEO,
   PROP_CURRENT_VIDEO,
   PROP_N_AUDIO,
@@ -341,6 +342,10 @@ gst_hls_demux_class_init (GstHLSDemuxClass * klass)
           "Maximum supported resolution in \"WxH\" format (NULL = no limit)",
           NULL, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
+  g_object_class_install_property (gobject_class, PROP_BITRATES,
+      g_param_spec_string ("streams-bitrate", "Streams bitrate",
+          "Space-separated list of the available streams bitrates",
+          NULL, G_PARAM_READABLE | G_PARAM_STATIC_STRINGS));
   /**
    * GstHLSDemux:n-video
    *
@@ -674,6 +679,24 @@ gst_hls_demux_get_property (GObject * object, guint prop_id, GValue * value,
     case PROP_MAX_RESOLUTION:
       g_value_set_string (value, demux->max_resolution);
       break;
+    case PROP_BITRATES:{
+      GList *list;
+      GString *string;
+
+      if (demux->client == NULL) {
+        g_value_set_string (value, "");
+      } else {
+        string = g_string_new ("");
+
+        for (list = gst_m3u8_client_get_streams_bitrates (demux->client);
+            list; list = list->next) {
+          g_string_append_printf (string, "%d ", GPOINTER_TO_UINT (list->data));
+        }
+        g_value_set_string (value, string->str);
+        g_string_free (string, TRUE);
+      }
+      break;
+    }
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
