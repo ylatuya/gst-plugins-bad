@@ -1269,6 +1269,7 @@ gst_m3u8_client_get_next_fragment (GstM3U8Client * client,
   GstM3U8MediaFile *video_file, *audio_file, *subtt_file;
   GstClockTime timestamp;
   gboolean updated = FALSE;
+  guint client_sequence;
 
   g_return_val_if_fail (client != NULL, FALSE);
   g_return_val_if_fail (client->selected_stream != NULL, FALSE);
@@ -1295,9 +1296,11 @@ gst_m3u8_client_get_next_fragment (GstM3U8Client * client,
 
   gst_m3u8_client_get_current_position (client, &timestamp);
 
+  client_sequence = client->sequence;
+
   if (video_file != NULL) {
     GstFragment *frag = gst_fragment_new ();
-    frag->discontinuous = client->sequence != video_file->sequence;
+    frag->discontinuous = client_sequence != video_file->sequence;
     frag->name = video_file->uri;
     frag->start_time = timestamp;
     frag->stop_time = timestamp + video_file->duration;
@@ -1310,7 +1313,7 @@ gst_m3u8_client_get_next_fragment (GstM3U8Client * client,
 
   if (audio_file != NULL) {
     GstFragment *frag = gst_fragment_new ();
-    frag->discontinuous = client->sequence != audio_file->sequence;
+    frag->discontinuous = client_sequence != audio_file->sequence;
     frag->name = audio_file->uri;
     frag->start_time = timestamp;
     frag->stop_time = timestamp + audio_file->duration;
@@ -1325,7 +1328,7 @@ gst_m3u8_client_get_next_fragment (GstM3U8Client * client,
 
   if (subtt_file != NULL) {
     GstFragment *frag = gst_fragment_new ();
-    frag->discontinuous = client->sequence != subtt_file->sequence;
+    frag->discontinuous = client_sequence != subtt_file->sequence;
     frag->name = subtt_file->uri;
     frag->start_time = timestamp;
     frag->stop_time = timestamp + subtt_file->duration;
