@@ -1443,7 +1443,7 @@ gst_hls_demux_push_fragment (GstHLSDemux * demux, GstM3U8MediaType type)
 
   /* Figure out if we need to create/switch pads */
   if (G_UNLIKELY (!pad || !gst_caps_is_equal_fixed (GST_BUFFER_CAPS (buf),
-              GST_PAD_CAPS (pad)) || demux->need_segment)) {
+              GST_PAD_CAPS (pad)))) {
     switch_pads (demux, type, GST_BUFFER_CAPS (buf));
     *pad_need_segment = TRUE;
   }
