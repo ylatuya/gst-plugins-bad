@@ -2053,8 +2053,11 @@ gst_hls_demux_fetch_fragment (GstHLSDemux * demux, GstFragment * fragment,
   download = gst_uri_downloader_fetch_uri_range (demux->downloader,
       fragment->name, fragment->offset, fragment->length);
 
-  if (download == NULL)
+  if (download == NULL) {
+    if (!demux->cancelled)
+      GST_ERROR_OBJECT (demux, "Could not download file %s", fragment->name);
     return FALSE;
+  }
 
   gst_hls_adaptation_add_fragment (demux->adaptation,
       gst_fragment_get_total_size (download),
@@ -2111,7 +2114,10 @@ gst_hls_demux_get_next_fragment (GstHLSDemux * demux, gboolean caching)
 
 error:
   {
-    gst_hls_demux_stop (demux);
+    if (!demux->cancelled) {
+      GST_ERROR_OBJECT (demux, "Error fetching fragment");
+      gst_hls_demux_stop (demux);
+    }
     return FALSE;
   }
 }
