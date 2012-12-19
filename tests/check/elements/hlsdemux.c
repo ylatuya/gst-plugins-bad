@@ -980,8 +980,8 @@ GST_START_TEST (test_simulation)
   gst_m3u8_client_get_current_uri (client, &v_uri, &a_uri, &s_uri);
   assert_equals_int (a_uri != NULL, TRUE);
   assert_equals_string (a_uri, "http://localhost/main/german-audio.m3u8");
-  assert_equals_int (v_uri != NULL, TRUE);
-  assert_equals_string (v_uri, "http://localhost/low/video-only.m3u8");
+  /* On demand  so the uri does not need to be downloaded again */
+  assert_equals_int (v_uri == NULL, TRUE);
   assert_equals_int (s_uri == NULL, TRUE);
   /* Update the new uri's */
   ret =
