@@ -840,20 +840,20 @@ gst_hls_demux_src_event (GstPad * pad, GstEvent * event)
 
       demux->need_cache = TRUE;
       while (!g_queue_is_empty (demux->video_queue)) {
-        GstBufferList *buf_list = g_queue_pop_head (demux->video_queue);
-        gst_buffer_list_unref (buf_list);
+        GstFragment *fragment = g_queue_pop_head (demux->video_queue);
+        g_object_unref (fragment);
       }
       g_queue_clear (demux->video_queue);
 
       while (!g_queue_is_empty (demux->audio_queue)) {
-        GstBufferList *buf_list = g_queue_pop_head (demux->audio_queue);
-        gst_buffer_list_unref (buf_list);
+        GstFragment *fragment = g_queue_pop_head (demux->audio_queue);
+        g_object_unref (fragment);
       }
       g_queue_clear (demux->audio_queue);
 
       while (!g_queue_is_empty (demux->subtt_queue)) {
-        GstBufferList *buf_list = g_queue_pop_head (demux->subtt_queue);
-        gst_buffer_list_unref (buf_list);
+        GstFragment *fragment = g_queue_pop_head (demux->subtt_queue);
+        g_object_unref (fragment);
       }
       g_queue_clear (demux->subtt_queue);
 
