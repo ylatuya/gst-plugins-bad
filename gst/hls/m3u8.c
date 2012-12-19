@@ -647,6 +647,8 @@ gst_m3u8_variant_playlist_parse (GstM3U8VariantPlaylist * self, gchar * data)
           GstM3U8Media *media;
 
           media = GST_M3U8_MEDIA (walk->data);
+          if (media->is_default)
+            stream->default_subtt = g_strdup (media->name);
           g_hash_table_insert (stream->subtt_alternates, media->name, media);
         }
       }
@@ -998,7 +1000,12 @@ gst_m3u8_client_select_defaults (GstM3U8Client * client)
     GST_M3U8_CLIENT_LOCK (client);
   }
 
-  client->selected_stream->default_subtt = NULL;
+  if (client->selected_stream->default_subtt != NULL) {
+    GST_M3U8_CLIENT_UNLOCK (client);
+    gst_m3u8_client_set_alternate (client, GST_M3U8_MEDIA_TYPE_SUBTITLES,
+        client->selected_stream->default_subtt);
+    GST_M3U8_CLIENT_LOCK (client);
+  }
 
   if (client->selected_stream->selected_video == NULL) {
     /* The first stream should never be the audio-only fallback */
