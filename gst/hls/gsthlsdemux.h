@@ -102,8 +102,12 @@ struct _GstHLSDemux
   gboolean cancelled;
 
   /* Position in the stream */
-  GstClockTime position_shift;
-  gboolean need_segment;
+  GstClockTime video_position_shift;
+  GstClockTime audio_position_shift;
+  GstClockTime subtt_position_shift;
+  gboolean video_need_segment;
+  gboolean audio_need_segment;
+  gboolean subtt_need_segment;
 };
 
 struct _GstHLSDemuxClass
