@@ -996,7 +996,12 @@ gst_m3u8_client_select_defaults (GstM3U8Client * client)
   }
 
   if (client->selected_stream->default_subtt != NULL) {
+    GList *defaults;
     GST_M3U8_CLIENT_UNLOCK (client);
+    defaults =
+        gst_m3u8_client_get_alternates (client, GST_M3U8_MEDIA_TYPE_SUBTITLES);
+    client->selected_stream->default_subtt =
+        g_strdup ((gchar *) defaults->data);
     gst_m3u8_client_set_alternate (client, GST_M3U8_MEDIA_TYPE_SUBTITLES,
         client->selected_stream->default_subtt);
     GST_M3U8_CLIENT_LOCK (client);
