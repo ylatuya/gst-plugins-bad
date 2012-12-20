@@ -803,15 +803,10 @@ gst_m3u8_variant_playlist_parse (GstM3U8VariantPlaylist * self, gchar * data)
             g_free (subtt_alternate);
           subtt_alternate = gst_m3u8_strip_quotes (v);
         } else if (g_str_equal (a, "RESOLUTION")) {
-          if (!int_from_string (v, &v, &stream->width))
-            GST_WARNING ("Error while reading RESOLUTION width");
-          if (!v || *v != '=') {
-            GST_WARNING ("Missing height");
-          } else {
-            v = g_utf8_next_char (v);
-            if (!int_from_string (v, NULL, &stream->height))
-              GST_WARNING ("Error while reading RESOLUTION height");
-          }
+          gchar **values = g_strsplit (v, "x", 2);
+
+          stream->width = g_ascii_strtoll (values[0], NULL, 0);
+          stream->height = g_ascii_strtoll (values[1], NULL, 0);
         }
       }
 
@@ -992,6 +987,7 @@ gst_m3u8_client_select_defaults (GstM3U8Client * client)
         client->selected_stream->default_audio);
     GST_M3U8_CLIENT_LOCK (client);
   }
+
   if (client->selected_stream->default_video != NULL) {
     GST_M3U8_CLIENT_UNLOCK (client);
     gst_m3u8_client_set_alternate (client, GST_M3U8_MEDIA_TYPE_VIDEO,
