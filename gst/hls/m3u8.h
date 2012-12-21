@@ -106,6 +106,7 @@ struct _GstM3U8Stream
   GstM3U8MediaCodec audio_codec;
   gint width;
   gint height;
+  GstM3U8MediaFile *init_segment;
 
   gchar * default_audio;
   gchar * default_video;
@@ -116,6 +117,7 @@ struct _GstM3U8Stream
   GstM3U8Playlist *selected_video;
   GstM3U8Playlist *selected_audio;
   GstM3U8Playlist *selected_subtt;
+  GstM3U8Playlist *i_frame;
 };
 
 struct _GstM3U8VariantPlaylist
@@ -123,6 +125,7 @@ struct _GstM3U8VariantPlaylist
   GstM3U8 base;
 
   GList *streams;                      /* list of GstM3U8Stream* in the main playlist */
+  GList *i_frame_streams;
   GHashTable *video_rendition_groups;  /* Key:Group-ID Value:GstM3U8Media* */
   GHashTable *audio_rendition_groups;  /* Key:Group-ID Value:GstM3U8Media* */
   GHashTable *subtt_rendition_groups;  /* Key:Group-ID Value:GstM3U8Media* */
@@ -168,6 +171,9 @@ gboolean gst_m3u8_client_update                       (GstM3U8Client * client,
                                                        gchar * audio_pl,
                                                        gchar * subtt_pl);
 
+gboolean gst_m3u8_client_update_i_frame               (GstM3U8Client * client,
+                                                       gchar * iframe_pl);
+
 void gst_m3u8_client_set_current                      (GstM3U8Client * client,
                                                        GstM3U8Stream * m3u8);
 
@@ -175,6 +181,10 @@ gboolean gst_m3u8_client_get_next_fragment            (GstM3U8Client * client,
                                                        GstFragment **video_fragment,
                                                        GstFragment **audio_fragment,
                                                        GstFragment **subs_fragment);
+
+gboolean gst_m3u8_client_get_next_i_frames            (GstM3U8Client * client,
+                                                       GstFragment **init_segment,
+                                                       GList **i_frames);
 
 void gst_m3u8_client_get_current_position             (GstM3U8Client * client,
                                                        GstClockTime * timestamp);
@@ -190,7 +200,11 @@ void gst_m3u8_client_get_current_uri                  (GstM3U8Client * client,
                                                        const gchar **audio_uri,
                                                        const gchar **subtitles);
 
+const gchar * gst_m3u8_client_get_i_frame_uri         (GstM3U8Client * client);
+
 gboolean gst_m3u8_client_is_live                      (GstM3U8Client * client);
+
+gboolean gst_m3u8_client_supports_trick_modes         (GstM3U8Client * client);
 
 gboolean gst_m3u8_client_check_sequence_validity      (GstM3U8Client * client);
 
