@@ -815,6 +815,16 @@ gst_hls_demux_src_event (GstPad * pad, GstEvent * event)
           " stop: %" GST_TIME_FORMAT, rate, GST_TIME_ARGS (start),
           GST_TIME_ARGS (stop));
 
+      if (rate != 1) {
+        if (!gst_m3u8_client_supports_trick_modes (demux->client)) {
+          GST_WARNING_OBJECT (demux,
+              "Trick modes not supported, missing I-Frame playlist");
+          return FALSE;
+        }
+      }
+      demux->rate = rate;
+      demux->i_frames_mode = (rate > 1 || rate < -1);
+
       ret = gst_m3u8_client_seek (demux->client, start);
       if (!ret) {
         GST_WARNING_OBJECT (demux, "Could not find seeked fragment");
@@ -1477,7 +1487,7 @@ gst_hls_demux_push_fragment (GstHLSDemux * demux, GstM3U8MediaType type)
     GST_DEBUG_OBJECT (demux, "Sending new-segment. segment start:%"
         GST_TIME_FORMAT, GST_TIME_ARGS (start));
     gst_pad_push_event (pad,
-        gst_event_new_new_segment (FALSE, 1.0, GST_FORMAT_TIME,
+        gst_event_new_new_segment (FALSE, demux->rate, GST_FORMAT_TIME,
             start, GST_CLOCK_TIME_NONE, start));
     *position_shift = 0;
     *pad_need_segment = FALSE;
@@ -1652,6 +1662,9 @@ gst_hls_demux_reset (GstHLSDemux * demux, gboolean dispose)
   demux->video_need_segment = TRUE;
   demux->audio_need_segment = TRUE;
   demux->subtt_need_segment = TRUE;
+  demux->rate = 1;
+  demux->i_frames_mode = FALSE;
+  demux->need_init_segment = TRUE;
 
   gst_hls_adaptation_reset (demux->adaptation);
 }
@@ -1771,6 +1784,7 @@ gst_hls_demux_cache_fragments (GstHLSDemux * demux)
   gint i;
   GstM3U8Stream *stream = NULL;
   guint target_bitrate;
+  guint fragments_cache;
 
   /* If this playlist is a variant playlist, select the first one
    * and update it */
@@ -1800,10 +1814,15 @@ gst_hls_demux_cache_fragments (GstHLSDemux * demux)
   }
 
   /* Cache the first fragments */
-  for (i = 0; i < demux->fragments_cache - 1; i++) {
+  if (demux->i_frames_mode) {
+    fragments_cache = demux->fragments_cache + 1;
+  } else {
+    fragments_cache = demux->fragments_cache;
+  }
+  for (i = 0; i < fragments_cache - 1; i++) {
     gst_element_post_message (GST_ELEMENT (demux),
         gst_message_new_buffering (GST_OBJECT (demux),
-            100 * i / (demux->fragments_cache - 1)));
+            100 * i / (fragments_cache - 1)));
     g_get_current_time (&demux->next_update);
     if (!gst_hls_demux_get_next_fragment (demux, TRUE)) {
       if (demux->end_of_playlist)
@@ -1822,11 +1841,14 @@ gst_hls_demux_cache_fragments (GstHLSDemux * demux)
       gst_message_new_buffering (GST_OBJECT (demux), 100));
 
   g_get_current_time (&demux->next_update);
-  /* We have chached the first fragments - 1 to start playing and cache the last
-   * one while playing the first */
-  g_time_val_add (&demux->next_update,
-      -(gst_m3u8_client_get_current_fragment_duration (demux->client)
-          / (gdouble) GST_SECOND * G_USEC_PER_SEC));
+
+  if (!demux->i_frames_mode) {
+    /* We have chached the first fragments - 1 to start playing and cache the last
+     * one while playing the first */
+    g_time_val_add (&demux->next_update,
+        -(gst_m3u8_client_get_current_fragment_duration (demux->client)
+            / (gdouble) GST_SECOND * G_USEC_PER_SEC));
+  }
 
   demux->need_cache = FALSE;
   return TRUE;
@@ -1890,6 +1912,18 @@ gst_hls_demux_update_playlist (GstHLSDemux * demux, gboolean update)
   gchar *v_playlist = NULL, *a_playlist = NULL, *s_playlist = NULL;
   const gchar *video_uri = NULL, *audio_uri = NULL;
   const gchar *subtt_uri = NULL;
+
+  if (demux->i_frames_mode) {
+    const gchar *uri = gst_m3u8_client_get_i_frame_uri (demux->client);
+    if (uri != NULL) {
+      download = gst_uri_downloader_fetch_uri (demux->downloader, uri);
+      if (download == NULL)
+        return FALSE;
+      return gst_m3u8_client_update_i_frame (demux->client,
+          gst_hls_demux_get_playlist_from_fragment (demux, download));
+    }
+    return TRUE;
+  }
 
   gst_m3u8_client_get_current_uri (demux->client, &video_uri, &audio_uri,
       &subtt_uri);
@@ -1986,8 +2020,8 @@ retry_failover_protection:
     gst_m3u8_client_set_current (demux->client, current_stream);
     /*  Try a lower bitrate (or stop if we just tried the lowest) */
     if (new_bandwidth ==
-        GST_M3U8_STREAM (g_list_first (demux->client->main->streams)->data)->
-        bandwidth)
+        GST_M3U8_STREAM (g_list_first (demux->client->main->streams)->
+            data)->bandwidth)
       return FALSE;
     else
       return gst_hls_demux_change_playlist (demux, new_bandwidth - 1);
@@ -2004,6 +2038,7 @@ gst_hls_demux_schedule (GstHLSDemux * demux)
 {
   gfloat update_factor;
   gint count;
+  GstClockTime next_ts;
 
   /* As defined in §6.3.4. Reloading the Playlist file:
    * "If the client reloads a Playlist file and finds that it has not
@@ -2019,9 +2054,21 @@ gst_hls_demux_schedule (GstHLSDemux * demux)
 
   /* schedule the next update using the target duration field of the
    * playlist */
+  next_ts = gst_m3u8_client_get_current_fragment_duration (demux->client);
+
+  /* With I-Frame playlists the scheduling is done based on the number of queued
+   * frames, we schedule at fixed interval which is 2x faster than what we
+   * should have in theory */
+  if (demux->i_frames_mode) {
+    if (demux->rate > 1) {
+      next_ts /= demux->rate * 2;
+    } else if (demux->rate < -1) {
+      next_ts /= -demux->rate * 2;
+    }
+  }
+
   g_time_val_add (&demux->next_update,
-      gst_m3u8_client_get_current_fragment_duration (demux->client)
-      / (gdouble) GST_SECOND * G_USEC_PER_SEC * update_factor);
+      next_ts / (gdouble) GST_SECOND * G_USEC_PER_SEC * update_factor);
   GST_DEBUG_OBJECT (demux, "Next update scheduled at %s",
       g_time_val_to_iso8601 (&demux->next_update));
 
@@ -2102,7 +2149,58 @@ static gboolean
 gst_hls_demux_get_next_fragment (GstHLSDemux * demux, gboolean caching)
 {
   gboolean ret = TRUE;
-  GstFragment *v_fragment, *a_fragment, *s_fragment;
+  GstFragment *v_fragment = NULL, *a_fragment = NULL;
+  GstFragment *s_fragment = NULL, *i_segment = NULL;
+
+  /* Trick Modes */
+  if (demux->i_frames_mode) {
+    GList *i_frames = NULL;
+
+    /* Don't let the I-Frames queue go higher than 20 */
+    if (g_queue_get_length (demux->video_queue) > 10) {
+      return TRUE;
+    }
+
+    if (demux->rate > 1) {
+      ret = gst_m3u8_client_get_next_i_frames (demux->client, &i_segment,
+          &i_frames);
+    } else {
+      /*ret = gst_m3u8_client_get_prev_i_frame (demux->client, &i_segment, */
+      /*&i_frames); */
+    }
+
+    if (!ret || g_list_length (i_frames) == 0) {
+      GST_INFO_OBJECT (demux, "This playlist doesn't contain more fragments");
+      demux->end_of_playlist = TRUE;
+      gst_task_start (demux->stream_task);
+      return FALSE;
+    }
+
+    if (demux->need_init_segment) {
+      /* This fragment has incorrect timestamp information, which is used to
+       * set the new segment start time */
+      i_segment->start_time = GST_FRAGMENT (i_frames->data)->start_time;
+
+      if (!gst_hls_demux_fetch_fragment (demux, i_segment,
+              GST_M3U8_MEDIA_TYPE_VIDEO))
+        goto exit;
+      demux->need_init_segment = FALSE;
+    }
+    GST_LOG_OBJECT (demux, "Adding init_segment");
+    for (; i_frames; i_frames = i_frames->next) {
+      GstFragment *frag = GST_FRAGMENT (i_frames->data);
+      frag->discontinuous = TRUE;
+      if (!gst_hls_demux_fetch_fragment (demux, frag,
+              GST_M3U8_MEDIA_TYPE_VIDEO))
+        goto exit;
+      GST_LOG_OBJECT (demux, "Adding I-Frame");
+      g_object_unref (frag);
+      /* FIXME: only download the first one until we find a way of way of
+       * determining the correct number of I-Frame based on the rate */
+      break;
+    }
+    goto start_streaming;
+  }
 
   if (!gst_m3u8_client_get_next_fragment (demux->client, &v_fragment,
           &a_fragment, &s_fragment)) {
@@ -2124,11 +2222,12 @@ gst_hls_demux_get_next_fragment (GstHLSDemux * demux, gboolean caching)
   if (!gst_hls_demux_fetch_fragment (demux, s_fragment,
           GST_M3U8_MEDIA_TYPE_SUBTITLES))
     goto error;
+
+start_streaming:
   if (!caching) {
     GST_TASK_SIGNAL (demux->updates_task);
     gst_task_start (demux->stream_task);
   }
-  ret = TRUE;
 
 exit:
   if (v_fragment != NULL)
@@ -2137,6 +2236,8 @@ exit:
     g_object_unref (a_fragment);
   if (s_fragment != NULL)
     g_object_unref (s_fragment);
+  if (i_segment != NULL)
+    g_object_unref (i_segment);
   return ret;
 
 error:

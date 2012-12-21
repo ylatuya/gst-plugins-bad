@@ -130,8 +130,10 @@ gst_m3u8_stream_new (void)
   stream->selected_video = NULL;
   stream->selected_audio = NULL;
   stream->selected_subtt = NULL;
+  stream->i_frame = NULL;
   stream->video_codec = GST_M3U8_MEDIA_CODEC_NONE;
   stream->audio_codec = GST_M3U8_MEDIA_CODEC_NONE;
+  stream->init_segment = NULL;
   return stream;
 }
 
@@ -146,6 +148,9 @@ gst_m3u8_stream_free (GstM3U8Stream * stream)
 
   if (stream->default_subtt != NULL)
     g_free (stream->default_subtt);
+
+  if (stream->init_segment != NULL)
+    gst_m3u8_media_file_free (stream->init_segment);
 
   g_hash_table_unref (stream->video_alternates);
   g_hash_table_unref (stream->audio_alternates);
@@ -580,6 +585,7 @@ gst_m3u8_variant_playlist_parse (GstM3U8VariantPlaylist * self, gchar * data)
 {
   gchar *end;
   GstM3U8Stream *stream = NULL;
+  GstM3U8Stream *last_stream = NULL;
   gchar *audio_alternate = NULL;
   gchar *video_alternate = NULL;
   gchar *subtt_alternate = NULL;
@@ -707,6 +713,7 @@ gst_m3u8_variant_playlist_parse (GstM3U8VariantPlaylist * self, gchar * data)
         GST_LOG ("Added new playlist with uri:%s", GST_M3U8 (pl)->uri);
         self->playlists = g_list_append (self->playlists, pl);
       }
+      last_stream = stream;
       stream = NULL;
     }
     /* EXT-X-MEDIA:
@@ -858,6 +865,44 @@ gst_m3u8_variant_playlist_parse (GstM3U8VariantPlaylist * self, gchar * data)
 
       self->streams = g_list_append (self->streams, stream);
       GST_LOG ("Adding stream with bandwidth:%d", stream->bandwidth);
+    }
+    /* EXT-X-I-FRAME-STREAM-INF:
+     * Create a new GstM3U8Media and add it to the corresponding group */
+    else if (g_str_has_prefix (data, "#EXT-X-I-FRAME-STREAM-INF:")) {
+      gchar *v, *a;
+      GstM3U8Playlist *playlist;
+
+      if (last_stream == NULL) {
+        GST_WARNING ("Found an I-Frames URI without a valid stream");
+        goto next_line;
+      }
+
+      data = data + 26;
+
+
+      playlist = gst_m3u8_playlist_new ();
+      last_stream->i_frame = playlist;
+      while (data && parse_attributes (&data, &a, &v)) {
+
+        if (g_str_equal (a, "BANDWIDTH")) {
+          if (!int_from_string (v, NULL, &last_stream->bandwidth)) {
+            GST_WARNING ("Error while reading BANDWIDTH");
+          }
+        } else if (g_str_equal (a, "PROGRAM-ID")) {
+          if (!int_from_string (v, NULL, &last_stream->program_id)) {
+            GST_WARNING ("Error while reading PROGRAM-ID");
+          }
+        } else if (g_str_equal (a, "URI")) {
+          gchar *uri = gst_m3u8_strip_quotes (v);
+          gst_m3u8_parse_uri (GST_M3U8 (self), uri,
+              &(GST_M3U8 (playlist)->uri));
+          g_free (uri);
+        }
+      }
+      GST_LOG ("Added new playlist with uri:%s", GST_M3U8 (playlist)->uri);
+      self->playlists = g_list_append (self->playlists, playlist);
+      self->i_frame_streams =
+          g_list_append (self->i_frame_streams, last_stream);
     } else {
       GST_LOG ("Ignored line: %s", data);
     }
@@ -989,20 +1034,20 @@ gst_m3u8_playlist_update (GstM3U8Playlist * self, gchar * data,
       }
     } else if (g_str_has_prefix (data, "#EXT-X-BYTERANGE:")) {
       gchar **content;
-      guint size;
 
       content = g_strsplit (data + 17, "@", 2);
-      size = sizeof (content) / sizeof (gchar *);
       if (!int64_from_string (content[0], NULL, &length)) {
         GST_WARNING ("Error while reading the lenght in #EXT-X-BYTERANGE");
+        g_strfreev (content);
+        return FALSE;
       }
-      if (size == 2) {
-        if (!int64_from_string (content[0], NULL, &offset)) {
-          GST_WARNING ("Error while reading the offset in #EXT-X-BYTERANGE");
-        }
-      } else {
+      if (content[1] == NULL) {
         offset = acc_offset;
         acc_offset += length;
+      } else if (!int64_from_string (content[1], NULL, &offset)) {
+        GST_WARNING ("Error while reading the offset in #EXT-X-BYTERANGE");
+        g_strfreev (content);
+        return FALSE;
       }
       g_strfreev (content);
     } else {
@@ -1250,6 +1295,49 @@ out:
 }
 
 gboolean
+gst_m3u8_client_update_i_frame (GstM3U8Client * self, gchar * data)
+{
+  gboolean updated = TRUE;
+  gboolean ret = FALSE;
+  GstM3U8Stream *selected;
+
+  g_return_val_if_fail (self != NULL, FALSE);
+
+  GST_M3U8_CLIENT_LOCK (self);
+
+  selected = self->selected_stream;
+  /* Update the playlists for the selected streams */
+  if (selected->i_frame == NULL) {
+    GST_WARNING ("The following stream doesn't have an I-Frame playlist");
+    goto out;
+  }
+
+  if (!gst_m3u8_playlist_update (selected->i_frame, data, &updated))
+    goto out;
+  if (!updated) {
+    self->update_failed_count++;
+    goto out;
+  }
+
+  /* The initialiation segment is defined by #EXT-X-MAP, which only appeared in
+   * the version 5 of the protocol, we must assume the initialization segment
+   * with the PAT/PMT tables is at the very beginning of the first segment */
+  if (selected->init_segment == NULL) {
+    GstM3U8MediaFile *file, *init_segment;
+
+    file = GST_M3U8_MEDIA_FILE (selected->i_frame->files->data);
+    selected->init_segment = init_segment =
+        gst_m3u8_media_file_new (g_strdup (file->uri), NULL, 0, 0, 0,
+        file->offset);
+  }
+
+  ret = TRUE;
+out:
+  GST_M3U8_CLIENT_UNLOCK (self);
+  return ret;
+}
+
+gboolean
 gst_m3u8_client_update (GstM3U8Client * self, gchar * video_data,
     gchar * audio_data, gchar * subtt_data)
 {
@@ -1402,6 +1490,61 @@ gst_m3u8_client_get_next_fragment (GstM3U8Client * client,
   return TRUE;
 }
 
+gboolean
+gst_m3u8_client_get_next_i_frames (GstM3U8Client * client,
+    GstFragment ** init_segment, GList ** i_frames)
+{
+  GstClockTime timestamp, end_timestamp, pos = 0;
+  GstM3U8Playlist *pl;
+  GList *walk;
+
+  g_return_val_if_fail (client != NULL, FALSE);
+  g_return_val_if_fail (i_frames != NULL, FALSE);
+  g_return_val_if_fail (init_segment != NULL, FALSE);
+  g_return_val_if_fail (client->selected_stream != NULL, FALSE);
+  g_return_val_if_fail (client->selected_stream->i_frame != NULL, FALSE);
+
+  GST_M3U8_CLIENT_LOCK (client);
+
+  pl = client->selected_stream->i_frame;
+  *i_frames = NULL;
+  *init_segment =
+      gst_m3u8_media_file_get_fragment (client->selected_stream->init_segment,
+      0, FALSE);
+
+  gst_m3u8_client_get_current_position (client, &timestamp);
+  end_timestamp =
+      gst_m3u8_client_get_current_playlist (client)->targetduration + timestamp;
+
+  /* Get a list of all the i_frames that are inside the segment boundaries */
+
+  /* For a live playlist we must guess the first timestamp from the media
+   * sequence and the target duration */
+  if (!pl->endlist) {
+    guint first_seq = pl->mediasequence - g_list_length (pl->files);
+    pos = (GstClockTime) (first_seq * pl->targetduration);
+  }
+  if (pos > timestamp)
+    return FALSE;
+
+  for (walk = pl->files; walk; walk = walk->next) {
+    GstM3U8MediaFile *media = GST_M3U8_MEDIA_FILE (walk->data);
+
+    if (pos >= timestamp) {
+      *i_frames = g_list_append (*i_frames,
+          gst_m3u8_media_file_get_fragment (media, pos, FALSE));
+    }
+    pos += media->duration;
+    if (pos > end_timestamp)
+      break;
+  }
+
+  client->sequence += 1;
+
+  GST_M3U8_CLIENT_UNLOCK (client);
+  return TRUE;
+}
+
 static void
 _sum_duration (GstM3U8MediaFile * self, GstClockTime * duration)
 {
@@ -1497,6 +1640,41 @@ gst_m3u8_client_get_current_uri (GstM3U8Client * client,
       *subtt_uri = GST_M3U8 (pl)->uri;
   }
   GST_M3U8_CLIENT_UNLOCK (client);
+}
+
+const gchar *
+gst_m3u8_client_get_i_frame_uri (GstM3U8Client * client)
+{
+  GstM3U8Playlist *pl;
+  gboolean is_live;
+  const gchar *ret = NULL;
+
+  g_return_val_if_fail (client != NULL, NULL);
+
+  is_live = gst_m3u8_client_is_live (client);
+
+  /* Update only playlists for live streams or if the playlist hasn't been
+   * loaded yet */
+  GST_M3U8_CLIENT_LOCK (client);
+  if (client->selected_stream->i_frame != NULL) {
+    pl = GST_M3U8_PLAYLIST (client->selected_stream->i_frame);
+    if (is_live || pl->last_data == NULL)
+      ret = GST_M3U8 (pl)->uri;
+  }
+  GST_M3U8_CLIENT_UNLOCK (client);
+
+  return ret;
+}
+
+gboolean
+gst_m3u8_client_supports_trick_modes (GstM3U8Client * client)
+{
+  g_return_val_if_fail (client != NULL, FALSE);
+
+  if (gst_m3u8_client_is_live (client))
+    return FALSE;
+
+  return client->selected_stream->i_frame != NULL;
 }
 
 gboolean
