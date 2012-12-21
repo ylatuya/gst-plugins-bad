@@ -180,24 +180,46 @@ gst_m3u8_stream_is_video_only (GstM3U8Stream * stream)
 
 static GstM3U8MediaFile *
 gst_m3u8_stream_find_next (GstM3U8Stream * stream, guint sequence,
-    GstM3U8MediaType media_type)
+    GstClockTime end_position, GstM3U8MediaType media_type)
 {
   GstM3U8Playlist *pl;
   GList *list;
 
-  switch (media_type) {
-    case GST_M3U8_MEDIA_TYPE_VIDEO:
-      pl = stream->selected_video;
-      break;
-    case GST_M3U8_MEDIA_TYPE_AUDIO:
-      pl = stream->selected_audio;
-      break;
-    case GST_M3U8_MEDIA_TYPE_SUBTITLES:
-      pl = stream->selected_subtt;
-      break;
-    default:
+  /* Subtitles might have a different target duration, so we must find
+   * the current element based on the position and not the client sequence
+   */
+  if (media_type == GST_M3U8_MEDIA_TYPE_SUBTITLES) {
+    GList *walk;
+    GstClockTime pos = 0;
+
+    pl = stream->selected_subtt;
+    if (pl == NULL)
       return NULL;
+
+    /* For a live playlist we must guess the first timestamp from the media
+     * sequence and the target duration */
+    if (!pl->endlist) {
+      guint first_seq = pl->mediasequence - g_list_length (pl->files);
+      pos = (GstClockTime) (first_seq * pl->targetduration);
+    }
+    if (pos > end_position)
+      return NULL;
+
+    for (walk = pl->files; walk; walk = walk->next) {
+      GstM3U8MediaFile *media = GST_M3U8_MEDIA_FILE (walk->data);
+      if ((pos + media->duration) > end_position)
+        return media;
+      pos += media->duration;
+    }
+    return NULL;
   }
+
+  if (media_type == GST_M3U8_MEDIA_TYPE_VIDEO)
+    pl = stream->selected_video;
+  else if (media_type == GST_M3U8_MEDIA_TYPE_AUDIO)
+    pl = stream->selected_audio;
+  else
+    return NULL;
 
   if (pl == NULL)
     return NULL;
@@ -1275,7 +1297,7 @@ gst_m3u8_client_get_next_fragment (GstM3U8Client * client,
     GstFragment ** subtt_fragment)
 {
   GstM3U8MediaFile *video_file, *audio_file, *subtt_file;
-  GstClockTime timestamp;
+  GstClockTime timestamp, end_timestamp;
   gboolean updated = FALSE;
   guint client_sequence;
 
@@ -1286,23 +1308,26 @@ gst_m3u8_client_get_next_fragment (GstM3U8Client * client,
 
   GST_M3U8_CLIENT_LOCK (client);
 
+  gst_m3u8_client_get_current_position (client, &timestamp);
+  end_timestamp =
+      gst_m3u8_client_get_current_playlist (client)->targetduration + timestamp;
+
   GST_DEBUG ("Looking for fragment %d", client->sequence);
   *video_fragment = NULL;
   *audio_fragment = NULL;
   *subtt_fragment = NULL;
   video_file = gst_m3u8_stream_find_next (client->selected_stream,
-      client->sequence, GST_M3U8_MEDIA_TYPE_VIDEO);
+      client->sequence, end_timestamp, GST_M3U8_MEDIA_TYPE_VIDEO);
   audio_file = gst_m3u8_stream_find_next (client->selected_stream,
-      client->sequence, GST_M3U8_MEDIA_TYPE_AUDIO);
+      client->sequence, end_timestamp, GST_M3U8_MEDIA_TYPE_AUDIO);
   subtt_file = gst_m3u8_stream_find_next (client->selected_stream,
-      client->sequence, GST_M3U8_MEDIA_TYPE_SUBTITLES);
+      client->sequence, end_timestamp, GST_M3U8_MEDIA_TYPE_SUBTITLES);
 
   if (video_file == NULL && audio_file == NULL && subtt_file == NULL) {
     GST_M3U8_CLIENT_UNLOCK (client);
     return FALSE;
   }
 
-  gst_m3u8_client_get_current_position (client, &timestamp);
 
   client_sequence = client->sequence;
 
