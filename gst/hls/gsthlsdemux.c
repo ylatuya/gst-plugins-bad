@@ -150,6 +150,8 @@ static guint gst_hls_demux_signals[LAST_SIGNAL] = { 0 };
 #define DEFAULT_CONNECTION_SPEED    0
 #define DEFAULT_ADAPTATION_ALGORITHM GST_HLS_ADAPTATION_BANDWIDTH_ESTIMATION
 #define DEFAULT_MAX_RESOLUTION NULL
+#define GST_HLS_DEMUX_EMPTY_FRAGMENT "a34dC9Pi8gsEMce8fked"
+
 
 /* GObject */
 static void gst_hls_demux_set_property (GObject * object, guint prop_id,
@@ -1412,6 +1414,16 @@ gst_hls_demux_push_fragment (GstHLSDemux * demux, GstM3U8MediaType type)
 
 
   fragment = g_queue_pop_head (queue);
+  if (!g_strcmp0 (fragment->name, GST_HLS_DEMUX_EMPTY_FRAGMENT)) {
+    if (type == GST_M3U8_MEDIA_TYPE_AUDIO && pad != NULL) {
+      gst_pad_set_active (pad, FALSE);
+      gst_element_remove_pad (GST_ELEMENT (demux), pad);
+      demux->audio_srcpad = NULL;
+    }
+    g_object_unref (fragment);
+    return TRUE;
+  }
+
   buffer_list = gst_fragment_get_buffer_list (fragment);
   /* Work with the first buffer of the list */
   buf = gst_buffer_list_get (buffer_list, 0, 0);
@@ -2035,9 +2047,6 @@ gst_hls_demux_fetch_fragment (GstHLSDemux * demux, GstFragment * fragment,
   GstBuffer *buf;
   GQueue *queue;
 
-  if (fragment == NULL)
-    return TRUE;
-
   if (type == GST_M3U8_MEDIA_TYPE_VIDEO)
     queue = demux->video_queue;
   else if (type == GST_M3U8_MEDIA_TYPE_AUDIO)
@@ -2046,6 +2055,14 @@ gst_hls_demux_fetch_fragment (GstHLSDemux * demux, GstFragment * fragment,
     queue = demux->subtt_queue;
   else
     return FALSE;
+
+  if (fragment == NULL) {
+    /* Create an empty fragment to keep the queues in sync */
+    download = gst_fragment_new ();
+    download->name = g_strdup (GST_HLS_DEMUX_EMPTY_FRAGMENT);
+    g_queue_push_tail (queue, download);
+    return TRUE;
+  }
 
   GST_INFO_OBJECT (demux, "Fetching next fragment %s %d@%d", fragment->name,
       fragment->offset, fragment->length);
