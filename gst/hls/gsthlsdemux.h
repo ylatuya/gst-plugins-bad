@@ -55,17 +55,21 @@ struct _GstHLSDemuxPadData
 {
   GstM3U8MediaType type;
   GstPad *pad;
-  GstCaps *input_caps;
+  GstPad *in_pad;
   GQueue *queue;
-  GstClockTime position_shift;
   gboolean need_segment;
-  gboolean do_typefind;
   guint *signal;
   const gchar *desc;
+  gboolean pad_added;
 
   /* Stream selection */
   GHashTable *streams;
   gint current_stream;
+
+  /* Audio stream selection */
+  GstPad *active_pad;
+  GstPad *main_pad;
+  GstPad *alt_pad;
 };
 
 /**
@@ -75,7 +79,7 @@ struct _GstHLSDemuxPadData
  */
 struct _GstHLSDemux
 {
-  GstElement parent;
+  GstBin parent;
 
   GstHLSDemuxPadData *video_srcpad;
   GstHLSDemuxPadData *audio_srcpad;
@@ -89,6 +93,7 @@ struct _GstHLSDemux
   gboolean end_of_playlist;
   GstHLSAdaptation *adaptation;
   GstHLSAdaptationAlgorithmFunc algo_func;
+  GMutex *pads_lock;
 
   /* Trick modes */
   gboolean i_frames_mode;
@@ -113,11 +118,26 @@ struct _GstHLSDemux
   GMutex *updates_timed_lock;
   GTimeVal next_update;         /* Time of the next update */
   gboolean cancelled;
+
+  /* Bin */
+  GstElement *avdemux;          /* Demuxer for the main stream */
+  GstElement *ademux;           /* Demuxer for the audio stream */
+  GstElement *selector;         /* input selector for the audio stream */
+  GstEvent *newsegment;         /* New segment events */
+  guint64 start_ts;
+  gboolean need_pts_sync;
+  GstClockTime pts_diff;
+  gboolean signal_no_more_pads;
+  gboolean avdemux_added;
+  gboolean ademux_added;
+  gboolean need_audio_switch;
+  gboolean delay_audio_switch;
+  GstClockTime next_audio_switch;
 };
 
 struct _GstHLSDemuxClass
 {
-  GstElementClass parent_class;
+  GstBinClass parent_class;
 
   /* inform that a stream has been set */
   void (*video_changed) (GstHLSDemux * demux);
