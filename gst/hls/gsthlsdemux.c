@@ -825,7 +825,11 @@ gst_hls_demux_src_event (GstPad * pad, GstEvent * event)
       demux->rate = rate;
       demux->i_frames_mode = (rate > 1 || rate < -1);
 
+      if (rate < 0)
+        start = stop;
+
       ret = gst_m3u8_client_seek (demux->client, start);
+
       if (!ret) {
         GST_WARNING_OBJECT (demux, "Could not find seeked fragment");
         return FALSE;
@@ -1481,14 +1485,21 @@ gst_hls_demux_push_fragment (GstHLSDemux * demux, GstM3U8MediaType type)
 
   if (*pad_need_segment) {
     GstClockTime start = GST_BUFFER_TIMESTAMP (buf);
+    GstEvent *event;
 
     start += *position_shift;
+
+    if (demux->rate < 0)
+      event = gst_event_new_new_segment (FALSE, demux->rate, GST_FORMAT_TIME,
+          0, start, start);
+    else
+      event = gst_event_new_new_segment (FALSE, demux->rate, GST_FORMAT_TIME,
+          start, GST_CLOCK_TIME_NONE, start);
+
     /* And send a newsegment */
     GST_DEBUG_OBJECT (demux, "Sending new-segment. segment start:%"
         GST_TIME_FORMAT, GST_TIME_ARGS (start));
-    gst_pad_push_event (pad,
-        gst_event_new_new_segment (FALSE, demux->rate, GST_FORMAT_TIME,
-            start, GST_CLOCK_TIME_NONE, start));
+    gst_pad_push_event (pad, event);
     *position_shift = 0;
     *pad_need_segment = FALSE;
   }
@@ -2165,8 +2176,8 @@ gst_hls_demux_get_next_fragment (GstHLSDemux * demux, gboolean caching)
       ret = gst_m3u8_client_get_next_i_frames (demux->client, &i_segment,
           &i_frames);
     } else {
-      /*ret = gst_m3u8_client_get_prev_i_frame (demux->client, &i_segment, */
-      /*&i_frames); */
+      ret = gst_m3u8_client_get_prev_i_frames (demux->client, &i_segment,
+          &i_frames);
     }
 
     if (!ret || g_list_length (i_frames) == 0) {

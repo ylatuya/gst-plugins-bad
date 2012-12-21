@@ -186,6 +186,10 @@ gboolean gst_m3u8_client_get_next_i_frames            (GstM3U8Client * client,
                                                        GstFragment **init_segment,
                                                        GList **i_frames);
 
+gboolean gst_m3u8_client_get_prev_i_frames            (GstM3U8Client * client,
+                                                       GstFragment **init_segment,
+                                                       GList **i_frames);
+
 void gst_m3u8_client_get_current_position             (GstM3U8Client * client,
                                                        GstClockTime * timestamp);
 
