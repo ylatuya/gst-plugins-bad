@@ -1492,6 +1492,62 @@ gst_m3u8_client_get_next_fragment (GstM3U8Client * client,
 }
 
 gboolean
+gst_m3u8_client_get_prev_i_frames (GstM3U8Client * client,
+    GstFragment ** init_segment, GList ** i_frames)
+{
+  GstClockTime timestamp, end_timestamp, pos = 0;
+  GstM3U8Playlist *pl;
+  GList *walk;
+
+  g_return_val_if_fail (client != NULL, FALSE);
+  g_return_val_if_fail (i_frames != NULL, FALSE);
+  g_return_val_if_fail (init_segment != NULL, FALSE);
+  g_return_val_if_fail (client->selected_stream != NULL, FALSE);
+  g_return_val_if_fail (client->selected_stream->i_frame != NULL, FALSE);
+
+  GST_M3U8_CLIENT_LOCK (client);
+
+  pl = client->selected_stream->i_frame;
+  *i_frames = NULL;
+  *init_segment =
+      gst_m3u8_media_file_get_fragment (client->selected_stream->init_segment,
+      0, FALSE);
+
+  gst_m3u8_client_get_current_position (client, &end_timestamp);
+  timestamp = end_timestamp -
+      gst_m3u8_client_get_current_playlist (client)->targetduration;
+
+  /* Get a list of all the i_frames that are inside the segment boundaries */
+
+  /* For a live playlist we must guess the first timestamp from the media
+   * sequence and the target duration */
+  if (!pl->endlist) {
+    guint first_seq = pl->mediasequence - g_list_length (pl->files);
+    pos = (GstClockTime) (first_seq * pl->targetduration);
+  }
+  if (pos > timestamp)
+    return FALSE;
+
+  for (walk = pl->files; walk; walk = walk->next) {
+    GstM3U8MediaFile *media = GST_M3U8_MEDIA_FILE (walk->data);
+
+    if (pos >= timestamp) {
+      *i_frames = g_list_append (*i_frames,
+          gst_m3u8_media_file_get_fragment (media, pos, FALSE));
+    }
+    pos += media->duration;
+    if (pos > end_timestamp)
+      break;
+  }
+
+  client->sequence -= 1;
+  *i_frames = g_list_reverse (*i_frames);
+
+  GST_M3U8_CLIENT_UNLOCK (client);
+  return TRUE;
+}
+
+gboolean
 gst_m3u8_client_get_next_i_frames (GstM3U8Client * client,
     GstFragment ** init_segment, GList ** i_frames)
 {
