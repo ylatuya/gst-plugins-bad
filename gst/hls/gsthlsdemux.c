@@ -1432,7 +1432,7 @@ gst_hls_demux_push_fragment (GstHLSDemux * demux, GstM3U8MediaType type)
   /* Work with the first buffer of the list */
   buf = gst_buffer_list_get (buffer_list, 0, 0);
 
-  GST_LOG_OBJECT (demux, "Pushing %s fragment ts:%" GST_TIME_FORMAT
+  GST_DEBUG_OBJECT (demux, "Pushing %s fragment ts:%" GST_TIME_FORMAT
       " dur:%" GST_TIME_FORMAT, desc,
       GST_TIME_ARGS (GST_BUFFER_TIMESTAMP (buf)),
       GST_TIME_ARGS (GST_BUFFER_DURATION (buf))
