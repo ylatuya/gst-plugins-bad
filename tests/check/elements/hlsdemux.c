@@ -532,6 +532,7 @@ GST_START_TEST (test_get_next_fragment)
   assert_equals_uint64 (v_frag->stop_time, 10 * GST_SECOND);
   assert_equals_uint64 (v_frag->offset, 0);
   assert_equals_uint64 (v_frag->length, 1000);
+  g_object_unref (v_frag);
 
   /* Check next media segments */
   gst_m3u8_client_get_next_fragment (client, &v_frag, &a_frag, &s_frag);
@@ -543,6 +544,7 @@ GST_START_TEST (test_get_next_fragment)
   assert_equals_uint64 (v_frag->stop_time, 20 * GST_SECOND);
   assert_equals_uint64 (v_frag->offset, 1000);
   assert_equals_uint64 (v_frag->length, 1000);
+  g_object_unref (v_frag);
 
   gst_m3u8_client_free (client);
 }
@@ -961,6 +963,8 @@ GST_START_TEST (test_simulation)
       "http://media.example.com/low/video-only-001.ts");
   assert_equals_string (a_frag->name,
       "http://media.example.com/audio/english-001.ts");
+  g_object_unref (v_frag);
+  g_object_unref (a_frag);
 
   /* Get the next fragment */
   gst_m3u8_client_get_next_fragment (client, &v_frag, &a_frag, &s_frag);
@@ -970,6 +974,8 @@ GST_START_TEST (test_simulation)
       "http://media.example.com/low/video-only-002.ts");
   assert_equals_string (a_frag->name,
       "http://media.example.com/audio/english-002.ts");
+  g_object_unref (v_frag);
+  g_object_unref (a_frag);
 
   /* Switch to German audio */
   ret =
@@ -997,6 +1003,8 @@ GST_START_TEST (test_simulation)
       "http://media.example.com/audio/german-003.ts");
   assert_equals_string (v_frag->name,
       "http://media.example.com/low/video-only-003.ts");
+  g_object_unref (v_frag);
+  g_object_unref (a_frag);
 
   /* Switch to a higher bitrate */
   gst_m3u8_client_set_current (client,
@@ -1020,6 +1028,8 @@ GST_START_TEST (test_simulation)
       "http://media.example.com/audio/german-004.ts");
   assert_equals_string (v_frag->name,
       "http://media.example.com/mid/video-only-004.ts");
+  g_object_unref (v_frag);
+  g_object_unref (a_frag);
 
   /* Seek to the beginning */
   gst_m3u8_client_seek (client, 0);
@@ -1031,6 +1041,8 @@ GST_START_TEST (test_simulation)
       "http://media.example.com/audio/german-001.ts");
   assert_equals_string (v_frag->name,
       "http://media.example.com/mid/video-only-001.ts");
+  g_object_unref (v_frag);
+  g_object_unref (a_frag);
 
   /* Select English audio again */
   ret =
@@ -1045,6 +1057,8 @@ GST_START_TEST (test_simulation)
       "http://media.example.com/audio/english-002.ts");
   assert_equals_string (v_frag->name,
       "http://media.example.com/mid/video-only-002.ts");
+  g_object_unref (v_frag);
+  g_object_unref (a_frag);
 
   /* Go to the audio-only fallback */
   gst_m3u8_client_set_current (client,
@@ -1055,6 +1069,7 @@ GST_START_TEST (test_simulation)
   assert_equals_int (v_frag == NULL, TRUE);
   assert_equals_string (a_frag->name,
       "http://media.example.com/audio/english-003.ts");
+  g_object_unref (a_frag);
 
   /* Go to mid again */
   gst_m3u8_client_set_current (client,
@@ -1067,6 +1082,8 @@ GST_START_TEST (test_simulation)
       "http://media.example.com/audio/english-004.ts");
   assert_equals_string (v_frag->name,
       "http://media.example.com/mid/video-only-004.ts");
+  g_object_unref (a_frag);
+  g_object_unref (v_frag);
 
   /* End of stream */
   ret = gst_m3u8_client_get_next_fragment (client, &v_frag, &a_frag, &s_frag);

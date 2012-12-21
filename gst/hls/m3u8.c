@@ -282,9 +282,12 @@ gst_m3u8_variant_playlist_new (void)
 
   m3u8 = g_new0 (GstM3U8VariantPlaylist, 1);
   m3u8->streams = NULL;
-  m3u8->video_rendition_groups = g_hash_table_new (g_str_hash, g_str_equal);
-  m3u8->audio_rendition_groups = g_hash_table_new (g_str_hash, g_str_equal);
-  m3u8->subtt_rendition_groups = g_hash_table_new (g_str_hash, g_str_equal);
+  m3u8->video_rendition_groups = g_hash_table_new_full (g_str_hash,
+      g_str_equal, g_free, NULL);
+  m3u8->audio_rendition_groups = g_hash_table_new_full (g_str_hash,
+      g_str_equal, g_free, NULL);
+  m3u8->subtt_rendition_groups = g_hash_table_new_full (g_str_hash,
+      g_str_equal, g_free, NULL);
   GST_M3U8 (m3u8)->uri = NULL;
 
   return m3u8;
@@ -357,6 +360,22 @@ gst_m3u8_media_file_free (GstM3U8MediaFile * self)
   g_free (self->uri);
   g_free (self);
 }
+
+static GstFragment *
+gst_m3u8_media_file_get_fragment (GstM3U8MediaFile * file, GstClockTime ts,
+    gboolean discontinuous)
+{
+  GstFragment *frag = gst_fragment_new ();
+  frag->discontinuous = discontinuous;
+  g_free (frag->name);
+  frag->name = g_strdup (file->uri);
+  frag->start_time = ts;
+  frag->stop_time = ts + file->duration;
+  frag->offset = file->offset;
+  frag->length = file->length;
+  return frag;
+}
+
 
 static gboolean
 bool_from_string (gchar * ptr, gboolean * val)
@@ -849,6 +868,13 @@ gst_m3u8_variant_playlist_parse (GstM3U8VariantPlaylist * self, gchar * data)
     data = g_utf8_next_char (end);      /* skip \n */
   }
 
+  if (audio_alternate)
+    g_free (audio_alternate);
+  if (video_alternate)
+    g_free (video_alternate);
+  if (subtt_alternate)
+    g_free (subtt_alternate);
+
   /* order streams by bitrate */
   self->streams = g_list_sort (self->streams,
       (GCompareFunc) gst_m3u8_stream_compare_by_bitrate);
@@ -978,6 +1004,7 @@ gst_m3u8_playlist_update (GstM3U8Playlist * self, gchar * data,
         offset = acc_offset;
         acc_offset += length;
       }
+      g_strfreev (content);
     } else {
       GST_LOG ("Ignored line: %s", data);
     }
@@ -1022,6 +1049,8 @@ gst_m3u8_client_select_defaults (GstM3U8Client * client)
     GST_M3U8_CLIENT_UNLOCK (client);
     defaults =
         gst_m3u8_client_get_alternates (client, GST_M3U8_MEDIA_TYPE_SUBTITLES);
+    if (client->selected_stream->default_subtt != NULL)
+      g_free (client->selected_stream->default_subtt);
     client->selected_stream->default_subtt =
         g_strdup ((gchar *) defaults->data);
     gst_m3u8_client_set_alternate (client, GST_M3U8_MEDIA_TYPE_SUBTITLES,
@@ -1149,6 +1178,16 @@ gst_m3u8_client_free (GstM3U8Client * self)
   if (self->main != NULL)
     gst_m3u8_variant_playlist_free (self->main);
   g_mutex_free (self->lock);
+
+  if (self->video_alternate != NULL)
+    g_free (self->video_alternate);
+
+  if (self->audio_alternate != NULL)
+    g_free (self->audio_alternate);
+
+  if (self->subtt_alternate != NULL)
+    g_free (self->subtt_alternate);
+
   g_free (self);
 }
 
@@ -1184,18 +1223,23 @@ gst_m3u8_client_parse_main_playlist (GstM3U8Client * self, gchar * data)
     gst_m3u8_set_uri (GST_M3U8 (stream->selected_video),
         g_strdup (GST_M3U8 (self->main)->uri));
     if (!gst_m3u8_playlist_update (stream->selected_video, data, &updated)) {
+      gst_m3u8_stream_free (stream);
+      gst_m3u8_playlist_free (pl);
       goto out;
     }
     self->main->streams = g_list_append (self->main->streams, stream);
+    self->main->playlists = g_list_append (self->main->playlists, pl);
     gst_m3u8_client_select_defaults (self);
     gst_m3u8_client_init_sequence (self);
   } else {
     /* Parse the variant playlist */
     GST_DEBUG ("Parsing variant playlist");
     if (!gst_m3u8_variant_playlist_parse (self->main, data)) {
+      g_free (data);
       goto out;
     }
     gst_m3u8_client_select_defaults (self);
+    g_free (data);
   }
 
   ret = TRUE;
@@ -1331,27 +1375,15 @@ gst_m3u8_client_get_next_fragment (GstM3U8Client * client,
   client_sequence = client->sequence;
 
   if (video_file != NULL) {
-    GstFragment *frag = gst_fragment_new ();
-    frag->discontinuous = client_sequence != video_file->sequence;
-    frag->name = video_file->uri;
-    frag->start_time = timestamp;
-    frag->stop_time = timestamp + video_file->duration;
-    frag->offset = video_file->offset;
-    frag->length = video_file->length;
-    *video_fragment = frag;
+    *video_fragment = gst_m3u8_media_file_get_fragment (video_file, timestamp,
+        client_sequence != video_file->sequence);
     client->sequence = video_file->sequence + 1;
     updated = TRUE;
   }
 
   if (audio_file != NULL) {
-    GstFragment *frag = gst_fragment_new ();
-    frag->discontinuous = client_sequence != audio_file->sequence;
-    frag->name = audio_file->uri;
-    frag->start_time = timestamp;
-    frag->stop_time = timestamp + audio_file->duration;
-    frag->offset = audio_file->offset;
-    frag->length = audio_file->length;
-    *audio_fragment = frag;
+    *audio_fragment = gst_m3u8_media_file_get_fragment (audio_file, timestamp,
+        client_sequence != audio_file->sequence);
     if (!updated) {
       client->sequence = audio_file->sequence + 1;
       updated = TRUE;
@@ -1359,14 +1391,8 @@ gst_m3u8_client_get_next_fragment (GstM3U8Client * client,
   }
 
   if (subtt_file != NULL) {
-    GstFragment *frag = gst_fragment_new ();
-    frag->discontinuous = client_sequence != subtt_file->sequence;
-    frag->name = subtt_file->uri;
-    frag->start_time = timestamp;
-    frag->stop_time = timestamp + subtt_file->duration;
-    frag->offset = subtt_file->offset;
-    frag->length = subtt_file->length;
-    *subtt_fragment = frag;
+    *subtt_fragment = gst_m3u8_media_file_get_fragment (subtt_file, timestamp,
+        client_sequence != subtt_file->sequence);
     if (!updated) {
       client->sequence = subtt_file->sequence + 1;
     }
