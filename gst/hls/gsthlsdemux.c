@@ -1493,12 +1493,12 @@ gst_hls_demux_push_fragment (GstHLSDemux * demux, GstM3U8MediaType type)
       GST_ELEMENT_ERROR (demux, STREAM, FAILED, (NULL),
           ("stream stopped, reason %s", gst_flow_get_name (ret)));
       gst_hls_demux_push_event (demux, gst_event_new_eos ());
+      gst_hls_demux_pause_tasks (demux, FALSE);
+      return FALSE;
     } else {
-      GST_DEBUG_OBJECT (demux, "stream stopped, reason %s",
+      GST_WARNING_OBJECT (demux, "stream stopped, reason %s",
           gst_flow_get_name (ret));
     }
-    gst_hls_demux_pause_tasks (demux, FALSE);
-    return FALSE;
   }
   return TRUE;
 }
@@ -1518,7 +1518,7 @@ gst_hls_demux_push_audio_fragment (GstHLSDemux * demux)
 static void
 gst_hls_demux_push_subtt_fragment (GstHLSDemux * demux)
 {
-  //gst_hls_demux_push_fragment (demux, GST_M3U8_MEDIA_TYPE_SUBTITLES);
+  gst_hls_demux_push_fragment (demux, GST_M3U8_MEDIA_TYPE_SUBTITLES);
 }
 
 static void
