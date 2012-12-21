@@ -81,7 +81,7 @@ http://example.com/audio-only.m3u8";
 static const gchar *BYTE_RANGES_PLAYLIST = "#EXTM3U \n\
 #EXT-X-TARGETDURATION:40\n\
 #EXTINF:10,Test\n\
-#EXT-X-BYTERANGE:1000@0\n\
+#EXT-X-BYTERANGE:1000@100\n\
 http://media.example.com/all.ts\n\
 #EXTINF:10,Test\n\
 #EXT-X-BYTERANGE:1000@1000\n\
@@ -91,6 +91,22 @@ http://media.example.com/all.ts\n\
 http://media.example.com/all.ts\n\
 #EXTINF:10,Test\n\
 #EXT-X-BYTERANGE:1000@3000\n\
+http://media.example.com/all.ts\n\
+#EXT-X-ENDLIST";
+
+static const gchar *BYTE_RANGES_ACC_OFFSET_PLAYLIST = "#EXTM3U \n\
+#EXT-X-TARGETDURATION:40\n\
+#EXTINF:10,Test\n\
+#EXT-X-BYTERANGE:1000\n\
+http://media.example.com/all.ts\n\
+#EXTINF:10,Test\n\
+#EXT-X-BYTERANGE:1000\n\
+http://media.example.com/all.ts\n\
+#EXTINF:10,Test\n\
+#EXT-X-BYTERANGE:1000\n\
+http://media.example.com/all.ts\n\
+#EXTINF:10,Test\n\
+#EXT-X-BYTERANGE:1000\n\
 http://media.example.com/all.ts\n\
 #EXT-X-ENDLIST";
 
@@ -499,6 +515,29 @@ GST_START_TEST (test_playlist_byte_range_media_files)
   assert_equals_string (file->uri, "http://media.example.com/all.ts");
   assert_equals_int (file->sequence, 0);
   assert_equals_float (file->duration, 10 * (double) GST_SECOND);
+  assert_equals_int (file->offset, 100);
+  assert_equals_int (file->length, 1000);
+  /* Check last media segments */
+  file = GST_M3U8_MEDIA_FILE (g_list_last (pl->files)->data);
+  assert_equals_string (file->uri, "http://media.example.com/all.ts");
+  assert_equals_int (file->sequence, 3);
+  assert_equals_float (file->duration, 10 * (double) GST_SECOND);
+  assert_equals_int (file->offset, 3000);
+  assert_equals_int (file->length, 1000);
+
+  gst_m3u8_client_free (client);
+
+
+  client = load_playlist (BYTE_RANGES_ACC_OFFSET_PLAYLIST, FALSE);
+  pl = client->selected_stream->selected_video;
+
+  /* Check number of entries */
+  assert_equals_int (g_list_length (pl->files), 4);
+  /* Check first media segments */
+  file = GST_M3U8_MEDIA_FILE (g_list_first (pl->files)->data);
+  assert_equals_string (file->uri, "http://media.example.com/all.ts");
+  assert_equals_int (file->sequence, 0);
+  assert_equals_float (file->duration, 10 * (double) GST_SECOND);
   assert_equals_int (file->offset, 0);
   assert_equals_int (file->length, 1000);
   /* Check last media segments */
@@ -530,7 +569,7 @@ GST_START_TEST (test_get_next_fragment)
   assert_equals_string (v_frag->name, "http://media.example.com/all.ts");
   assert_equals_uint64 (v_frag->start_time, 0);
   assert_equals_uint64 (v_frag->stop_time, 10 * GST_SECOND);
-  assert_equals_uint64 (v_frag->offset, 0);
+  assert_equals_uint64 (v_frag->offset, 100);
   assert_equals_uint64 (v_frag->length, 1000);
   g_object_unref (v_frag);
 
