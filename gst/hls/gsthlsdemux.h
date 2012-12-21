@@ -74,6 +74,11 @@ struct _GstHLSDemux
   GstHLSAdaptation *adaptation;
   GstHLSAdaptationAlgorithmFunc algo_func;
 
+  /* Trick modes */
+  gboolean i_frames_mode;
+  gboolean rate;
+  gboolean need_init_segment;
+
   /* Stream selection */
   GHashTable *audio_streams;        /* ID:alt-name for audio streams */
   GHashTable *video_streams;        /* ID:alt-name for video streams */
