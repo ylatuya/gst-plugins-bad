@@ -15,7 +15,7 @@ fragmented_init (GstPlugin * plugin)
 {
   GST_DEBUG_CATEGORY_INIT (fragmented_debug, "fragmented", 0, "fragmented");
 
-  if (!gst_element_register (plugin, "hlsdemux", GST_RANK_PRIMARY,
+  if (!gst_element_register (plugin, "hlsdemux", GST_RANK_SECONDARY,
           GST_TYPE_HLS_DEMUX) || FALSE)
     return FALSE;
 
