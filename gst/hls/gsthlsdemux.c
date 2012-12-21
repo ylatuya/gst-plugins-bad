@@ -2101,6 +2101,7 @@ gst_hls_demux_fetch_fragment (GstHLSDemux * demux, GstFragment * fragment,
 static gboolean
 gst_hls_demux_get_next_fragment (GstHLSDemux * demux, gboolean caching)
 {
+  gboolean ret = TRUE;
   GstFragment *v_fragment, *a_fragment, *s_fragment;
 
   if (!gst_m3u8_client_get_next_fragment (demux->client, &v_fragment,
@@ -2127,7 +2128,16 @@ gst_hls_demux_get_next_fragment (GstHLSDemux * demux, gboolean caching)
     GST_TASK_SIGNAL (demux->updates_task);
     gst_task_start (demux->stream_task);
   }
-  return TRUE;
+  ret = TRUE;
+
+exit:
+  if (v_fragment != NULL)
+    g_object_unref (v_fragment);
+  if (a_fragment != NULL)
+    g_object_unref (a_fragment);
+  if (s_fragment != NULL)
+    g_object_unref (s_fragment);
+  return ret;
 
 error:
   {
@@ -2135,6 +2145,8 @@ error:
       GST_ERROR_OBJECT (demux, "Error fetching fragment");
       gst_hls_demux_stop (demux);
     }
-    return FALSE;
+    ret = FALSE;
+    goto exit;
   }
+
 }

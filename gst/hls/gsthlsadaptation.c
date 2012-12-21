@@ -141,7 +141,10 @@ gst_hls_adaptation_add_fragment (GstHLSAdaptation * adaptation, gsize size,
   GST_HLS_ADAPTATION_LOCK (adaptation);
 
   if (g_list_length (adaptation->fragments) >= adaptation->max_fragments) {
-    adaptation->fragments = g_list_remove (adaptation->fragments,
+    gst_hls_adaptation_fragment_free (GST_HLS_ADAPTATION_FRAGMENT (g_list_first
+            (adaptation->fragments)->data));
+    adaptation->fragments =
+        g_list_remove (adaptation->fragments,
         g_list_first (adaptation->fragments)->data);
   }
 
@@ -219,8 +222,8 @@ gst_hls_adaptation_always_lowest (GstHLSAdaptation * adaptation)
   if (adaptation->streams == NULL)
     return -1;
 
-  return GST_HLS_ADAPTATION_STREAM (g_list_first (adaptation->streams)->data)->
-      bandwidth;
+  return GST_HLS_ADAPTATION_STREAM (g_list_first (adaptation->streams)->
+      data)->bandwidth;
 }
 
 /* Returns always the highest bitrate, but smaller than connection
@@ -234,8 +237,8 @@ gst_hls_adaptation_always_highest (GstHLSAdaptation * adaptation)
     return -1;
 
   bitrate =
-      GST_HLS_ADAPTATION_STREAM (g_list_last (adaptation->streams)->data)->
-      bandwidth;
+      GST_HLS_ADAPTATION_STREAM (g_list_last (adaptation->streams)->
+      data)->bandwidth;
 
   /* If user specifies a connection speed never use a playlist with a bandwidth
    * superior than it */
