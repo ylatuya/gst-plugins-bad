@@ -2134,9 +2134,10 @@ gst_hls_demux_fetch_fragment (GstHLSDemux * demux, GstFragment * fragment,
     return FALSE;
   }
 
-  gst_hls_adaptation_add_fragment (demux->adaptation,
-      gst_fragment_get_total_size (download),
-      download->download_stop_time - download->download_start_time);
+  if (type != GST_M3U8_MEDIA_TYPE_SUBTITLES)
+    gst_hls_adaptation_add_fragment (demux->adaptation,
+        gst_fragment_get_total_size (download),
+        download->download_stop_time - download->download_start_time);
 
   buffer_list = gst_fragment_get_buffer_list (download);
   buf = gst_buffer_list_get (buffer_list, 0, 0);
