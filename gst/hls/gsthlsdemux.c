@@ -2144,7 +2144,7 @@ gst_hls_demux_fetch_fragment (GstHLSDemux * demux, GstFragment * fragment,
   GST_BUFFER_DURATION (buf) = fragment->stop_time - fragment->start_time;
   GST_BUFFER_TIMESTAMP (buf) = fragment->start_time;
   GST_BUFFER_OFFSET (buf) = 0;
-
+  GST_BUFFER_FLAG_UNSET (buf, GST_BUFFER_FLAG_DISCONT);
 
   if (fragment->discontinuous) {
     GST_DEBUG_OBJECT (demux, "Marking fragment as discontinuous");
