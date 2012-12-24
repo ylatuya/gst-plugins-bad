@@ -44,6 +44,29 @@ G_BEGIN_DECLS
   (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_HLS_DEMUX))
 typedef struct _GstHLSDemux GstHLSDemux;
 typedef struct _GstHLSDemuxClass GstHLSDemuxClass;
+typedef struct _GstHLSDemuxPadData GstHLSDemuxPadData;
+
+/**
+ * GstHLSDemuxPadData:
+ *
+ * Opaque #GstHLSDemuxPadData data structure.
+ */
+struct _GstHLSDemuxPadData
+{
+  GstM3U8MediaType type;
+  GstPad *pad;
+  GstCaps *input_caps;
+  GQueue *queue;
+  GstClockTime position_shift;
+  gboolean need_segment;
+  gboolean do_typefind;
+  guint *signal;
+  const gchar *desc;
+
+  /* Stream selection */
+  GHashTable *streams;
+  gint current_stream;
+};
 
 /**
  * GstHLSDemux:
@@ -54,23 +77,16 @@ struct _GstHLSDemux
 {
   GstElement parent;
 
-  GstPad *video_srcpad;
-  GstPad *audio_srcpad;
-  GstPad *subtt_srcpad;
+  GstHLSDemuxPadData *video_srcpad;
+  GstHLSDemuxPadData *audio_srcpad;
+  GstHLSDemuxPadData *subtt_srcpad;
   GstPad *sinkpad;
 
   GstBuffer *playlist;
-  GstCaps *video_input_caps;
-  GstCaps *audio_input_caps;
-  GstCaps *subtt_input_caps;
   GstUriDownloader *downloader;
   GstM3U8Client *client;        /* M3U8 client */
-  GQueue *video_queue;          /* Queue storing the fetched fragments */
-  GQueue *audio_queue;          /* Queue storing the fetched fragments */
-  GQueue *subtt_queue;          /* Queue storing the fetched fragments */
   gboolean need_cache;          /* Wheter we need to cache some fragments before starting to push data */
   gboolean end_of_playlist;
-  gboolean do_typefind;         /* Whether we need to typefind the next buffer */
   GstHLSAdaptation *adaptation;
   GstHLSAdaptationAlgorithmFunc algo_func;
 
@@ -78,14 +94,6 @@ struct _GstHLSDemux
   gboolean i_frames_mode;
   gboolean rate;
   gboolean need_init_segment;
-
-  /* Stream selection */
-  GHashTable *audio_streams;        /* ID:alt-name for audio streams */
-  GHashTable *video_streams;        /* ID:alt-name for video streams */
-  GHashTable *subtt_streams;        /* ID:alt-name for subtitles streams */
-  gint current_video;
-  gint current_audio;
-  gint current_subtt;
 
   /* Properties */
   guint fragments_cache;        /* number of fragments needed to be cached to start playing */
@@ -105,14 +113,6 @@ struct _GstHLSDemux
   GMutex *updates_timed_lock;
   GTimeVal next_update;         /* Time of the next update */
   gboolean cancelled;
-
-  /* Position in the stream */
-  GstClockTime video_position_shift;
-  GstClockTime audio_position_shift;
-  GstClockTime subtt_position_shift;
-  gboolean video_need_segment;
-  gboolean audio_need_segment;
-  gboolean subtt_need_segment;
 };
 
 struct _GstHLSDemuxClass
