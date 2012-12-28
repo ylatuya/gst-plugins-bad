@@ -2058,6 +2058,7 @@ gst_hls_demux_fetch_fragment (GstHLSDemux * demux, GstFragment * fragment,
   if (fragment == NULL) {
     /* Create an empty fragment to keep the queues in sync */
     download = gst_fragment_new ();
+    g_free (download->name);
     download->name = g_strdup (GST_HLS_DEMUX_EMPTY_FRAGMENT);
     g_queue_push_tail (pdata->queue, download);
     return TRUE;
