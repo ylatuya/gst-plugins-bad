@@ -363,6 +363,11 @@ gst_hls_demux_dispose (GObject * obj)
   gst_hls_demux_pad_data_free (demux->audio_srcpad);
   gst_hls_demux_pad_data_free (demux->subtt_srcpad);
 
+  if (demux->adaptation != NULL) {
+    gst_hls_adaptation_free (demux->adaptation);
+    demux->adaptation = NULL;
+  }
+
   G_OBJECT_CLASS (parent_class)->dispose (obj);
 }
 
