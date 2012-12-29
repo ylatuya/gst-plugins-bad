@@ -1061,10 +1061,11 @@ gst_hls_demux_sink_event (GstPad * pad, GstEvent * event)
       }
 
       gst_hls_demux_create_streams (demux);
-      gst_m3u8_client_get_current_position (demux->client, &demux->start_ts);
-      demux->newsegment = gst_event_new_new_segment (FALSE, demux->rate,
-          GST_FORMAT_TIME, demux->start_ts, GST_CLOCK_TIME_NONE,
-          demux->start_ts);
+      gst_m3u8_client_get_current_position (demux->client, &demux->start_ts,
+          NULL);
+      demux->newsegment =
+          gst_event_new_new_segment (FALSE, demux->rate, GST_FORMAT_TIME,
+          demux->start_ts, GST_CLOCK_TIME_NONE, demux->start_ts);
 
       if (!ret && gst_m3u8_client_is_live (demux->client)) {
         GST_ELEMENT_ERROR (demux, RESOURCE, NOT_FOUND,

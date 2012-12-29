@@ -277,6 +277,30 @@ gst_m3u8_playlist_free (GstM3U8Playlist * self)
   g_free (self);
 }
 
+static guint64
+gst_m3u8_playlist_get_position (GstM3U8Playlist * pl, guint sequence)
+{
+  GList *l, *walk;
+  guint64 timestamp = 0;
+
+  l = g_list_find_custom (pl->files, GUINT_TO_POINTER (sequence),
+      (GCompareFunc) _find_next);
+
+  /* For a live playlist we must guess the first timestamp from the media
+   * sequence and the target duration */
+  if (!pl->endlist) {
+    guint first_seq = pl->mediasequence - g_list_length (pl->files);
+    timestamp = (GstClockTime) (first_seq * pl->targetduration);
+  }
+
+  for (walk = pl->files; walk; walk = walk->next) {
+    if (walk == l)
+      break;
+    timestamp += GST_M3U8_MEDIA_FILE (walk->data)->duration;
+  }
+  return timestamp;
+}
+
 /******************************
  *    GstM3u8VariantPlaylist  *
  *****************************/
@@ -1403,35 +1427,44 @@ out:
 
 void
 gst_m3u8_client_get_current_position (GstM3U8Client * client,
-    GstClockTime * timestamp)
+    GstClockTime * video, GstClockTime * audio)
 {
-  GList *l;
-  GList *walk;
-  GstM3U8Playlist *pl;
+  GstClockTime audio_ts, video_ts;
+  GstM3U8Playlist *video_pl, *audio_pl;
+  GstM3U8Stream *selected_stream = client->selected_stream;
 
-  *timestamp = 0;
+  video_ts = GST_CLOCK_TIME_NONE;
+  audio_ts = GST_CLOCK_TIME_NONE;
 
-  pl = gst_m3u8_client_get_current_playlist (client);
-  if (pl == NULL)
-    return;
+  if (selected_stream == NULL)
+    goto exit;
 
-  l = g_list_find_custom (pl->files, GUINT_TO_POINTER (client->sequence),
-      (GCompareFunc) _find_next);
+  video_pl = selected_stream->selected_video;
+  audio_pl = selected_stream->selected_audio;
+  if (video_pl == NULL && audio_pl == NULL)
+    goto exit;
 
-  /* For a live playlist we must guess the first timestamp from the media
-   * sequence and the target duration */
-  if (!pl->endlist) {
-    guint first_seq = pl->mediasequence - g_list_length (pl->files);
-    *timestamp = (GstClockTime) (first_seq * pl->targetduration);
+  if (video_pl != NULL) {
+    video_ts = gst_m3u8_playlist_get_position (video_pl, client->sequence);
+  }
+  if (audio_pl != NULL) {
+    audio_ts = gst_m3u8_playlist_get_position (audio_pl, client->sequence);
   }
 
-  for (walk = pl->files; walk; walk = walk->next) {
-    if (walk == l)
-      break;
-    *timestamp += GST_M3U8_MEDIA_FILE (walk->data)->duration;
-  }
-  GST_DEBUG ("Current position is %" GST_TIME_FORMAT,
-      GST_TIME_ARGS (*timestamp));
+  if (audio_ts == -1)
+    audio_ts = video_ts;
+  if (video_ts == -1)
+    video_ts = audio_ts;
+
+  GST_DEBUG ("Current position video:%" GST_TIME_FORMAT
+      " audio:%" GST_TIME_FORMAT, GST_TIME_ARGS (video_ts),
+      GST_TIME_ARGS (audio_ts));
+
+exit:
+  if (audio != NULL)
+    *audio = audio_ts;
+  if (video != NULL)
+    *video = video_ts;
 }
 
 gboolean
@@ -1440,7 +1473,7 @@ gst_m3u8_client_get_next_fragment (GstM3U8Client * client,
     GstFragment ** subtt_fragment)
 {
   GstM3U8MediaFile *video_file, *audio_file, *subtt_file;
-  GstClockTime timestamp, end_timestamp;
+  GstClockTime video_ts, audio_ts, end_timestamp;
   gboolean updated = FALSE;
   guint client_sequence;
 
@@ -1451,9 +1484,9 @@ gst_m3u8_client_get_next_fragment (GstM3U8Client * client,
 
   GST_M3U8_CLIENT_LOCK (client);
 
-  gst_m3u8_client_get_current_position (client, &timestamp);
+  gst_m3u8_client_get_current_position (client, &video_ts, &audio_ts);
   end_timestamp =
-      gst_m3u8_client_get_current_playlist (client)->targetduration + timestamp;
+      gst_m3u8_client_get_current_playlist (client)->targetduration + video_ts;
 
   GST_DEBUG ("Looking for fragment %d", client->sequence);
   *video_fragment = NULL;
@@ -1475,14 +1508,14 @@ gst_m3u8_client_get_next_fragment (GstM3U8Client * client,
   client_sequence = client->sequence;
 
   if (video_file != NULL) {
-    *video_fragment = gst_m3u8_media_file_get_fragment (video_file, timestamp,
+    *video_fragment = gst_m3u8_media_file_get_fragment (video_file, video_ts,
         client_sequence != video_file->sequence);
     client->sequence = video_file->sequence + 1;
     updated = TRUE;
   }
 
   if (audio_file != NULL) {
-    *audio_fragment = gst_m3u8_media_file_get_fragment (audio_file, timestamp,
+    *audio_fragment = gst_m3u8_media_file_get_fragment (audio_file, audio_ts,
         client_sequence != audio_file->sequence);
     if (!updated) {
       client->sequence = audio_file->sequence + 1;
@@ -1491,7 +1524,7 @@ gst_m3u8_client_get_next_fragment (GstM3U8Client * client,
   }
 
   if (subtt_file != NULL) {
-    *subtt_fragment = gst_m3u8_media_file_get_fragment (subtt_file, timestamp,
+    *subtt_fragment = gst_m3u8_media_file_get_fragment (subtt_file, video_ts,
         client_sequence != subtt_file->sequence);
     if (!updated) {
       client->sequence = subtt_file->sequence + 1;
@@ -1524,7 +1557,7 @@ gst_m3u8_client_get_prev_i_frames (GstM3U8Client * client,
       gst_m3u8_media_file_get_fragment (client->selected_stream->init_segment,
       0, FALSE);
 
-  gst_m3u8_client_get_current_position (client, &end_timestamp);
+  gst_m3u8_client_get_current_position (client, &end_timestamp, NULL);
   timestamp = end_timestamp -
       gst_m3u8_client_get_current_playlist (client)->targetduration;
 
@@ -1580,7 +1613,7 @@ gst_m3u8_client_get_next_i_frames (GstM3U8Client * client,
       gst_m3u8_media_file_get_fragment (client->selected_stream->init_segment,
       0, FALSE);
 
-  gst_m3u8_client_get_current_position (client, &timestamp);
+  gst_m3u8_client_get_current_position (client, &timestamp, NULL);
   end_timestamp =
       gst_m3u8_client_get_current_playlist (client)->targetduration + timestamp;
 
