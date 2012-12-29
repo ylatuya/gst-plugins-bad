@@ -41,6 +41,7 @@ struct _GstUriDownloaderPrivate
   GstPad *pad;
   GTimeVal *timeout;
   GstFragment *download;
+  gint64 offset;
   gint64 length;
   GMutex *usage_lock;
   GMutex *lock;
@@ -228,7 +229,8 @@ gst_uri_downloader_chain (GstPad * pad, GstBuffer * buf)
    * in the bus, which is handled synchronously cancelling the download.
    */
   GST_OBJECT_LOCK (downloader);
-  if (downloader->priv->download == NULL) {
+  if (downloader->priv->download == NULL
+      || downloader->priv->download->completed) {
     /* Download cancelled, quit */
     GST_OBJECT_UNLOCK (downloader);
     goto done;
@@ -236,6 +238,13 @@ gst_uri_downloader_chain (GstPad * pad, GstBuffer * buf)
 
   if (downloader->priv->download->download_start_time == GST_CLOCK_TIME_NONE)
     downloader->priv->download->download_start_time = gst_util_get_timestamp ();
+
+  if (downloader->priv->offset != -1 &&
+      GST_BUFFER_OFFSET (buf) < downloader->priv->offset) {
+    GST_DEBUG_OBJECT (downloader, "Skipping buffer out of range");
+    GST_OBJECT_UNLOCK (downloader);
+    goto done;
+  }
 
   frag_buf = buf;
   sbuf = GST_BUFFER_SIZE (buf);
@@ -348,6 +357,8 @@ gst_uri_downloader_fetch_uri_range (GstUriDownloader * downloader,
 
   downloader->priv->download = gst_fragment_new ();
   downloader->priv->download->download_start_time = GST_CLOCK_TIME_NONE;
+  downloader->priv->length = length;
+  downloader->priv->offset = offset;
 
   if (!gst_uri_downloader_set_uri (downloader, uri)) {
     goto quit;
@@ -370,7 +381,6 @@ gst_uri_downloader_fetch_uri_range (GstUriDownloader * downloader,
     goto quit;
   }
 
-  downloader->priv->length = length;
   if (offset != -1 && length != -1) {
     GST_INFO_OBJECT (downloader, "range request offset:%" G_GUINT64_FORMAT
         " length:%" G_GUINT64_FORMAT, offset, length);
