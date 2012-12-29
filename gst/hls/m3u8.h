@@ -192,7 +192,8 @@ gboolean gst_m3u8_client_get_prev_i_frames            (GstM3U8Client * client,
                                                        GList **i_frames);
 
 void gst_m3u8_client_get_current_position             (GstM3U8Client * client,
-                                                       GstClockTime * timestamp);
+                                                       GstClockTime * video,
+                                                       GstClockTime * audio);
 
 GstClockTime gst_m3u8_client_get_duration             (GstM3U8Client * client);
 

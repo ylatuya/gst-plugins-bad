@@ -592,15 +592,15 @@ GST_START_TEST (test_get_current_position)
   client = load_playlist (BYTE_RANGES_PLAYLIST);
 
   /* Check the next fragment */
-  gst_m3u8_client_get_current_position (client, &pos);
+  gst_m3u8_client_get_current_position (client, &pos, NULL);
   assert_equals_uint64 (pos, 0);
 
   gst_m3u8_client_get_next_fragment (client, &v_frag, &a_frag, &s_frag);
-  gst_m3u8_client_get_current_position (client, &pos);
+  gst_m3u8_client_get_current_position (client, &pos, NULL);
   assert_equals_uint64 (pos, 10 * GST_SECOND);
 
   gst_m3u8_client_get_next_fragment (client, &v_frag, &a_frag, &s_frag);
-  gst_m3u8_client_get_current_position (client, &pos);
+  gst_m3u8_client_get_current_position (client, &pos, NULL);
   assert_equals_uint64 (pos, 20 * GST_SECOND);
 
   gst_m3u8_client_free (client);
@@ -691,7 +691,7 @@ do_test_seek (GstM3U8Client * client, guint seek_pos, gint pos)
     return;
   }
   assert_equals_int (ret, TRUE);
-  gst_m3u8_client_get_current_position (client, &cur_pos);
+  gst_m3u8_client_get_current_position (client, &cur_pos, NULL);
   assert_equals_uint64 (cur_pos, pos * GST_SECOND);
 }
 
