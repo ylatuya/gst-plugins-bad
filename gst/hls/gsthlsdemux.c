@@ -1126,7 +1126,7 @@ gst_hls_demux_src_query (GstPad * pad, GstQuery * query)
           ret = TRUE;
         }
       }
-      GST_INFO_OBJECT (hlsdemux, "GST_QUERY_DURATION returns %s with duration %"
+      GST_LOG_OBJECT (hlsdemux, "GST_QUERY_DURATION returns %s with duration %"
           GST_TIME_FORMAT, ret ? "TRUE" : "FALSE", GST_TIME_ARGS (duration));
       break;
     }
