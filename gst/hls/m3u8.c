@@ -125,6 +125,7 @@ gst_m3u8_stream_new (void)
   GstM3U8Stream *stream;
 
   stream = g_new0 (GstM3U8Stream, 1);
+  stream->first = FALSE;
   stream->video_alternates = g_hash_table_new (g_str_hash, g_str_equal);
   stream->audio_alternates = g_hash_table_new (g_str_hash, g_str_equal);
   stream->subtt_alternates = g_hash_table_new (g_str_hash, g_str_equal);
@@ -585,6 +586,7 @@ static gboolean
 gst_m3u8_variant_playlist_parse (GstM3U8VariantPlaylist * self, gchar * data)
 {
   gchar *end;
+  gboolean first_stream = TRUE;
   GstM3U8Stream *stream = NULL;
   GstM3U8Stream *last_stream = NULL;
   gchar *audio_alternate = NULL;
@@ -804,6 +806,9 @@ gst_m3u8_variant_playlist_parse (GstM3U8VariantPlaylist * self, gchar * data)
       }
 
       stream = gst_m3u8_stream_new ();
+      stream->first = first_stream;
+      first_stream = FALSE;
+
       data = data + 18;
       while (data && parse_attributes (&data, &a, &v)) {
         if (g_str_equal (a, "BANDWIDTH")) {
@@ -1074,7 +1079,13 @@ gst_m3u8_is_variant_playlist (gchar * data)
 static void
 gst_m3u8_client_select_defaults (GstM3U8Client * client)
 {
-  client->selected_stream = GST_M3U8_STREAM (client->main->streams->data);
+  GList *walk;
+
+  for (walk = client->main->streams; walk; walk = walk->next) {
+    if (GST_M3U8_STREAM (walk->data)->first) {
+      client->selected_stream = GST_M3U8_STREAM (walk->data);
+    }
+  }
 
   if (client->selected_stream->default_audio != NULL) {
     GST_M3U8_CLIENT_UNLOCK (client);
@@ -1266,6 +1277,7 @@ gst_m3u8_client_parse_main_playlist (GstM3U8Client * self, gchar * data)
     GstM3U8Playlist *pl = gst_m3u8_playlist_new ();
     GST_DEBUG ("Parsing rendition playlist");
     stream->selected_video = pl;
+    stream->first = TRUE;
     gst_m3u8_set_uri (GST_M3U8 (stream->selected_video),
         g_strdup (GST_M3U8 (self->main)->uri));
     if (!gst_m3u8_playlist_update (stream->selected_video, data, &updated)) {

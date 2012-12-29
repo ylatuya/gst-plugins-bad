@@ -1746,7 +1746,7 @@ gst_hls_demux_cache_fragments (GstHLSDemux * demux)
 {
   gint i;
   GstM3U8Stream *stream = NULL;
-  guint target_bitrate;
+  gint target_bitrate;
   guint fragments_cache;
 
   /* If this playlist is a variant playlist, select the first one
@@ -1755,7 +1755,7 @@ gst_hls_demux_cache_fragments (GstHLSDemux * demux)
   target_bitrate = gst_hls_adaptation_get_target_bitrate (demux->adaptation);
   /* If we set the connection speed, use it for the first fragments. Otherwise
    * use the default stream selected by the client */
-  if (target_bitrate != 0) {
+  if (target_bitrate > 0) {
     stream = gst_m3u8_client_get_stream_for_bitrate (demux->client,
         target_bitrate);
     gst_m3u8_client_set_current (demux->client, stream);
