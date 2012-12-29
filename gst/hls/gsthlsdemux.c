@@ -633,17 +633,19 @@ gst_hls_demux_init (GstHLSDemux * demux, GstHLSDemuxClass * klass)
   /* Downloader */
   demux->downloader = gst_uri_downloader_new ();
 
-  /* Streams adaptation */
-  demux->adaptation = gst_hls_adaptation_new ();
-  gst_hls_adaptation_set_max_bitrate (demux->adaptation, DEFAULT_BITRATE_LIMIT);
-  gst_hls_adaptation_set_connection_speed (demux->adaptation,
-      DEFAULT_CONNECTION_SPEED);
-
   /* Properties */
   demux->fragments_cache = DEFAULT_FRAGMENTS_CACHE;
   demux->bitrate_limit = DEFAULT_BITRATE_LIMIT;
   demux->connection_speed = DEFAULT_CONNECTION_SPEED;
   demux->max_resolution = DEFAULT_MAX_RESOLUTION;
+  demux->adaptation_algo = DEFAULT_ADAPTATION_ALGORITHM;
+
+  /* Streams adaptation */
+  demux->adaptation = gst_hls_adaptation_new ();
+  gst_hls_adaptation_set_max_bitrate (demux->adaptation, DEFAULT_BITRATE_LIMIT);
+  gst_hls_adaptation_set_connection_speed (demux->adaptation,
+      DEFAULT_CONNECTION_SPEED);
+  gst_hls_demux_update_adaptation_algorithm (demux);
 
   /* Updates task */
   g_static_rec_mutex_init (&demux->updates_lock);
