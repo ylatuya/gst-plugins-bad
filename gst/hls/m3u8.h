@@ -106,6 +106,7 @@ struct _GstM3U8Stream
   GstM3U8MediaCodec audio_codec;
   gint width;
   gint height;
+  gboolean first;                   /* The first in the playlist and therefore the default */
   GstM3U8MediaFile *init_segment;
 
   gchar * default_audio;
