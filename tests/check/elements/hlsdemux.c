@@ -212,7 +212,7 @@ mid/video-audio.m3u8\n\
 hi/video-audio.m3u8";
 
 static GstM3U8Client *
-load_playlist (const gchar * data, gboolean with_audio_only)
+load_playlist (const gchar * data)
 {
   gboolean ret;
   GstM3U8Client *client;
@@ -226,14 +226,7 @@ load_playlist (const gchar * data, gboolean with_audio_only)
   stream = GST_M3U8_STREAM (client->main->streams->data);
   assert_equals_int (stream != NULL, TRUE);
 
-  /* Variant playlist with an audio-only fallback should never have this one
-   * selected as the first one but instead the next one with video-audio */
-  if (!with_audio_only) {
-    assert_equals_int (client->selected_stream == stream, TRUE);
-  } else {
-    stream = GST_M3U8_STREAM (client->main->streams->next->data);
-    assert_equals_int (client->selected_stream == stream, TRUE);
-  }
+  assert_equals_int (client->selected_stream->first, TRUE);
 
   return client;
 }
@@ -256,7 +249,7 @@ GST_START_TEST (test_load_main_playlist_rendition)
 {
   GstM3U8Client *client;
 
-  client = load_playlist (ON_DEMAN_PLAYLIST, FALSE);
+  client = load_playlist (ON_DEMAN_PLAYLIST);
 
   assert_equals_int (g_list_length (client->main->streams), 1);
   assert_equals_int (g_hash_table_size (client->main->video_rendition_groups),
@@ -279,7 +272,7 @@ GST_START_TEST (test_load_main_playlist_variant)
   GstM3U8Stream *stream;
   GList *tmp;
 
-  client = load_playlist (VARIANT_PLAYLIST, FALSE);
+  client = load_playlist (VARIANT_PLAYLIST);
 
   assert_equals_int (g_hash_table_size (client->main->video_rendition_groups),
       0);
@@ -321,9 +314,9 @@ GST_START_TEST (test_load_main_playlist_variant)
   assert_equals_string (GST_M3U8 (stream->selected_video)->uri,
       "http://example.com/hi.m3u8");
 
-  /* Check the lowest bitrate is selected */
+  /* Check the first playlist is selected */
   assert_equals_int (client->selected_stream != NULL, TRUE);
-  assert_equals_int (client->selected_stream->bandwidth, 65000);
+  assert_equals_int (client->selected_stream->bandwidth, 128000);
 
   gst_m3u8_client_free (client);
 }
@@ -336,7 +329,7 @@ GST_START_TEST (test_on_demand_playlist)
   GstM3U8Playlist *pl;
   GstM3U8MediaFile *file;
 
-  client = load_playlist (ON_DEMAN_PLAYLIST, FALSE);
+  client = load_playlist (ON_DEMAN_PLAYLIST);
   pl = client->selected_stream->selected_video;
 
   /* Sequence should be 0 as it's an ondemand playlist */
@@ -365,7 +358,7 @@ GST_START_TEST (test_live_playlist)
   GstM3U8Playlist *pl;
   GstM3U8MediaFile *file;
 
-  client = load_playlist (LIVE_PLAYLIST, FALSE);
+  client = load_playlist (LIVE_PLAYLIST);
 
   assert_equals_int (g_list_length (client->main->streams), 1);
   assert_equals_int (g_hash_table_size (client->main->video_rendition_groups),
@@ -402,7 +395,7 @@ GST_START_TEST (test_playlist_with_doubles_duration)
   GstM3U8Playlist *pl;
   GstM3U8MediaFile *file;
 
-  client = load_playlist (DOUBLES_PLAYLIST, FALSE);
+  client = load_playlist (DOUBLES_PLAYLIST);
 
   pl = client->selected_stream->selected_video;
   /* Check first media segments */
@@ -426,7 +419,7 @@ GST_START_TEST (test_update_invalid_playlist)
   gboolean ret;
 
   /* Test updates in on-demand playlists */
-  client = load_playlist (ON_DEMAN_PLAYLIST, FALSE);
+  client = load_playlist (ON_DEMAN_PLAYLIST);
   pl = client->selected_stream->selected_video;
   assert_equals_int (g_list_length (pl->files), 4);
   ret = gst_m3u8_client_update (client, g_strdup ("#INVALID"), NULL, NULL);
@@ -445,7 +438,7 @@ GST_START_TEST (test_update_playlist)
   gboolean ret;
 
   /* Test updates in on-demand playlists */
-  client = load_playlist (ON_DEMAN_PLAYLIST, FALSE);
+  client = load_playlist (ON_DEMAN_PLAYLIST);
   pl = client->selected_stream->selected_video;
   assert_equals_int (g_list_length (pl->files), 4);
   ret =
@@ -455,7 +448,7 @@ GST_START_TEST (test_update_playlist)
   gst_m3u8_client_free (client);
 
   /* Test updates in live playlists */
-  client = load_playlist (LIVE_PLAYLIST, FALSE);
+  client = load_playlist (LIVE_PLAYLIST);
   pl = client->selected_stream->selected_video;
   assert_equals_int (g_list_length (pl->files), 4);
   /* Add a new entry to the playlist and check the update */
@@ -479,7 +472,7 @@ GST_START_TEST (test_playlist_media_files)
   GstM3U8Playlist *pl;
   GstM3U8MediaFile *file;
 
-  client = load_playlist (ON_DEMAN_PLAYLIST, FALSE);
+  client = load_playlist (ON_DEMAN_PLAYLIST);
   pl = client->selected_stream->selected_video;
 
   /* Check number of entries */
@@ -505,7 +498,7 @@ GST_START_TEST (test_playlist_byte_range_media_files)
   GstM3U8Playlist *pl;
   GstM3U8MediaFile *file;
 
-  client = load_playlist (BYTE_RANGES_PLAYLIST, FALSE);
+  client = load_playlist (BYTE_RANGES_PLAYLIST);
   pl = client->selected_stream->selected_video;
 
   /* Check number of entries */
@@ -528,7 +521,7 @@ GST_START_TEST (test_playlist_byte_range_media_files)
   gst_m3u8_client_free (client);
 
 
-  client = load_playlist (BYTE_RANGES_ACC_OFFSET_PLAYLIST, FALSE);
+  client = load_playlist (BYTE_RANGES_ACC_OFFSET_PLAYLIST);
   pl = client->selected_stream->selected_video;
 
   /* Check number of entries */
@@ -558,7 +551,7 @@ GST_START_TEST (test_get_next_fragment)
   GstM3U8Client *client;
   GstFragment *v_frag = NULL, *a_frag = NULL, *s_frag = NULL;
 
-  client = load_playlist (BYTE_RANGES_PLAYLIST, FALSE);
+  client = load_playlist (BYTE_RANGES_PLAYLIST);
 
   /* Check the next fragment */
   gst_m3u8_client_get_next_fragment (client, &v_frag, &a_frag, &s_frag);
@@ -596,7 +589,7 @@ GST_START_TEST (test_get_current_position)
   GstClockTime pos;
   GstFragment *v_frag = NULL, *a_frag = NULL, *s_frag = NULL;
 
-  client = load_playlist (BYTE_RANGES_PLAYLIST, FALSE);
+  client = load_playlist (BYTE_RANGES_PLAYLIST);
 
   /* Check the next fragment */
   gst_m3u8_client_get_current_position (client, &pos);
@@ -620,12 +613,12 @@ GST_START_TEST (test_get_duration)
   GstM3U8Client *client;
 
   /* Test duration for on-demand playlists */
-  client = load_playlist (ON_DEMAN_PLAYLIST, FALSE);
+  client = load_playlist (ON_DEMAN_PLAYLIST);
   assert_equals_uint64 (gst_m3u8_client_get_duration (client), 40 * GST_SECOND);
   gst_m3u8_client_free (client);
 
   /* Test duration for live playlists */
-  client = load_playlist (LIVE_PLAYLIST, FALSE);
+  client = load_playlist (LIVE_PLAYLIST);
   assert_equals_uint64 (gst_m3u8_client_get_duration (client),
       GST_CLOCK_TIME_NONE);
   gst_m3u8_client_free (client);
@@ -637,7 +630,7 @@ GST_START_TEST (test_get_target_duration)
 {
   GstM3U8Client *client;
 
-  client = load_playlist (ON_DEMAN_PLAYLIST, FALSE);
+  client = load_playlist (ON_DEMAN_PLAYLIST);
   assert_equals_uint64 (gst_m3u8_client_get_target_duration (client),
       10 * GST_SECOND);
 
@@ -651,7 +644,7 @@ GST_START_TEST (test_get_streams_bitrates)
   GstM3U8Client *client;
   GList *bandwidths;
 
-  client = load_playlist (VARIANT_PLAYLIST, FALSE);
+  client = load_playlist (VARIANT_PLAYLIST);
   bandwidths = gst_m3u8_client_get_streams_bitrates (client);
   assert_equals_int (g_list_length (bandwidths), 4);
   assert_equals_int (GPOINTER_TO_UINT (g_list_nth_data (bandwidths, 0)), 65000);
@@ -668,7 +661,7 @@ GST_START_TEST (test_get_stream_for_bitrate)
   GstM3U8Client *client;
   GstM3U8Stream *stream;
 
-  client = load_playlist (VARIANT_PLAYLIST, FALSE);
+  client = load_playlist (VARIANT_PLAYLIST);
   stream = gst_m3u8_client_get_stream_for_bitrate (client, 0);
   assert_equals_int (stream->bandwidth, 65000);
   stream = gst_m3u8_client_get_stream_for_bitrate (client, G_MAXINT32);
@@ -706,7 +699,7 @@ GST_START_TEST (test_seek)
 {
   GstM3U8Client *client;
 
-  client = load_playlist (ON_DEMAN_PLAYLIST, FALSE);
+  client = load_playlist (ON_DEMAN_PLAYLIST);
 
   /* Test seek in the middle of a fragment */
   do_test_seek (client, 1, 0);
@@ -726,7 +719,7 @@ GST_START_TEST (test_seek)
   gst_m3u8_client_free (client);
 
   /* Test seeks on a live playlist */
-  client = load_playlist (LIVE_PLAYLIST, FALSE);
+  client = load_playlist (LIVE_PLAYLIST);
   do_test_seek (client, 0, -1);
 
   do_test_seek (client, 21440, 21440);
@@ -745,7 +738,7 @@ GST_START_TEST (test_alternate_audio_playlist)
   GstM3U8Media *media;
   GList *alternates;
 
-  client = load_playlist (ALTERNATE_AUDIO_PLAYLIST, TRUE);
+  client = load_playlist (ALTERNATE_AUDIO_PLAYLIST);
 
   assert_equals_int (g_list_length (client->main->streams), 4);
   assert_equals_int (g_hash_table_size (client->main->video_rendition_groups),
@@ -792,7 +785,7 @@ GST_START_TEST (test_subtitles_playlist)
   GstM3U8Media *media;
   GList *alternates;
 
-  client = load_playlist (SUBTITLES_PLAYLIST, FALSE);
+  client = load_playlist (SUBTITLES_PLAYLIST);
 
   assert_equals_int (g_list_length (client->main->streams), 3);
   assert_equals_int (g_hash_table_size (client->main->video_rendition_groups),
@@ -842,7 +835,7 @@ GST_START_TEST (test_select_subs_alternate)
   /* Check with a playlist with alternative audio renditions where the video
    * stream is video-only and therefor we always have 2 playlists, one for
    * video and another one for audio */
-  client = load_playlist (SUBTITLES_PLAYLIST, FALSE);
+  client = load_playlist (SUBTITLES_PLAYLIST);
   gst_m3u8_client_get_current_uri (client, &v_uri, &a_uri, &s_uri);
   assert_equals_int (a_uri == NULL, TRUE);
   assert_equals_int (s_uri != NULL, TRUE);
@@ -895,7 +888,7 @@ GST_START_TEST (test_select_alternate)
   /* Check with a playlist with alternative audio renditions where the video
    * stream is video-only and therefor we always have 2 playlists, one for
    * video and another one for audio */
-  client = load_playlist (ALTERNATE_AUDIO_PLAYLIST, TRUE);
+  client = load_playlist (ALTERNATE_AUDIO_PLAYLIST);
   gst_m3u8_client_get_current_uri (client, &v_uri, &a_uri, &s_uri);
   assert_equals_int (a_uri != NULL, TRUE);
   assert_equals_string (a_uri, "http://localhost/main/english-audio.m3u8");
@@ -930,7 +923,7 @@ GST_START_TEST (test_select_alternate)
    * video * stream has the default audio rendition muxed and therefore we
    * only have 2 playlists when the audio alternative rendition is not the
    * default one */
-  client = load_playlist (ALT_AUDIO_PLAYLIST_WITH_VIDEO_AUDIO, TRUE);
+  client = load_playlist (ALT_AUDIO_PLAYLIST_WITH_VIDEO_AUDIO);
   gst_m3u8_client_get_current_uri (client, &v_uri, &a_uri, &s_uri);
   assert_equals_int (a_uri == NULL, TRUE);
   assert_equals_int (v_uri != NULL, TRUE);
@@ -974,7 +967,7 @@ GST_START_TEST (test_simulation)
   GstFragment *a_frag, *v_frag, *s_frag;
   gboolean ret;
 
-  client = load_playlist (ALTERNATE_AUDIO_PLAYLIST, TRUE);
+  client = load_playlist (ALTERNATE_AUDIO_PLAYLIST);
   /* The default selection should be audio-only, which only has audio and not
    * video */
   gst_m3u8_client_get_current_uri (client, &v_uri, &a_uri, &s_uri);

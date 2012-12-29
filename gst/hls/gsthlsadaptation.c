@@ -168,7 +168,7 @@ gst_hls_adaptation_set_algorithm_func (GstHLSAdaptation * adaptation,
 gint
 gst_hls_adaptation_get_target_bitrate (GstHLSAdaptation * adaptation)
 {
-  gint ret = 0;
+  gint ret = -1;
 
   GST_HLS_ADAPTATION_LOCK (adaptation);
 
