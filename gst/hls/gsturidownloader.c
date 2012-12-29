@@ -244,7 +244,7 @@ gst_uri_downloader_chain (GstPad * pad, GstBuffer * buf)
 
   if (downloader->priv->length != -1) {
     sfrag = gst_fragment_get_total_size (downloader->priv->download);
-    GST_DEBUG_OBJECT (downloader, "Fragment size is %u/%u", sfrag,
+    GST_LOG_OBJECT (downloader, "Fragment size is %u/%u", sfrag,
         (gsize) downloader->priv->length);
     if (sfrag + sbuf > downloader->priv->length) {
       frag_buf = gst_buffer_create_sub (buf, 0,
