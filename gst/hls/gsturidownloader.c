@@ -346,13 +346,12 @@ gst_uri_downloader_fetch_uri_range (GstUriDownloader * downloader,
 
   g_mutex_lock (downloader->priv->usage_lock);
 
+  downloader->priv->download = gst_fragment_new ();
+  downloader->priv->download->download_start_time = GST_CLOCK_TIME_NONE;
 
   if (!gst_uri_downloader_set_uri (downloader, uri)) {
     goto quit;
   }
-
-  downloader->priv->download = gst_fragment_new ();
-  downloader->priv->download->download_start_time = GST_CLOCK_TIME_NONE;
 
   ret = gst_element_set_state (downloader->priv->urisrc, GST_STATE_PAUSED);
 
@@ -364,6 +363,12 @@ gst_uri_downloader_fetch_uri_range (GstUriDownloader * downloader,
   }
 
   g_mutex_lock (downloader->priv->lock);
+
+  /* Check if we were cancelled while setting the URI */
+  if (downloader->priv->download == NULL) {
+    g_mutex_unlock (downloader->priv->lock);
+    goto quit;
+  }
 
   downloader->priv->length = length;
   if (offset != -1 && length != -1) {
@@ -381,6 +386,7 @@ gst_uri_downloader_fetch_uri_range (GstUriDownloader * downloader,
   if (ret == GST_STATE_CHANGE_FAILURE) {
     g_object_unref (downloader->priv->download);
     downloader->priv->download = NULL;
+    g_mutex_unlock (downloader->priv->lock);
     goto quit;
   }
 
