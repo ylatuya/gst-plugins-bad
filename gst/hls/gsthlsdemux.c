@@ -2425,6 +2425,13 @@ gst_hls_demux_switch_audio_pads (GstHLSDemux * demux)
   }
   pdata->active_pad = new_pad;
   gst_ghost_pad_set_target (GST_GHOST_PAD (pdata->pad), new_pad);
+  if (new_pad == pdata->main_pad) {
+    gst_element_set_state (GST_ELEMENT (demux->ademux), GST_STATE_NULL);
+    gst_object_ref (demux->ademux);
+    gst_bin_remove (GST_BIN (demux), demux->ademux);
+    demux->ademux_added = FALSE;
+    pdata->alt_pad = NULL;
+  }
   GST_DEBUG_OBJECT (demux, "Switching audio pads %s:%s -> %s:%s",
       GST_DEBUG_PAD_NAME (old_pad), GST_DEBUG_PAD_NAME (new_pad));
 }
