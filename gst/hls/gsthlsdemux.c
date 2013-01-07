@@ -1615,17 +1615,19 @@ gst_hls_demux_stream_loop (GstHLSDemux * demux)
     goto pause_task;
   }
 
-  /* Wait until we have fetched all fragments for the current sequence. This can
-   * happend when the video fragment has been already downloaded and the audio
-   * is being downloaded. We pause the task and will be started by the updates
-   * thread when the download finished. */
-  if (g_queue_get_length (demux->video_srcpad->queue) !=
-      g_queue_get_length (demux->audio_srcpad->queue))
-    goto pause_task;
+  if (!demux->i_frames_mode) {
+    /* Wait until we have fetched all fragments for the current sequence. This can
+     * happend when the video fragment has been already downloaded and the audio
+     * is being downloaded. We pause the task and will be started by the updates
+     * thread when the download finished. */
+    if (g_queue_get_length (demux->video_srcpad->queue) !=
+        g_queue_get_length (demux->audio_srcpad->queue))
+      goto pause_task;
 
-  /* Check if we need to switch audio for this fragment */
-  if (demux->need_audio_switch)
-    gst_hls_demux_check_for_audio_switch (demux);
+    /* Check if we need to switch audio for this fragment */
+    if (demux->need_audio_switch)
+      gst_hls_demux_check_for_audio_switch (demux);
+  }
   GST_HLS_DEMUX_PADS_UNLOCK (demux);
 
   video_thread =
