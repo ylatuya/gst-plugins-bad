@@ -347,20 +347,22 @@ gst_uri_downloader_set_uri (GstUriDownloader * downloader, const gchar * uri)
 }
 
 GstFragment *
-gst_uri_downloader_fetch_uri_range (GstUriDownloader * downloader,
-    const gchar * uri, gint64 offset, gint64 length)
+gst_uri_downloader_fetch_fragment (GstUriDownloader * downloader,
+    GstFragment * fragment)
 {
   GstStateChangeReturn ret;
   GstFragment *download = NULL;
 
   g_mutex_lock (downloader->priv->usage_lock);
 
-  downloader->priv->download = gst_fragment_new ();
+  GST_DEBUG_OBJECT (downloader, "Fetching new URI %s", fragment->name);
+  downloader->priv->download = fragment;
   downloader->priv->download->download_start_time = GST_CLOCK_TIME_NONE;
-  downloader->priv->length = length;
-  downloader->priv->offset = offset;
+  downloader->priv->length = fragment->length;
+  downloader->priv->offset = fragment->offset;
+  downloader->priv->setting_uri = TRUE;
 
-  if (!gst_uri_downloader_set_uri (downloader, uri)) {
+  if (!gst_uri_downloader_set_uri (downloader, fragment->name)) {
     goto quit;
   }
 
@@ -425,6 +427,21 @@ quit:
     g_mutex_lock (downloader->priv->usage_lock);
     return download;
   }
+}
+
+GstFragment *
+gst_uri_downloader_fetch_uri_range (GstUriDownloader * downloader,
+    const gchar * uri, gint64 offset, gint64 length)
+{
+  GstFragment *fragment;
+
+  fragment = gst_fragment_new ();
+  g_free (fragment->name);
+  fragment->name = g_strdup (uri);
+  fragment->offset = offset;
+  fragment->length = length;
+
+  return gst_uri_downloader_fetch_fragment (downloader, fragment);
 }
 
 GstFragment *
