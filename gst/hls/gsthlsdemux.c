@@ -43,6 +43,9 @@
 #  include "config.h"
 #endif
 
+#if HAVE_LIBCRYPTO
+#include <openssl/evp.h>
+#endif
 
 #include <string.h>
 #include <gst/base/gsttypefindhelper.h>
@@ -2131,6 +2134,133 @@ gst_hls_demux_switch_playlist (GstHLSDemux * demux)
   return gst_hls_demux_change_playlist (demux, target_bitrate);
 }
 
+#if HAVE_LIBCRYPTO
+static gboolean
+gst_hls_demux_decrypt_aes_128 (GstHLSDemux * demux, GstFragment * fragment)
+{
+  GstBuffer *in = NULL, *out = NULL, *key_buf = NULL;
+  EVP_CIPHER_CTX *cryptCtx = NULL;
+  GstBufferList *list = NULL;
+  GstBufferListIterator *it = NULL;
+  GstFragment *key_frag;
+  guchar iv[16];
+  const gchar *pos = 0;
+  gint dec_length = 0, res = 0, i = 0;
+  gboolean ret = FALSE;
+
+  out = gst_buffer_new_and_alloc (gst_fragment_get_total_size (fragment));
+  GST_BUFFER_SIZE (out) = 0;
+
+  if (fragment->key_url == NULL) {
+    GST_ERROR_OBJECT (demux, "The key URL is missing for this fragment");
+    goto exit;
+  }
+
+  key_frag =
+      gst_uri_downloader_fetch_uri (demux->downloader, fragment->key_url);
+  if (key_frag == NULL) {
+    GST_ERROR_OBJECT (demux, "Could not fetch key from %s", fragment->key_url);
+    goto exit;
+  }
+  key_buf = gst_fragment_get_buffer (key_frag);
+  g_object_unref (key_frag);
+
+  /* Parse the IV hexadecimal string */
+  if (g_utf8_strlen (fragment->iv, -1) != 2 + 32) {
+    GST_ERROR_OBJECT (demux, "The initial vector is not correctly "
+        "formatted %s (length:%d)", fragment->iv, g_utf8_strlen (fragment->iv,
+            -1));
+    goto exit;
+  }
+  pos = fragment->iv + 2;
+  for (i = 0; i < 16; i++) {
+    sscanf (pos, "%2hhx", &iv[i]);
+    pos += 2;
+  }
+
+  /* Initialize the AES-128 CBC decryption cypher with the fragment's key
+   * and its initialization vector*/
+  cryptCtx = EVP_CIPHER_CTX_new ();
+  EVP_CIPHER_CTX_init (cryptCtx);
+  res = EVP_DecryptInit_ex (cryptCtx, EVP_aes_128_cbc (), NULL,
+      GST_BUFFER_DATA (key_buf), iv);
+  gst_buffer_unref (key_buf);
+  if (res != 1) {
+    GST_ERROR_OBJECT (demux, "Error in EVP_DecryptInit_ex");
+    goto exit;
+  }
+
+  /* Feed the decryption cipher with the input buffer */
+  list = gst_fragment_get_buffer_list (fragment);
+  it = gst_buffer_list_iterate (list);
+  while (gst_buffer_list_iterator_next_group (it)) {
+    while ((in = gst_buffer_list_iterator_next (it)) != NULL) {
+      res = EVP_DecryptUpdate (cryptCtx,
+          GST_BUFFER_DATA (out) + GST_BUFFER_SIZE (out),
+          &dec_length, GST_BUFFER_DATA (in), GST_BUFFER_SIZE (in));
+      GST_BUFFER_SIZE (out) += dec_length;
+      if (res != 1) {
+        GST_ERROR_OBJECT (demux, "Error in EVP_DecryptUpdate");
+        goto exit;
+      }
+    }
+  }
+
+  /* Finalize the last block, this shouldn't be needed as the fragment should be
+   * padded properly */
+  res = EVP_DecryptFinal_ex (cryptCtx,
+      GST_BUFFER_DATA (out) + GST_BUFFER_SIZE (out), &dec_length);
+  GST_BUFFER_SIZE (out) += dec_length;
+  if (res != 1) {
+    GST_ERROR_OBJECT (demux, "Error in EVP_DecryptFinal_ex");
+    goto exit;
+  }
+
+  /* Replace the buffers in the fragment with the decrypted one */
+  gst_fragment_clear (fragment);
+  gst_fragment_add_buffer (fragment, out);
+  fragment->completed = TRUE;
+  out = NULL;
+  ret = TRUE;
+
+exit:
+  if (out != NULL)
+    gst_buffer_unref (out);
+  if (it != NULL)
+    gst_buffer_list_iterator_free (it);
+  if (list != NULL)
+    gst_buffer_list_unref (list);
+  if (cryptCtx != NULL)
+    EVP_CIPHER_CTX_cleanup (cryptCtx);
+  return ret;
+}
+#endif
+
+static gboolean
+gst_hls_demux_decrypt_fragment (GstHLSDemux * demux, GstFragment * fragment)
+{
+  gboolean ret = TRUE;
+
+  GST_DEBUG_OBJECT (demux, "Decrypting fragment");
+  switch (fragment->enc_method) {
+    case GST_FRAGMENT_ENCODING_METHOD_NONE:
+      ret = TRUE;
+      break;
+#if HAVE_LIBCRYPTO
+    case GST_FRAGMENT_ENCODING_METHOD_AES_128:
+      ret = gst_hls_demux_decrypt_aes_128 (demux, fragment);
+      break;
+#endif
+    default:
+      GST_ERROR_OBJECT (demux, "Encoding method %d not supported",
+          fragment->enc_method);
+      ret = FALSE;
+      break;
+  }
+
+  return ret;
+}
+
 static gboolean
 gst_hls_demux_fetch_fragment (GstHLSDemux * demux, GstFragment * fragment,
     GstM3U8MediaType type)
@@ -2179,6 +2309,8 @@ gst_hls_demux_fetch_fragment (GstHLSDemux * demux, GstFragment * fragment,
     GST_DEBUG_OBJECT (demux, "Marking fragment as discontinuous");
     GST_BUFFER_FLAG_SET (buf, GST_BUFFER_FLAG_DISCONT);
   }
+
+  gst_hls_demux_decrypt_fragment (demux, fragment);
 
   GST_HLS_DEMUX_PADS_LOCK (demux);
   g_queue_push_tail (pdata->queue, fragment);

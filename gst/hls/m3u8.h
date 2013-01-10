@@ -142,6 +142,9 @@ struct _GstM3U8MediaFile
   guint sequence;               /* the sequence nb of this file */
   gint64 offset;                /* offset for byte-ranges */
   gint64 length;                /* length for byte-ranges */
+  gint32 enc_method;            /* Encoding method */
+  gchar *key_url;               /* URL for the encoding key */
+  gchar *iv;                    /* Initial vector */
 };
 
 struct _GstM3U8Client

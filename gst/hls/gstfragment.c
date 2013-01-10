@@ -136,6 +136,9 @@ gst_fragment_init (GstFragment * fragment)
   fragment->name = g_strdup ("");
   fragment->completed = FALSE;
   fragment->discontinuous = FALSE;
+  fragment->enc_method = GST_FRAGMENT_ENCODING_METHOD_NONE;
+  fragment->key_url = NULL;
+  fragment->iv = NULL;
 }
 
 GstFragment *
@@ -150,6 +153,16 @@ gst_fragment_finalize (GObject * gobject)
   GstFragment *fragment = GST_FRAGMENT (gobject);
 
   g_free (fragment->name);
+
+  if (fragment->key_url != NULL) {
+    g_free (fragment->key_url);
+    fragment->key_url = NULL;
+  }
+
+  if (fragment->iv != NULL) {
+    g_free (fragment->iv);
+    fragment->iv = NULL;
+  }
 
   G_OBJECT_CLASS (gst_fragment_parent_class)->finalize (gobject);
 }
@@ -205,4 +218,35 @@ gst_fragment_get_total_size (GstFragment * fragment)
   g_return_val_if_fail (GST_IS_FRAGMENT (fragment), 0);
 
   return fragment->priv->accumulated_size;
+}
+
+void
+gst_fragment_clear (GstFragment * fragment)
+{
+  g_return_if_fail (fragment != NULL);
+
+  gst_buffer_list_iterator_free (fragment->priv->buffer_iterator);
+  gst_buffer_list_unref (fragment->priv->buffer_list);
+  fragment->priv->buffer_list = gst_buffer_list_new ();
+  fragment->priv->buffer_iterator =
+      gst_buffer_list_iterate (fragment->priv->buffer_list);
+  gst_buffer_list_iterator_add_group (fragment->priv->buffer_iterator);
+  fragment->priv->accumulated_size = 0;
+  fragment->completed = FALSE;
+}
+
+GstBuffer *
+gst_fragment_get_buffer (GstFragment * fragment)
+{
+  GstBufferListIterator *it;
+  GstBuffer *buf;
+
+  g_return_val_if_fail (fragment != NULL, NULL);
+
+  it = gst_buffer_list_iterate (fragment->priv->buffer_list);
+  gst_buffer_list_iterator_next_group (it);
+  buf = gst_buffer_list_iterator_merge_group (it);
+  gst_buffer_list_iterator_free (it);
+
+  return buf;
 }
