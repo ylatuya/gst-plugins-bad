@@ -2135,7 +2135,6 @@ static gboolean
 gst_hls_demux_fetch_fragment (GstHLSDemux * demux, GstFragment * fragment,
     GstM3U8MediaType type)
 {
-  GstFragment *download;
   GstBufferList *buffer_list;
   GstBuffer *buf;
   GstHLSDemuxPadData *pdata;
@@ -2144,11 +2143,11 @@ gst_hls_demux_fetch_fragment (GstHLSDemux * demux, GstFragment * fragment,
 
   if (fragment == NULL) {
     /* Create an empty fragment to keep the queues in sync */
-    download = gst_fragment_new ();
-    g_free (download->name);
-    download->name = g_strdup (GST_HLS_DEMUX_EMPTY_FRAGMENT);
+    fragment = gst_fragment_new ();
+    g_free (fragment->name);
+    fragment->name = g_strdup (GST_HLS_DEMUX_EMPTY_FRAGMENT);
     GST_HLS_DEMUX_PADS_LOCK (demux);
-    g_queue_push_tail (pdata->queue, download);
+    g_queue_push_tail (pdata->queue, fragment);
     GST_HLS_DEMUX_PADS_UNLOCK (demux);
     return TRUE;
   }
@@ -2156,28 +2155,25 @@ gst_hls_demux_fetch_fragment (GstHLSDemux * demux, GstFragment * fragment,
   GST_INFO_OBJECT (demux, "Fetching next fragment %s %d@%d", fragment->name,
       fragment->offset, fragment->length);
 
-  download = gst_uri_downloader_fetch_uri_range (demux->downloader,
-      fragment->name, fragment->offset, fragment->length);
+  fragment = gst_uri_downloader_fetch_fragment (demux->downloader, fragment);
 
-  if (download == NULL) {
+  if (fragment == NULL) {
     if (!demux->cancelled)
-      GST_ERROR_OBJECT (demux, "Could not download file %s", fragment->name);
+      GST_ERROR_OBJECT (demux, "Could not download fragment");
     return FALSE;
   }
 
   if (type != GST_M3U8_MEDIA_TYPE_SUBTITLES)
     gst_hls_adaptation_add_fragment (demux->adaptation,
-        gst_fragment_get_total_size (download),
-        download->download_stop_time - download->download_start_time);
+        gst_fragment_get_total_size (fragment),
+        fragment->download_stop_time - fragment->download_start_time);
 
-  buffer_list = gst_fragment_get_buffer_list (download);
+  buffer_list = gst_fragment_get_buffer_list (fragment);
   buf = gst_buffer_list_get (buffer_list, 0, 0);
   GST_BUFFER_DURATION (buf) = fragment->stop_time - fragment->start_time;
   GST_BUFFER_TIMESTAMP (buf) = fragment->start_time;
   GST_BUFFER_OFFSET (buf) = 0;
   GST_BUFFER_FLAG_UNSET (buf, GST_BUFFER_FLAG_DISCONT);
-  download->start_time = fragment->start_time;
-  download->stop_time = fragment->stop_time;
 
   if (fragment->discontinuous) {
     GST_DEBUG_OBJECT (demux, "Marking fragment as discontinuous");
@@ -2185,7 +2181,7 @@ gst_hls_demux_fetch_fragment (GstHLSDemux * demux, GstFragment * fragment,
   }
 
   GST_HLS_DEMUX_PADS_LOCK (demux);
-  g_queue_push_tail (pdata->queue, download);
+  g_queue_push_tail (pdata->queue, fragment);
   GST_HLS_DEMUX_PADS_UNLOCK (demux);
   gst_buffer_list_unref (buffer_list);
 
@@ -2241,7 +2237,6 @@ gst_hls_demux_get_next_fragment (GstHLSDemux * demux, gboolean caching)
               GST_M3U8_MEDIA_TYPE_VIDEO))
         goto exit;
       GST_LOG_OBJECT (demux, "Adding I-Frame");
-      g_object_unref (frag);
       /* FIXME: only download the first one until we find a way of way of
        * determining the correct number of I-Frame based on the rate */
       break;
@@ -2277,14 +2272,6 @@ start_streaming:
   }
 
 exit:
-  if (v_fragment != NULL)
-    g_object_unref (v_fragment);
-  if (a_fragment != NULL)
-    g_object_unref (a_fragment);
-  if (s_fragment != NULL)
-    g_object_unref (s_fragment);
-  if (i_segment != NULL)
-    g_object_unref (i_segment);
   return ret;
 
 error:

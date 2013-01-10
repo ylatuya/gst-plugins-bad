@@ -56,6 +56,7 @@ struct _GstUriDownloaderClass
 GType gst_uri_downloader_get_type (void);
 
 GstUriDownloader * gst_uri_downloader_new (void);
+GstFragment * gst_uri_downloader_fetch_fragment (GstUriDownloader * downloader, GstFragment *fragment);
 GstFragment * gst_uri_downloader_fetch_uri (GstUriDownloader * downloader, const gchar * uri);
 GstFragment * gst_uri_downloader_fetch_uri_range (GstUriDownloader * downloader,
                                                   const gchar * uri,
