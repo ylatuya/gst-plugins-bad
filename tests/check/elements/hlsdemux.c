@@ -211,6 +211,23 @@ mid/video-audio.m3u8\n\
 #EXT-X-STREAM-INF:BANDWIDTH=768000,CODECS=\"avc1.42001f, mp4a.40.5\",SUBTITLES=\"subs\"\n\
 hi/video-audio.m3u8";
 
+static const gchar *AES_128_ENCRYPTED_PLAYLIST = "#EXTM3U \n\
+#EXT-X-TARGETDURATION:10\n\
+#EXTINF:10,Test\n\
+http://media.example.com/mid/video-only-001.ts\n\
+#EXT-X-KEY:METHOD=NONE\n\
+#EXTINF:10,Test\n\
+http://media.example.com/mid/video-only-002.ts\n\
+#EXT-X-KEY:METHOD=AES-128,URI=\"https://priv.example.com/key.bin\"\n\
+#EXTINF:10,Test\n\
+http://media.example.com/mid/video-only-003.ts\n\
+#EXT-X-KEY:METHOD=AES-128,URI=\"https://priv.example.com/key2.bin\",IV=0x1\n\
+#EXTINF:10,Test\n\
+http://media.example.com/mid/video-only-004.ts\n\
+#EXTINF:10,Test\n\
+http://media.example.com/mid/video-only-005.ts\n\
+#EXT-X-ENDLIST";
+
 static GstM3U8Client *
 load_playlist (const gchar * data)
 {
@@ -412,6 +429,43 @@ GST_START_TEST (test_playlist_with_doubles_duration)
 
 GST_END_TEST;
 
+GST_START_TEST (test_playlist_with_encription)
+{
+  GstM3U8Client *client;
+  GstM3U8Playlist *pl;
+  GstM3U8MediaFile *file;
+
+  client = load_playlist (AES_128_ENCRYPTED_PLAYLIST);
+
+  pl = client->selected_stream->selected_video;
+  assert_equals_int (g_list_length (pl->files), 5);
+
+  /* Check all media segments */
+  file = GST_M3U8_MEDIA_FILE (g_list_nth_data (pl->files, 0));
+  assert_equals_int (file->enc_method, GST_FRAGMENT_ENCODING_METHOD_NONE);
+
+  file = GST_M3U8_MEDIA_FILE (g_list_nth_data (pl->files, 1));
+  assert_equals_int (file->enc_method, GST_FRAGMENT_ENCODING_METHOD_NONE);
+
+  file = GST_M3U8_MEDIA_FILE (g_list_nth_data (pl->files, 2));
+  assert_equals_int (file->enc_method, GST_FRAGMENT_ENCODING_METHOD_AES_128);
+  assert_equals_string (file->key_url, "https://priv.example.com/key.bin");
+  assert_equals_string (file->iv, "0x00000000000000000000000000000002");
+
+  file = GST_M3U8_MEDIA_FILE (g_list_nth_data (pl->files, 3));
+  assert_equals_int (file->enc_method, GST_FRAGMENT_ENCODING_METHOD_AES_128);
+  assert_equals_string (file->key_url, "https://priv.example.com/key2.bin");
+  assert_equals_string (file->iv, "0x1");
+
+  file = GST_M3U8_MEDIA_FILE (g_list_nth_data (pl->files, 4));
+  assert_equals_int (file->enc_method, GST_FRAGMENT_ENCODING_METHOD_AES_128);
+  assert_equals_string (file->key_url, "https://priv.example.com/key2.bin");
+  assert_equals_string (file->iv, "0x1");
+
+  gst_m3u8_client_free (client);
+}
+
+GST_END_TEST;
 GST_START_TEST (test_update_invalid_playlist)
 {
   GstM3U8Client *client;
@@ -1364,6 +1418,7 @@ hlsdemux_suite (void)
   tcase_add_test (tc_m3u8, test_select_subs_alternate);
   tcase_add_test (tc_m3u8, test_simulation);
   tcase_add_test (tc_m3u8, test_playlist_with_doubles_duration);
+  tcase_add_test (tc_m3u8, test_playlist_with_encription);
 
   suite_add_tcase (s, tc_adaptation);
   tcase_add_test (tc_m3u8, test_adaptation_add_fragments);
