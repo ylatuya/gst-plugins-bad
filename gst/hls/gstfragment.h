@@ -37,6 +37,13 @@ typedef struct _GstFragment GstFragment;
 typedef struct _GstFragmentPrivate GstFragmentPrivate;
 typedef struct _GstFragmentClass GstFragmentClass;
 
+typedef enum
+{
+  GST_FRAGMENT_ENCODING_METHOD_NONE,
+  GST_FRAGMENT_ENCODING_METHOD_AES_128,
+  GST_FRAGMENT_ENCODING_METHOD_SAMPLE_AES_128,
+} GstFragmentEncodingMethod;
+
 struct _GstFragment
 {
   GObject parent;
@@ -51,6 +58,11 @@ struct _GstFragment
   gboolean discontinuous;       /* Whether this fragment is discontinuous or not */
   guint64 offset;               /* Offset of this fragment */
   guint64 length;               /* Length of this fragment */
+  gint32 enc_method;            /* Encoding method for this fragment */
+
+  /* For AES-128 encrypted fragments */
+  gchar *key_url;               /* URL for the key */
+  gchar *iv;                    /* Initial vector */
 
   GstFragmentPrivate *priv;
 };
@@ -65,7 +77,9 @@ GType gst_fragment_get_type (void);
 GstBufferList * gst_fragment_get_buffer_list (GstFragment *fragment);
 gboolean gst_fragment_set_headers (GstFragment *fragment, GstBuffer **buffer, guint count);
 gboolean gst_fragment_add_buffer (GstFragment *fragment, GstBuffer *buffer);
+GstBuffer * gst_fragment_get_buffer (GstFragment *fragment);
 gsize gst_fragment_get_total_size (GstFragment * fragment);
+void gst_fragment_clear (GstFragment *fragment);
 GstFragment * gst_fragment_new (void);
 
 G_END_DECLS

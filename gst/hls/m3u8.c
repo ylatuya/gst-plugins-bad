@@ -379,6 +379,8 @@ gst_m3u8_media_file_new (gchar * uri, gchar * title,
   file->sequence = sequence;
   file->offset = offset;
   file->length = length;
+  file->key_url = NULL;
+  file->iv = NULL;
   return file;
 }
 
@@ -389,6 +391,10 @@ gst_m3u8_media_file_free (GstM3U8MediaFile * self)
 
   g_free (self->title);
   g_free (self->uri);
+  if (self->key_url != NULL)
+    g_free (self->key_url);
+  if (self->iv != NULL)
+    g_free (self->iv);
   g_free (self);
 }
 
@@ -404,6 +410,9 @@ gst_m3u8_media_file_get_fragment (GstM3U8MediaFile * file, GstClockTime ts,
   frag->stop_time = ts + file->duration;
   frag->offset = file->offset;
   frag->length = file->length;
+  frag->enc_method = file->enc_method;
+  frag->key_url = g_strdup (file->key_url);
+  frag->iv = g_strdup (file->iv);
   return frag;
 }
 
@@ -966,6 +975,8 @@ gst_m3u8_playlist_update (GstM3U8Playlist * self, gchar * data,
   gchar *title = NULL, *end = NULL;
 //  gboolean discontinuity;
   gint64 offset = -1, length = -1, acc_offset = 0;
+  gchar *key_url = NULL, *iv = NULL;
+  GstFragmentEncodingMethod enc_method = GST_FRAGMENT_ENCODING_METHOD_NONE;
 
   g_return_val_if_fail (self != NULL, FALSE);
   g_return_val_if_fail (data != NULL, FALSE);
@@ -1022,6 +1033,16 @@ gst_m3u8_playlist_update (GstM3U8Playlist * self, gchar * data,
 
       file = gst_m3u8_media_file_new (uri, title, duration,
           self->mediasequence++, offset, length);
+      if (enc_method != GST_FRAGMENT_ENCODING_METHOD_NONE) {
+        file->enc_method = enc_method;
+        file->key_url = g_strdup (key_url);
+        if (iv != NULL) {
+          file->iv = g_strdup (iv);
+        } else {
+          /* media sequence (16 octects hexadecimal integer representation) */
+          file->iv = g_strdup_printf ("0x%032X", file->sequence);
+        }
+      }
       duration = 0;
       title = NULL;
       offset = -1;
@@ -1080,6 +1101,29 @@ gst_m3u8_playlist_update (GstM3U8Playlist * self, gchar * data,
         return FALSE;
       }
       g_strfreev (content);
+    }
+    /* EXT-X-KEY:
+     * New encription for the following files */
+    else if (g_str_has_prefix (data, "#EXT-X-KEY:")) {
+      gchar *v, *a;
+      data = data + 11;
+      enc_method = GST_FRAGMENT_ENCODING_METHOD_NONE;
+      while (data && parse_attributes (&data, &a, &v)) {
+        if (g_str_equal (a, "METHOD")) {
+          if (g_str_equal (v, "NONE")) {
+            enc_method = GST_FRAGMENT_ENCODING_METHOD_NONE;
+          } else if (g_str_equal (v, "AES-128")) {
+            enc_method = GST_FRAGMENT_ENCODING_METHOD_AES_128;
+          } else {
+            GST_ERROR ("Unsupported encryption method %s", v);
+            return FALSE;
+          }
+        } else if (g_str_equal (a, "URI")) {
+          key_url = gst_m3u8_strip_quotes (v);
+        } else if (g_str_equal (a, "IV")) {
+          iv = g_strdup (v);
+        }
+      }
     } else {
       GST_LOG ("Ignored line: %s", data);
     }
@@ -1088,6 +1132,13 @@ gst_m3u8_playlist_update (GstM3U8Playlist * self, gchar * data,
     if (!end)
       break;
     data = g_utf8_next_char (end);      /* skip \n */
+  }
+
+  if (iv != NULL) {
+    g_free (iv);
+  }
+  if (key_url != NULL) {
+    g_free (key_url);
   }
 
   return TRUE;
