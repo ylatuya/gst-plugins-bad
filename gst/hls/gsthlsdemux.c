@@ -1940,18 +1940,10 @@ static gchar *
 gst_hls_demux_get_playlist_from_fragment (GstHLSDemux * demux,
     GstFragment * fragment)
 {
-  GstBufferListIterator *it;
-  GstBuffer *buf;
   gchar *playlist;
 
-  /* Merge all the buffers in the list to build a unique buffer with the
-   * playlist */
-  it = gst_buffer_list_iterate (gst_fragment_get_buffer_list (fragment));
-  gst_buffer_list_iterator_next_group (it);
-  buf = gst_buffer_list_iterator_merge_group (it);
-
-  playlist = gst_hls_src_buf_to_utf8_playlist (buf);
-  gst_buffer_list_iterator_free (it);
+  playlist =
+      gst_hls_src_buf_to_utf8_playlist (gst_fragment_get_buffer (fragment));
   g_object_unref (fragment);
 
   if (playlist == NULL) {
