@@ -201,12 +201,6 @@ gst_m3u8_stream_find_next (GstM3U8Stream * stream, guint sequence,
     if (pl == NULL)
       return NULL;
 
-    /* For a live playlist we must guess the first timestamp from the media
-     * sequence and the target duration */
-    if (!pl->endlist) {
-      guint first_seq = pl->mediasequence - g_list_length (pl->files);
-      pos = (GstClockTime) (first_seq * pl->targetduration);
-    }
     if (pos > end_position)
       return NULL;
 
@@ -285,13 +279,6 @@ gst_m3u8_playlist_get_position (GstM3U8Playlist * pl, guint sequence)
 
   l = g_list_find_custom (pl->files, GUINT_TO_POINTER (sequence),
       (GCompareFunc) _find_next);
-
-  /* For a live playlist we must guess the first timestamp from the media
-   * sequence and the target duration */
-  if (!pl->endlist) {
-    guint first_seq = pl->mediasequence - g_list_length (pl->files);
-    timestamp = (GstClockTime) (first_seq * pl->targetduration);
-  }
 
   for (walk = pl->files; walk; walk = walk->next) {
     if (walk == l)
@@ -1616,12 +1603,6 @@ gst_m3u8_client_get_prev_i_frames (GstM3U8Client * client,
 
   /* Get a list of all the i_frames that are inside the segment boundaries */
 
-  /* For a live playlist we must guess the first timestamp from the media
-   * sequence and the target duration */
-  if (!pl->endlist) {
-    guint first_seq = pl->mediasequence - g_list_length (pl->files);
-    pos = (GstClockTime) (first_seq * pl->targetduration);
-  }
   if (pos > timestamp)
     return FALSE;
 
@@ -1672,12 +1653,6 @@ gst_m3u8_client_get_next_i_frames (GstM3U8Client * client,
 
   /* Get a list of all the i_frames that are inside the segment boundaries */
 
-  /* For a live playlist we must guess the first timestamp from the media
-   * sequence and the target duration */
-  if (!pl->endlist) {
-    guint first_seq = pl->mediasequence - g_list_length (pl->files);
-    pos = (GstClockTime) (first_seq * pl->targetduration);
-  }
   if (pos > timestamp)
     return FALSE;
 
@@ -1925,7 +1900,7 @@ gboolean
 gst_m3u8_client_seek (GstM3U8Client * client, gint64 seek_time)
 {
   GList *list;
-  GstClockTime ts;
+  GstClockTime ts = 0;
   GstM3U8Playlist *pl;
   GstM3U8MediaFile *fragment, *target_fragment;
   gboolean ret = FALSE;
@@ -1937,12 +1912,6 @@ gst_m3u8_client_seek (GstM3U8Client * client, gint64 seek_time)
 
   list = g_list_first (pl->files);
   fragment = target_fragment = GST_M3U8_MEDIA_FILE (list->data);
-
-  if (!pl->endlist) {
-    ts = fragment->sequence * pl->targetduration;
-  } else {
-    ts = 0;
-  }
 
   if (seek_time < ts) {
     GST_WARNING ("Invalid seek, %" GST_TIME_FORMAT " is earlier than start "

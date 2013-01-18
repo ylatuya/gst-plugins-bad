@@ -774,11 +774,11 @@ GST_START_TEST (test_seek)
 
   /* Test seeks on a live playlist */
   client = load_playlist (LIVE_PLAYLIST);
-  do_test_seek (client, 0, -1);
+  do_test_seek (client, 0, 0);
 
-  do_test_seek (client, 21440, 21440);
-  do_test_seek (client, 21457, 21456);
-  do_test_seek (client, 21450, 21448);
+  do_test_seek (client, 8, 8);
+  do_test_seek (client, 20, 16);
+  do_test_seek (client, 30, 24);
 
   do_test_seek (client, 3000, -1);
   gst_m3u8_client_free (client);
