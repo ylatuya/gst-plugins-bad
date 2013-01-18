@@ -505,10 +505,12 @@ parse_attributes (gchar ** ptr, gchar ** a, gchar ** v)
       w = g_utf8_strchr (w, -1, ',');
     }
     end = w;
-    do {
-      end = g_utf8_next_char (end);
-    } while (end && *end == ' ');
-    *w = '\0';
+    if (end) {
+      do {
+        end = g_utf8_next_char (end);
+      } while (end && *end == ' ');
+      *w = '\0';
+    }
   }
 
   if (*v) {
