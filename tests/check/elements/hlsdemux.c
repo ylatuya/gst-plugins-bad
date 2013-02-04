@@ -78,6 +78,26 @@ http://example.com/hi.m3u8\n\
 #EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=65000,CODECS=\"mp4a.40.5\"\n\
 http://example.com/audio-only.m3u8";
 
+static const gchar *EMPTY_LINES_VARIANT_PLAYLIST = "#EXTM3U \n\
+#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=128000\n\n\
+http://example.com/low.m3u8\n\n\
+#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=256000\n\n\
+http://example.com/mid.m3u8\n\n\
+#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=768000\n\n\
+http://example.com/hi.m3u8\n\n\
+#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=65000,CODECS=\"mp4a.40.5\"\n\n\
+http://example.com/audio-only.m3u8";
+
+static const gchar *WINDOWS_EMPTY_LINES_VARIANT_PLAYLIST = "#EXTM3U \r\n\
+#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=128000\r\n\r\n\
+http://example.com/low.m3u8\r\n\r\n\
+#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=256000\r\n\r\n\
+http://example.com/mid.m3u8\r\n\r\n\
+#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=768000\r\n\r\n\
+http://example.com/hi.m3u8\r\n\r\n\
+#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=65000,CODECS=\"mp4a.40.5\"\r\n\r\n\
+http://example.com/audio-only.m3u8";
+
 static const gchar *BYTE_RANGES_PLAYLIST = "#EXTM3U \n\
 #EXT-X-TARGETDURATION:40\n\
 #EXTINF:10,Test\n\
@@ -228,6 +248,28 @@ http://media.example.com/mid/video-only-004.ts\n\
 http://media.example.com/mid/video-only-005.ts\n\
 #EXT-X-ENDLIST";
 
+static const gchar *WINDOWS_LINE_ENDINGS_PLAYLIST = "#EXTM3U \r\n\
+#EXT-X-TARGETDURATION:10\r\n\
+#EXTINF:10,Test\r\n\
+http://media.example.com/001.ts\r\n\
+#EXTINF:10,Test\r\n\
+http://media.example.com/002.ts\r\n\
+#EXTINF:10,Test\r\n\
+http://media.example.com/003.ts\r\n\
+#EXTINF:10,Test\r\n\
+http://media.example.com/004.ts\r\n\
+#EXT-X-ENDLIST";
+
+static const gchar *WINDOWS_LINE_ENDINGS_VARIANT_PLAYLIST = "#EXTM3U \r\n\
+#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=128000\r\n\
+http://example.com/low.m3u8\r\n\
+#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=256000\r\n\
+http://example.com/mid.m3u8\r\n\
+#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=768000\r\n\
+http://example.com/hi.m3u8\r\n\
+#EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=65000,CODECS=\"mp4a.40.5\"\r\n\
+http://example.com/audio-only.m3u8";
+
 static GstM3U8Client *
 load_playlist (const gchar * data)
 {
@@ -283,13 +325,35 @@ GST_START_TEST (test_load_main_playlist_rendition)
 
 GST_END_TEST;
 
-GST_START_TEST (test_load_main_playlist_variant)
+GST_START_TEST (test_load_windows_line_endings_playlist)
+{
+  GstM3U8Client *client;
+
+  client = load_playlist (WINDOWS_LINE_ENDINGS_PLAYLIST);
+
+  assert_equals_int (g_list_length (client->main->streams), 1);
+  assert_equals_int (g_hash_table_size (client->main->video_rendition_groups),
+      0);
+  assert_equals_int (g_hash_table_size (client->main->audio_rendition_groups),
+      0);
+
+  assert_equals_int (g_list_length (client->selected_stream->
+          selected_video->files), 4);
+  assert_equals_int (client->sequence, 0);
+
+  gst_m3u8_client_free (client);
+}
+
+GST_END_TEST;
+
+static void
+do_test_load_main_playlist_variant (const gchar * playlist)
 {
   GstM3U8Client *client;
   GstM3U8Stream *stream;
   GList *tmp;
 
-  client = load_playlist (VARIANT_PLAYLIST);
+  client = load_playlist (playlist);
 
   assert_equals_int (g_hash_table_size (client->main->video_rendition_groups),
       0);
@@ -336,6 +400,32 @@ GST_START_TEST (test_load_main_playlist_variant)
   assert_equals_int (client->selected_stream->bandwidth, 128000);
 
   gst_m3u8_client_free (client);
+}
+
+GST_START_TEST (test_load_main_playlist_variant)
+{
+  do_test_load_main_playlist_variant (VARIANT_PLAYLIST);
+}
+
+GST_END_TEST;
+
+GST_START_TEST (test_load_windows_line_endings_variant_playlist)
+{
+  do_test_load_main_playlist_variant (WINDOWS_LINE_ENDINGS_VARIANT_PLAYLIST);
+}
+
+GST_END_TEST;
+
+GST_START_TEST (test_load_main_playlist_with_empty_lines)
+{
+  do_test_load_main_playlist_variant (EMPTY_LINES_VARIANT_PLAYLIST);
+}
+
+GST_END_TEST;
+
+GST_START_TEST (test_load_windows_main_playlist_with_empty_lines)
+{
+  do_test_load_main_playlist_variant (WINDOWS_EMPTY_LINES_VARIANT_PLAYLIST);
 }
 
 GST_END_TEST;
@@ -1398,7 +1488,11 @@ hlsdemux_suite (void)
   suite_add_tcase (s, tc_m3u8);
   tcase_add_test (tc_m3u8, test_load_main_playlist_invalid);
   tcase_add_test (tc_m3u8, test_load_main_playlist_rendition);
+  tcase_add_test (tc_m3u8, test_load_windows_line_endings_playlist);
   tcase_add_test (tc_m3u8, test_load_main_playlist_variant);
+  tcase_add_test (tc_m3u8, test_load_windows_line_endings_variant_playlist);
+  tcase_add_test (tc_m3u8, test_load_main_playlist_with_empty_lines);
+  tcase_add_test (tc_m3u8, test_load_windows_main_playlist_with_empty_lines);
   tcase_add_test (tc_m3u8, test_on_demand_playlist);
   tcase_add_test (tc_m3u8, test_live_playlist);
   tcase_add_test (tc_m3u8, test_update_invalid_playlist);
