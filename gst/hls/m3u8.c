@@ -626,13 +626,16 @@ gst_m3u8_variant_playlist_parse (GstM3U8VariantPlaylist * self, gchar * data)
     end = g_utf8_strchr (data, -1, '\n');
     if (end)
       *end = '\0';
+    /* For windows line endings */
+    if (data[1] == '\0' && data[0] == '\r')
+      data[0] = '\0';
 
     /* URI for an EXT-X-STREAM-INF:
      * Create a new GstM3U8Playlist for this URI. If the stream has alternative
      * renditions, fill the stream alternates with the correspoding group-id.
      * We must check that this URI is not listed in any of the alternates,
      * meaning that it's a playlist for a different media type (Audio or Video)*/
-    if (data[0] != '#') {
+    if (data[0] != '#' && data[0] != '\0') {
       GstM3U8Playlist *pl = NULL;
       gchar *uri = NULL;
       gboolean seen = FALSE;
