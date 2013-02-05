@@ -794,6 +794,11 @@ create_pad_for_stream (MpegTSBase * base, MpegTSBaseStream * bstream,
             name = g_strdup_printf ("private_%04x", bstream->pid);
             caps = gst_caps_new_simple ("audio/x-dts", NULL);
             break;
+          case DRF_ID_S302M:
+            template = gst_static_pad_template_get (&audio_template);
+            name = g_strdup_printf ("audio_%04x", bstream->pid);
+            caps = gst_caps_new_empty_simple ("audio/x-smpte-302m");
+            break;
         }
         g_free (desc);
       }
