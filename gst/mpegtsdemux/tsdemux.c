@@ -797,7 +797,7 @@ create_pad_for_stream (MpegTSBase * base, MpegTSBaseStream * bstream,
           case DRF_ID_S302M:
             template = gst_static_pad_template_get (&audio_template);
             name = g_strdup_printf ("audio_%04x", bstream->pid);
-            caps = gst_caps_new_empty_simple ("audio/x-smpte-302m");
+            caps = gst_caps_new_simple ("audio/x-smpte-302m", NULL);
             break;
         }
         g_free (desc);
@@ -882,24 +882,28 @@ create_pad_for_stream (MpegTSBase * base, MpegTSBaseStream * bstream,
       break;
     case ST_PRIVATE_EA:        /* Try to detect a VC1 stream */
     {
+      gboolean is_vc1 = FALSE;
       desc =
           mpegts_get_descriptor_from_stream ((MpegTSBaseStream *) stream,
           DESC_REGISTRATION);
       if (desc) {
         if (DESC_LENGTH (desc) >= 4) {
           if (DESC_REGISTRATION_format_identifier (desc) == DRF_ID_VC1) {
-            GST_WARNING ("0xea private stream type found but no descriptor "
-                "for VC1. Assuming plain VC1.");
-            template = gst_static_pad_template_get (&video_template);
-            name = g_strdup_printf ("video_%04x", bstream->pid);
-            caps = gst_caps_new_simple ("video/x-wmv",
-                "wmvversion", G_TYPE_INT, 3,
-                "format", GST_TYPE_FOURCC, GST_MAKE_FOURCC ('W', 'V', 'C', '1'),
-                NULL);
+            is_vc1 = TRUE;
           }
         }
         g_free (desc);
       }
+      if (!is_vc1) {
+        GST_WARNING ("0xea private stream type found but no descriptor "
+            "for VC1. Assuming plain VC1.");
+      }
+
+      template = gst_static_pad_template_get (&video_template);
+      name = g_strdup_printf ("video_%04x", bstream->pid);
+      caps = gst_caps_new_simple ("video/x-wmv",
+          "wmvversion", G_TYPE_INT, 3, "format", GST_TYPE_FOURCC, GST_MAKE_FOURCC ('W', 'V', 'C', '1'), NULL);
+
       break;
     }
     case ST_BD_AUDIO_AC3:
