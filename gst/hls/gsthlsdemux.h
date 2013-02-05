@@ -58,9 +58,11 @@ struct _GstHLSDemuxPadData
   GstPad *in_pad;
   GQueue *queue;
   gboolean need_segment;
+  gboolean drop_next_segment;
   guint *signal;
   const gchar *desc;
   gboolean pad_added;
+  gboolean is_eos;
 
   /* Stream selection */
   GHashTable *streams;
@@ -111,6 +113,7 @@ struct _GstHLSDemux
   GstTask *stream_task;
   GStaticRecMutex stream_lock;
   gboolean stop_stream_task;
+  gboolean flushing;
 
   /* Updates task */
   GstTask *updates_task;
@@ -124,6 +127,13 @@ struct _GstHLSDemux
   GstElement *ademux;           /* Demuxer for the audio stream */
   GstElement *selector;         /* input selector for the audio stream */
   GstEvent *newsegment;         /* New segment events */
+
+  gboolean bitrate_switched;    /* Indicates there is bitrate switch */
+  GstEvent *demux_switch_eos; /* EOS to flush the demuxer before switching it */
+  GMutex * demux_switch_lock;   /* Lock for the demuxer switch */
+  GCond * demux_switch_cond;    /* Condition to wait for the EOS on the demuxer switch */
+  gboolean drop_new_segment;    /* Drop the new segment after resetting the demuxer */
+
   guint64 start_ts;
   gboolean need_pts_sync;
   GstClockTime pts_diff;
