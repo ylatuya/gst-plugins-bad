@@ -110,6 +110,7 @@ gst_uri_downloader_dispose (GObject * object)
   GstUriDownloader *downloader = GST_URI_DOWNLOADER (object);
 
   if (downloader->priv->urisrc != NULL) {
+    gst_element_set_state (downloader->priv->urisrc, GST_STATE_NULL);
     gst_object_unref (downloader->priv->urisrc);
     downloader->priv->urisrc = NULL;
   }
