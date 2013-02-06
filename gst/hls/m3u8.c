@@ -2041,7 +2041,7 @@ exit:
 gboolean
 gst_m3u8_client_check_sequence_validity (GstM3U8Client * client)
 {
-  guint last_sequence;
+  guint last_sequence, first_sequence;
   GstM3U8Playlist *pl;
   gboolean ret = TRUE;
 
@@ -2051,13 +2051,14 @@ gst_m3u8_client_check_sequence_validity (GstM3U8Client * client)
     goto exit;
 
   last_sequence = pl->mediasequence - 1;
-  GST_DEBUG ("Last sequence is: %d", last_sequence);
+  first_sequence = last_sequence - g_list_length (pl->files);
+  GST_DEBUG ("First sequence is: %d. Last sequence is %d", first_sequence,
+      last_sequence);
 
-  if (client->sequence > last_sequence - 3) {
-    GST_DEBUG ("Sequence is beyond playlist. Moving back to %d",
-        last_sequence - 3);
+  if (client->sequence > last_sequence || client->sequence < first_sequence) {
     client->sequence = last_sequence - 3;
     ret = FALSE;
+    GST_DEBUG ("Sequence is beyond playlist. Moving to %d", last_sequence - 3);
   }
 
 exit:
