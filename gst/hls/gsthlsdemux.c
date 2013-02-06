@@ -927,6 +927,83 @@ gst_hls_demux_push_event (GstHLSDemux * demux, GstEvent * event)
 }
 
 static gboolean
+gst_hls_demux_seek (GstHLSDemux * demux, gint64 start, gint64 stop,
+    gdouble rate, GstSeekFlags flags)
+{
+  demux->rate = rate;
+  demux->i_frames_mode = (rate > 1 || rate < -1);
+
+  if (rate < 0)
+    start = stop;
+
+  if (!gst_m3u8_client_seek (demux->client, start)) {
+    GST_WARNING_OBJECT (demux, "Could not find seeked fragment");
+    return FALSE;
+  }
+
+  if (flags & GST_SEEK_FLAG_FLUSH) {
+    GST_DEBUG_OBJECT (demux, "sending flush start");
+    gst_hls_demux_push_event (demux, gst_event_new_flush_start ());
+    GST_HLS_DEMUX_DEMUX_SWITCH_LOCK (demux);
+    demux->flushing = TRUE;
+    GST_HLS_DEMUX_DEMUX_SWITCH_UNLOCK (demux);
+  }
+
+  demux->cancelled = TRUE;
+  gst_task_pause (demux->stream_task);
+  gst_uri_downloader_cancel (demux->downloader);
+  gst_task_stop (demux->updates_task);
+  g_mutex_lock (demux->updates_timed_lock);
+  GST_TASK_SIGNAL (demux->updates_task);
+  g_mutex_unlock (demux->updates_timed_lock);
+  g_static_rec_mutex_lock (&demux->updates_lock);
+  g_static_rec_mutex_unlock (&demux->updates_lock);
+  gst_task_pause (demux->stream_task);
+
+  /* wait for streaming to finish */
+  if (flags & GST_SEEK_FLAG_FLUSH) {
+    GST_HLS_DEMUX_DEMUX_SWITCH_LOCK (demux);
+    GST_HLS_DEMUX_DEMUX_SWITCH_COND_SIGNAL (demux);
+    GST_HLS_DEMUX_DEMUX_SWITCH_UNLOCK (demux);
+  }
+  g_static_rec_mutex_lock (&demux->stream_lock);
+
+  demux->need_cache = TRUE;
+  gst_hls_demux_pad_data_prepare_seek (demux->video_srcpad);
+  gst_hls_demux_pad_data_prepare_seek (demux->audio_srcpad);
+  gst_hls_demux_pad_data_prepare_seek (demux->subtt_srcpad);
+
+  gst_event_replace (&demux->newsegment, NULL);
+  if (demux->rate < 0)
+    demux->newsegment =
+        gst_event_new_new_segment (FALSE, demux->rate, GST_FORMAT_TIME, 0,
+        start, start);
+  else
+    demux->newsegment =
+        gst_event_new_new_segment (FALSE, demux->rate, GST_FORMAT_TIME,
+        start, GST_CLOCK_TIME_NONE, start);
+
+  if (flags & GST_SEEK_FLAG_FLUSH) {
+    GST_DEBUG_OBJECT (demux, "sending flush stop");
+    gst_hls_demux_push_event (demux, gst_event_new_flush_stop ());
+    GST_HLS_DEMUX_DEMUX_SWITCH_LOCK (demux);
+    demux->flushing = FALSE;
+    gst_element_set_state (demux->avdemux, GST_STATE_NULL);
+    g_object_ref (demux->avdemux);
+    gst_bin_remove (GST_BIN (demux), demux->avdemux);
+    demux->avdemux_added = FALSE;
+    GST_HLS_DEMUX_DEMUX_SWITCH_UNLOCK (demux);
+  }
+
+  demux->cancelled = FALSE;
+  demux->drop_new_segment = FALSE;
+  gst_task_start (demux->stream_task);
+  g_static_rec_mutex_unlock (&demux->stream_lock);
+  return TRUE;
+
+}
+
+static gboolean
 gst_hls_demux_src_event (GstPad * pad, GstEvent * event)
 {
   GstHLSDemux *demux;
@@ -941,7 +1018,6 @@ gst_hls_demux_src_event (GstPad * pad, GstEvent * event)
       GstSeekFlags flags;
       GstSeekType start_type, stop_type;
       gint64 start, stop;
-      gboolean ret;
 
       GST_INFO_OBJECT (demux, "Received GST_EVENT_SEEK");
 
@@ -967,79 +1043,8 @@ gst_hls_demux_src_event (GstPad * pad, GstEvent * event)
           return FALSE;
         }
       }
-      demux->rate = rate;
-      demux->i_frames_mode = (rate > 1 || rate < -1);
 
-      if (rate < 0)
-        start = stop;
-
-      ret = gst_m3u8_client_seek (demux->client, start);
-
-      if (!ret) {
-        GST_WARNING_OBJECT (demux, "Could not find seeked fragment");
-        return FALSE;
-      }
-
-      if (flags & GST_SEEK_FLAG_FLUSH) {
-        GST_DEBUG_OBJECT (demux, "sending flush start");
-        gst_hls_demux_push_event (demux, gst_event_new_flush_start ());
-        GST_HLS_DEMUX_DEMUX_SWITCH_LOCK (demux);
-        demux->flushing = TRUE;
-        GST_HLS_DEMUX_DEMUX_SWITCH_UNLOCK (demux);
-      }
-
-      demux->cancelled = TRUE;
-      gst_task_pause (demux->stream_task);
-      gst_uri_downloader_cancel (demux->downloader);
-      gst_task_stop (demux->updates_task);
-      g_mutex_lock (demux->updates_timed_lock);
-      GST_TASK_SIGNAL (demux->updates_task);
-      g_mutex_unlock (demux->updates_timed_lock);
-      g_static_rec_mutex_lock (&demux->updates_lock);
-      g_static_rec_mutex_unlock (&demux->updates_lock);
-      gst_task_pause (demux->stream_task);
-
-      /* wait for streaming to finish */
-      if (flags & GST_SEEK_FLAG_FLUSH) {
-        GST_HLS_DEMUX_DEMUX_SWITCH_LOCK (demux);
-        GST_HLS_DEMUX_DEMUX_SWITCH_COND_SIGNAL (demux);
-        GST_HLS_DEMUX_DEMUX_SWITCH_UNLOCK (demux);
-      }
-      g_static_rec_mutex_lock (&demux->stream_lock);
-
-      demux->need_cache = TRUE;
-      gst_hls_demux_pad_data_prepare_seek (demux->video_srcpad);
-      gst_hls_demux_pad_data_prepare_seek (demux->audio_srcpad);
-      gst_hls_demux_pad_data_prepare_seek (demux->subtt_srcpad);
-
-      gst_event_replace (&demux->newsegment, NULL);
-      if (demux->rate < 0)
-        demux->newsegment =
-            gst_event_new_new_segment (FALSE, demux->rate, GST_FORMAT_TIME, 0,
-            start, start);
-      else
-        demux->newsegment =
-            gst_event_new_new_segment (FALSE, demux->rate, GST_FORMAT_TIME,
-            start, GST_CLOCK_TIME_NONE, start);
-
-      if (flags & GST_SEEK_FLAG_FLUSH) {
-        GST_DEBUG_OBJECT (demux, "sending flush stop");
-        gst_hls_demux_push_event (demux, gst_event_new_flush_stop ());
-        GST_HLS_DEMUX_DEMUX_SWITCH_LOCK (demux);
-        demux->flushing = FALSE;
-        gst_element_set_state (demux->avdemux, GST_STATE_NULL);
-        g_object_ref (demux->avdemux);
-        gst_bin_remove (GST_BIN (demux), demux->avdemux);
-        demux->avdemux_added = FALSE;
-        GST_HLS_DEMUX_DEMUX_SWITCH_UNLOCK (demux);
-      }
-
-      demux->cancelled = FALSE;
-      demux->drop_new_segment = FALSE;
-      gst_task_start (demux->stream_task);
-      g_static_rec_mutex_unlock (&demux->stream_lock);
-
-      return TRUE;
+      return gst_hls_demux_seek (demux, start, stop, rate, flags);
     }
     default:
       break;
@@ -1786,6 +1791,15 @@ gst_hls_demux_set_location (GstHLSDemux * demux, const gchar * uri)
   return TRUE;
 }
 
+static gboolean
+gst_hls_demux_resume_live_playback (GstHLSDemux * demux)
+{
+  GST_DEBUG_OBJECT (demux, "Resuming playback for current live");
+  gst_hls_demux_seek (demux, 0, GST_CLOCK_TIME_NONE, 1, GST_SEEK_FLAG_FLUSH);
+  demux->need_pts_sync = TRUE;
+  return FALSE;
+}
+
 void
 gst_hls_demux_updates_loop (GstHLSDemux * demux)
 {
@@ -1807,7 +1821,7 @@ gst_hls_demux_updates_loop (GstHLSDemux * demux)
     /*  block until the next scheduled update or the signal to quit this thread */
     if (g_cond_timed_wait (GST_TASK_GET_COND (demux->updates_task),
             demux->updates_timed_lock, &demux->next_update)) {
-      goto quit;
+      goto resume_playback;
     }
 
     if (demux->cancelled)
@@ -1827,6 +1841,15 @@ gst_hls_demux_updates_loop (GstHLSDemux * demux)
             ("Could not update the playlist"), (NULL));
         goto error;
       }
+    }
+
+    if (demux->need_cache) {
+      /* With live sources, if we are paused to much time and the playlist has
+       * rotated going out the DVR window, we need to restart playback from the
+       * current live position. */
+      g_timeout_add (0, (GSourceFunc) gst_hls_demux_resume_live_playback,
+          demux);
+      goto resume_playback;
     }
 
     /* if it's a live source and the playlist couldn't be updated, there aren't
@@ -1872,6 +1895,14 @@ gst_hls_demux_updates_loop (GstHLSDemux * demux)
 quit:
   {
     GST_DEBUG_OBJECT (demux, "Stopped updates task");
+    g_mutex_unlock (demux->updates_timed_lock);
+    return;
+  }
+
+resume_playback:
+  {
+    GST_DEBUG_OBJECT (demux, "Stopped updates task");
+    gst_hls_demux_pause_tasks (demux, TRUE);
     g_mutex_unlock (demux->updates_timed_lock);
     return;
   }
@@ -2062,11 +2093,9 @@ gst_hls_demux_update_playlist (GstHLSDemux * demux, gboolean update)
 
   /*  If it's a live source, do not let the sequence number go beyond
    * three fragments before the end of the list */
-  if (updated && update == FALSE && gst_m3u8_client_is_live (demux->client)) {
+  if (updated && update && gst_m3u8_client_is_live (demux->client)) {
     if (!gst_m3u8_client_check_sequence_validity (demux->client)) {
-      demux->video_srcpad->need_segment = TRUE;
-      demux->audio_srcpad->need_segment = TRUE;
-      demux->subtt_srcpad->need_segment = TRUE;
+      demux->need_cache = TRUE;
     }
   }
 
