@@ -68,6 +68,19 @@ https://priv.example.com/fileSequence2682.ts\n\
 #EXTINF:8,\n\
 https://priv.example.com/fileSequence2683.ts";
 
+static const gchar *LIVE_ROTATED_PLAYLIST = "#EXTM3U\n\
+#EXT-X-TARGETDURATION:8\n\
+#EXT-X-MEDIA-SEQUENCE:3001\n\
+\n\
+#EXTINF:8,\n\
+https://priv.example.com/fileSequence3001.ts\n\
+#EXTINF:8,\n\
+https://priv.example.com/fileSequence3002.ts\n\
+#EXTINF:8,\n\
+https://priv.example.com/fileSequence3003.ts\n\
+#EXTINF:8,\n\
+https://priv.example.com/fileSequence3004.ts";
+
 static const gchar *VARIANT_PLAYLIST = "#EXTM3U \n\
 #EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=128000\n\
 http://example.com/low.m3u8\n\
@@ -496,6 +509,37 @@ GST_START_TEST (test_live_playlist)
 
 GST_END_TEST;
 
+/* This test is for live sreams in which we pause the stream for more than the
+ * DVR window and we resume playback. The playlist has rotated completely and
+ * there is a jump in the media sequence that must be handled correctly. */
+GST_START_TEST (test_live_playlist_rotated)
+{
+  GstM3U8Client *client;
+  GstM3U8Playlist *pl;
+  GstM3U8MediaFile *file;
+  GstFragment *v_frag, *a_frag, *s_frag;
+
+  client = load_playlist (LIVE_PLAYLIST);
+  pl = client->selected_stream->selected_video;
+  /* Sequence should be last - 3 */
+  assert_equals_int (client->sequence, 2680);
+  /* Check first media segments */
+  file = GST_M3U8_MEDIA_FILE (g_list_first (pl->files)->data);
+  assert_equals_int (file->sequence, 2680);
+
+  gst_m3u8_client_update (client, g_strdup (LIVE_ROTATED_PLAYLIST), NULL, NULL);
+  assert_equals_int (gst_m3u8_client_check_sequence_validity (client), FALSE);
+  gst_m3u8_client_get_next_fragment (client, &v_frag, &a_frag, &s_frag);
+  assert_equals_int (client->sequence, 3002);
+  assert_equals_uint64 (v_frag->start_time, 0);
+  /* Check first media segments */
+  file = GST_M3U8_MEDIA_FILE (g_list_first (pl->files)->data);
+  assert_equals_int (file->sequence, 3001);
+
+  gst_m3u8_client_free (client);
+}
+
+GST_END_TEST;
 GST_START_TEST (test_playlist_with_doubles_duration)
 {
   GstM3U8Client *client;
@@ -1495,6 +1539,7 @@ hlsdemux_suite (void)
   tcase_add_test (tc_m3u8, test_load_windows_main_playlist_with_empty_lines);
   tcase_add_test (tc_m3u8, test_on_demand_playlist);
   tcase_add_test (tc_m3u8, test_live_playlist);
+  tcase_add_test (tc_m3u8, test_live_playlist_rotated);
   tcase_add_test (tc_m3u8, test_update_invalid_playlist);
   tcase_add_test (tc_m3u8, test_update_playlist);
   tcase_add_test (tc_m3u8, test_playlist_media_files);
