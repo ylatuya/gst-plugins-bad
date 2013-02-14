@@ -2217,8 +2217,12 @@ gst_hls_demux_switch_playlist (GstHLSDemux * demux)
   target_bitrate = gst_hls_adaptation_get_target_bitrate (demux->adaptation);
 
   ret = gst_hls_demux_change_playlist (demux, target_bitrate);
-  if (old_bitrate != demux->client->selected_stream->bandwidth)
+  if (old_bitrate != demux->client->selected_stream->bandwidth) {
     demux->bitrate_switched = TRUE;
+    /* trigger the streams changed to update the new bitrate for the selected
+     * stream */
+    g_signal_emit (demux, gst_hls_demux_signals[SIGNAL_STREAMS_CHANGED], 0);
+  }
   return ret;
 }
 
