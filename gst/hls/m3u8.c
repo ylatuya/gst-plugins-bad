@@ -1862,7 +1862,7 @@ gst_m3u8_client_get_stream_for_bitrate (GstM3U8Client * client, guint bitrate)
   stream = target_stream = GST_M3U8_STREAM (list->data);
 
   /*  Go to the highest possible bandwidth allowed */
-  while (stream->bandwidth < bitrate) {
+  while (stream->bandwidth <= bitrate) {
     target_stream = stream;
     list = g_list_next (list);
     if (!list)
@@ -1871,7 +1871,7 @@ gst_m3u8_client_get_stream_for_bitrate (GstM3U8Client * client, guint bitrate)
   }
 
   if (client->max_resolution != 0) {
-    resolution = stream->width * stream->height;
+    resolution = target_stream->width * target_stream->height;
     /* Check that this stream mets the resolution constraints */
     while (resolution > client->max_resolution) {
       list = g_list_previous (list);
@@ -1880,7 +1880,7 @@ gst_m3u8_client_get_stream_for_bitrate (GstM3U8Client * client, guint bitrate)
     }
   }
 
-  GST_DEBUG ("Selected stream with bitrate %d for %d", stream->bandwidth,
+  GST_DEBUG ("Selected stream with bitrate %d for %d", target_stream->bandwidth,
       bitrate);
   GST_M3U8_CLIENT_UNLOCK (client);
 
