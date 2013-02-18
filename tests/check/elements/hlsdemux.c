@@ -24,7 +24,7 @@
 #include <unistd.h>
 
 #include <gst/check/gstcheck.h>
-#include "m3u8.h"
+#include "m3u8.c"
 #include "gsthlsadaptation.h"
 
 GST_DEBUG_CATEGORY (fragmented_debug);
@@ -302,6 +302,40 @@ load_playlist (const gchar * data)
 
   return client;
 }
+
+GST_START_TEST (test_parse_uri)
+{
+  GstM3U8 *m3u8;
+  gchar *uri;
+
+  m3u8 = g_new0 (GstM3U8, 1);
+
+  /* No URI set */
+  assert_equals_int (gst_m3u8_parse_uri (m3u8, "test", NULL), FALSE);
+
+  m3u8->uri = g_strdup ("http://foo.org/test/");
+
+  /* Relative URI's */
+  gst_m3u8_parse_uri (m3u8, "file.ts", &uri);
+  assert_equals_string (uri, "http://foo.org/test/file.ts");
+
+  gst_m3u8_parse_uri (m3u8, "bar/file.ts", &uri);
+  assert_equals_string (uri, "http://foo.org/test/bar/file.ts");
+
+  gst_m3u8_parse_uri (m3u8, "/test/file.ts", &uri);
+  assert_equals_string (uri, "http://foo.org/test/file.ts");
+
+  /* Valid URI */
+  gst_m3u8_parse_uri (m3u8, "http://foo1.org/test/file.ts", &uri);
+  assert_equals_string (uri, "http://foo1.org/test/file.ts");
+
+  gst_m3u8_parse_uri (m3u8, "file:///foo1.org/test/file.ts", &uri);
+  assert_equals_string (uri, "file:///foo1.org/test/file.ts");
+
+  gst_m3u8_free (m3u8);
+}
+
+GST_END_TEST;
 
 GST_START_TEST (test_load_main_playlist_invalid)
 {
@@ -1530,6 +1564,7 @@ hlsdemux_suite (void)
   TCase *tc_adaptation = tcase_create ("adaptation");
 
   suite_add_tcase (s, tc_m3u8);
+  tcase_add_test (tc_m3u8, test_parse_uri);
   tcase_add_test (tc_m3u8, test_load_main_playlist_invalid);
   tcase_add_test (tc_m3u8, test_load_main_playlist_rendition);
   tcase_add_test (tc_m3u8, test_load_windows_line_endings_playlist);
