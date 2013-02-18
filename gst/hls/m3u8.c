@@ -519,7 +519,7 @@ gst_m3u8_stream_compare_by_bitrate (GstM3U8Stream * a, GstM3U8Stream * b)
 }
 
 static gboolean
-gst_m3u8_parse_uri (GstM3U8 * self, gchar * data, gchar ** uri)
+gst_m3u8_parse_uri (GstM3U8 * self, const gchar * data, gchar ** uri)
 {
   gchar *r;
 
@@ -535,9 +535,23 @@ gst_m3u8_parse_uri (GstM3U8 * self, gchar * data, gchar ** uri)
       return FALSE;
     }
 
-    *slash = '\0';
-    *uri = g_strdup_printf ("%s/%s", self->uri, data);
-    *slash = '/';
+    /* http://host.org/hls/ foo/files.ts -> http://host.org/hls/foo.file.ts */
+    if (data[0] != '/') {
+      *slash = '\0';
+      *uri = g_strdup_printf ("%s/%s", self->uri, data);
+      *slash = '/';
+    }
+    /* http://host.org/hls/ /hls/files.ts -> http://host.org/hls/foo.file.ts */
+    else {
+      gchar *ptr;
+      ptr = g_utf8_strchr (self->uri, -1, '/');
+      while (ptr[-1] == '/' || ptr[-1] == ':') {
+        ptr = g_utf8_strchr (ptr + 1, -1, '/');
+      }
+      *ptr = '\0';
+      *uri = g_strdup_printf ("%s%s", self->uri, data);
+      *ptr = '/';
+    }
   } else {
     *uri = g_strdup (data);
   }
