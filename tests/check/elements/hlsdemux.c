@@ -111,6 +111,30 @@ http://example.com/hi.m3u8\r\n\r\n\
 #EXT-X-STREAM-INF:PROGRAM-ID=1,BANDWIDTH=65000,CODECS=\"mp4a.40.5\"\r\n\r\n\
 http://example.com/audio-only.m3u8";
 
+static const gchar *EMPTY_LINES_PLAYLIST = "#EXTM3U \n\n\
+#EXT-X-TARGETDURATION:10\n\
+#EXTINF:10,Testr\n\n\
+http://media.example.com/001.ts\n\n\
+#EXTINF:10,Test\n\n\
+http://media.example.com/002.ts\n\n\
+#EXTINF:10,Test\n\n\
+http://media.example.com/003.ts\n\n\
+#EXTINF:10,Test\n\n\
+http://media.example.com/004.ts\n\n\
+#EXT-X-ENDLIST";
+
+static const gchar *WINDOWS_EMPTY_LINES_PLAYLIST = "#EXTM3U \r\n\
+#EXT-X-TARGETDURATION:10\r\n\r\n\
+#EXTINF:10,Test\r\n\r\n\
+http://media.example.com/001.ts\r\n\r\n\
+#EXTINF:10,Test\r\n\r\n\
+http://media.example.com/002.ts\r\n\r\n\
+#EXTINF:10,Test\r\n\r\n\
+http://media.example.com/003.ts\r\n\r\n\
+#EXTINF:10,Test\r\n\r\n\
+http://media.example.com/004.ts\r\n\r\n\
+#EXT-X-ENDLIST";
+
 static const gchar *BYTE_RANGES_PLAYLIST = "#EXTM3U \n\
 #EXT-X-TARGETDURATION:40\n\
 #EXTINF:10,Test\n\
@@ -370,26 +394,6 @@ GST_START_TEST (test_load_main_playlist_rendition)
   gst_m3u8_client_free (client);
 }
 
-GST_END_TEST;
-
-GST_START_TEST (test_load_windows_line_endings_playlist)
-{
-  GstM3U8Client *client;
-
-  client = load_playlist (WINDOWS_LINE_ENDINGS_PLAYLIST);
-
-  assert_equals_int (g_list_length (client->main->streams), 1);
-  assert_equals_int (g_hash_table_size (client->main->video_rendition_groups),
-      0);
-  assert_equals_int (g_hash_table_size (client->main->audio_rendition_groups),
-      0);
-
-  assert_equals_int (g_list_length (client->selected_stream->
-          selected_video->files), 4);
-  assert_equals_int (client->sequence, 0);
-
-  gst_m3u8_client_free (client);
-}
 
 GST_END_TEST;
 
@@ -477,13 +481,14 @@ GST_START_TEST (test_load_windows_main_playlist_with_empty_lines)
 
 GST_END_TEST;
 
-GST_START_TEST (test_on_demand_playlist)
+static void
+check_on_demand_playlist (const gchar * data)
 {
   GstM3U8Client *client;
   GstM3U8Playlist *pl;
   GstM3U8MediaFile *file;
 
-  client = load_playlist (ON_DEMAN_PLAYLIST);
+  client = load_playlist (data);
   pl = client->selected_stream->selected_video;
 
   /* Sequence should be 0 as it's an ondemand playlist */
@@ -504,7 +509,34 @@ GST_START_TEST (test_on_demand_playlist)
   gst_m3u8_client_free (client);
 }
 
+GST_START_TEST (test_on_demand_playlist)
+{
+  check_on_demand_playlist (ON_DEMAN_PLAYLIST);
+}
+
 GST_END_TEST;
+
+GST_START_TEST (test_windows_line_endings_playlist)
+{
+  check_on_demand_playlist (WINDOWS_LINE_ENDINGS_PLAYLIST);
+}
+
+GST_END_TEST;
+
+GST_START_TEST (test_empty_lines_playlist)
+{
+  check_on_demand_playlist (EMPTY_LINES_PLAYLIST);
+}
+
+GST_END_TEST;
+
+GST_START_TEST (test_windows_empty_lines_playlist)
+{
+  check_on_demand_playlist (WINDOWS_EMPTY_LINES_PLAYLIST);
+}
+
+GST_END_TEST;
+
 
 GST_START_TEST (test_live_playlist)
 {
@@ -1567,12 +1599,14 @@ hlsdemux_suite (void)
   tcase_add_test (tc_m3u8, test_parse_uri);
   tcase_add_test (tc_m3u8, test_load_main_playlist_invalid);
   tcase_add_test (tc_m3u8, test_load_main_playlist_rendition);
-  tcase_add_test (tc_m3u8, test_load_windows_line_endings_playlist);
   tcase_add_test (tc_m3u8, test_load_main_playlist_variant);
   tcase_add_test (tc_m3u8, test_load_windows_line_endings_variant_playlist);
   tcase_add_test (tc_m3u8, test_load_main_playlist_with_empty_lines);
   tcase_add_test (tc_m3u8, test_load_windows_main_playlist_with_empty_lines);
   tcase_add_test (tc_m3u8, test_on_demand_playlist);
+  tcase_add_test (tc_m3u8, test_windows_line_endings_playlist);
+  tcase_add_test (tc_m3u8, test_windows_empty_lines_playlist);
+  tcase_add_test (tc_m3u8, test_empty_lines_playlist);
   tcase_add_test (tc_m3u8, test_live_playlist);
   tcase_add_test (tc_m3u8, test_live_playlist_rotated);
   tcase_add_test (tc_m3u8, test_update_invalid_playlist);
