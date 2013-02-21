@@ -1022,9 +1022,12 @@ gst_m3u8_playlist_update (GstM3U8Playlist * self, gchar * data,
     end = g_utf8_strchr (data, -1, '\n');
     if (end)
       *end = '\0';
+    /* For windows line endings */
+    if (data[1] == '\0' && data[0] == '\r')
+      data[0] = '\0';
 
     /* Uri for media segment */
-    if (data[0] != '#') {
+    if (data[0] != '#' && data[0] != '\0') {
       GstM3U8MediaFile *file;
       gchar *uri = NULL;
 
