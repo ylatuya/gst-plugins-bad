@@ -121,6 +121,7 @@ enum
   GST_HLS_ADAPTATION_ALWAYS_HIGHEST,
   GST_HLS_ADAPTATION_BANDWIDTH_ESTIMATION,
   GST_HLS_ADAPTATION_FIXED_BITRATE,
+  GST_HLS_ADAPTATION_ROTATION,
   GST_HLS_ADAPTATION_DISABLED,
   GST_HLS_ADAPTATION_CUSTOM,
 };
@@ -138,6 +139,9 @@ gst_hls_adaptation_algorithm_get_type (void)
         "bandwidth"},
     {GST_HLS_ADAPTATION_FIXED_BITRATE,
         "Fixed bitrate using the connection speed", "fixed"},
+    {GST_HLS_ADAPTATION_ROTATION,
+          "Rotates the selected stream for each fragment " "(for debug only)",
+        "rotation"},
     {GST_HLS_ADAPTATION_DISABLED, "Disables adaptive switching", "disabled"},
     {0, NULL, NULL}
   };
@@ -1234,6 +1238,9 @@ gst_hls_demux_update_adaptation_algorithm (GstHLSDemux * demux)
       break;
     case GST_HLS_ADAPTATION_FIXED_BITRATE:
       demux->algo_func = gst_hls_adaptation_fixed_bitrate;
+      break;
+    case GST_HLS_ADAPTATION_ROTATION:
+      demux->algo_func = gst_hls_adaptation_rotation;
       break;
     case GST_HLS_ADAPTATION_DISABLED:
       demux->algo_func = gst_hls_adaptation_disabled;
