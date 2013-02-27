@@ -83,6 +83,7 @@ gst_hls_adaptation_new (void)
   adaptation->max_bitrate = 0;
   adaptation->connection_speed = 0;
   adaptation->max_fragments = 5;
+  adaptation->selected_bandwidth = 0;
   adaptation->adaptation_func =
       (GstHLSAdaptationAlgorithmFunc) gst_hls_adaptation_bandwidth_estimation;
   adaptation->lock = g_mutex_new ();
@@ -179,7 +180,8 @@ gst_hls_adaptation_get_target_bitrate (GstHLSAdaptation * adaptation)
 
 exit:
   GST_HLS_ADAPTATION_UNLOCK (adaptation);
-  return ret;
+  adaptation->selected_bandwidth = ret;
+  return adaptation->selected_bandwidth;
 }
 
 void
@@ -266,6 +268,29 @@ guint
 gst_hls_adaptation_disabled (GstHLSAdaptation * adaptation)
 {
   return -1;
+}
+
+guint
+gst_hls_adaptation_rotation (GstHLSAdaptation * adaptation)
+{
+  GList *walk;
+  GstHLSAdaptationStream *stream = NULL;
+  guint ret = -1;
+
+  for (walk = g_list_last (adaptation->streams); walk; walk = walk->prev) {
+    stream = (GstHLSAdaptationStream *) walk->data;
+    if (stream->bandwidth < adaptation->selected_bandwidth) {
+      break;
+    }
+    if (walk->prev == NULL) {
+      stream =
+          (GstHLSAdaptationStream *) g_list_last (adaptation->streams)->data;
+      break;
+    }
+  }
+
+  ret = stream->bandwidth;
+  return ret;
 }
 
 /* Returns an estimation of the average bandwidth, based on a pondered
