@@ -54,6 +54,7 @@ struct _GstHLSAdaptation
   GList *streams;
   GList *fragments;
   gdouble proportion;
+  guint selected_bandwidth;
 
   /* Properties */
   GstHLSAdaptationAlgorithmFunc adaptation_func;
@@ -99,6 +100,8 @@ guint gst_hls_adaptation_fixed_bitrate          (GstHLSAdaptation *adaptation);
 guint gst_hls_adaptation_disabled               (GstHLSAdaptation *adaptation);
 
 guint gst_hls_adaptation_bandwidth_estimation   (GstHLSAdaptation *adaptation);
+
+guint gst_hls_adaptation_rotation               (GstHLSAdaptation *adaptation);
 
 G_END_DECLS
 
