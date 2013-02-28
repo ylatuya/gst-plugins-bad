@@ -389,7 +389,7 @@ GST_START_TEST (test_load_main_playlist_rendition)
 
   assert_equals_int (g_list_length (client->selected_stream->selected_video->
           files), 4);
-  assert_equals_int (client->sequence, 0);
+  assert_equals_int (client->video_sequence, 0);
 
   gst_m3u8_client_free (client);
 }
@@ -492,7 +492,7 @@ check_on_demand_playlist (const gchar * data)
   pl = client->selected_stream->selected_video;
 
   /* Sequence should be 0 as it's an ondemand playlist */
-  assert_equals_int (client->sequence, 0);
+  assert_equals_int (client->video_sequence, 0);
   /* Check that we are not live */
   assert_equals_int (gst_m3u8_client_is_live (client), FALSE);
   /* Check number of entries */
@@ -556,7 +556,7 @@ GST_START_TEST (test_live_playlist)
   /* Check that we are live */
   assert_equals_int (gst_m3u8_client_is_live (client), TRUE);
   /* Sequence should last - 3 */
-  assert_equals_int (client->sequence, 2680);
+  assert_equals_int (client->video_sequence, 2681);
   /* Check number of entries */
   assert_equals_int (g_list_length (pl->files), 4);
   /* Check first media segments */
@@ -588,7 +588,7 @@ GST_START_TEST (test_live_playlist_rotated)
   client = load_playlist (LIVE_PLAYLIST);
   pl = client->selected_stream->selected_video;
   /* Sequence should be last - 3 */
-  assert_equals_int (client->sequence, 2680);
+  assert_equals_int (client->video_sequence, 2681);
   /* Check first media segments */
   file = GST_M3U8_MEDIA_FILE (g_list_first (pl->files)->data);
   assert_equals_int (file->sequence, 2680);
@@ -596,7 +596,7 @@ GST_START_TEST (test_live_playlist_rotated)
   gst_m3u8_client_update (client, g_strdup (LIVE_ROTATED_PLAYLIST), NULL, NULL);
   assert_equals_int (gst_m3u8_client_check_sequence_validity (client), FALSE);
   gst_m3u8_client_get_next_fragment (client, &v_frag, &a_frag, &s_frag);
-  assert_equals_int (client->sequence, 3002);
+  assert_equals_int (client->video_sequence, 3002);
   assert_equals_uint64 (v_frag->start_time, 0);
   /* Check first media segments */
   file = GST_M3U8_MEDIA_FILE (g_list_first (pl->files)->data);
