@@ -280,24 +280,12 @@ done:
 static void
 gst_uri_downloader_stop (GstUriDownloader * downloader)
 {
-  GstPad *pad;
-
   GST_DEBUG_OBJECT (downloader, "Stopping source element");
 
   /* set the element state to NULL */
-  gst_element_set_state (downloader->priv->urisrc, GST_STATE_NULL);
+  gst_element_set_state (downloader->priv->urisrc, GST_STATE_READY);
   gst_element_get_state (downloader->priv->urisrc, NULL, NULL,
       GST_CLOCK_TIME_NONE);
-
-  /* remove the bus' sync handler */
-  gst_bus_set_sync_handler (downloader->priv->bus, NULL, NULL);
-
-  /* unlink the source element from the internal pad */
-  pad = gst_pad_get_peer (downloader->priv->pad);
-  if (pad) {
-    gst_pad_unlink (pad, downloader->priv->pad);
-    gst_object_unref (pad);
-  }
 }
 
 void
@@ -324,26 +312,55 @@ static gboolean
 gst_uri_downloader_set_uri (GstUriDownloader * downloader, const gchar * uri)
 {
   GstPad *pad;
+  GstElement *source;
+  gboolean new_element = FALSE;
 
   if (!gst_uri_is_valid (uri))
     return FALSE;
 
-  GST_DEBUG_OBJECT (downloader, "Creating source element for the URI:%s", uri);
-  downloader->priv->urisrc = gst_element_make_from_uri (GST_URI_SRC, uri, NULL);
-  if (!downloader->priv->urisrc)
+  source = gst_element_make_from_uri (GST_URI_SRC, uri, NULL);
+  if (source == NULL)
     return FALSE;
 
-  /* add a sync handler for the bus messages to detect errors in the download */
-  gst_element_set_bus (GST_ELEMENT (downloader->priv->urisrc),
-      downloader->priv->bus);
-  gst_bus_set_sync_handler (downloader->priv->bus,
-      gst_uri_downloader_bus_handler, downloader);
+  /* Make sure we can reuse the same source element for this new URI */
+  if (downloader->priv->urisrc != NULL) {
+    if (gst_element_get_factory (source) !=
+        gst_element_get_factory (downloader->priv->urisrc)) {
+      gst_object_unref (downloader->priv->urisrc);
+      downloader->priv->urisrc = source;
+      new_element = TRUE;
+    } else {
+      gst_object_unref (source);
+    }
+  } else {
+    downloader->priv->urisrc = source;
+    new_element = TRUE;
+  }
 
-  pad = gst_element_get_static_pad (downloader->priv->urisrc, "src");
-  if (!pad)
-    return FALSE;
-  gst_pad_link (pad, downloader->priv->pad);
-  gst_object_unref (pad);
+  if (new_element) {
+    GST_DEBUG_OBJECT (downloader, "Creating source element for the URI:%s",
+        uri);
+    downloader->priv->urisrc = source;
+
+    /* Use keep-alive when possible */
+    if (g_object_class_find_property (G_OBJECT_GET_CLASS (downloader->priv->
+                urisrc), "keep-alive")) {
+      g_object_set (downloader->priv->urisrc, "keep-alive", TRUE, NULL);
+    }
+    /* add a sync handler for the bus messages to detect errors in the download */
+    gst_element_set_bus (GST_ELEMENT (downloader->priv->urisrc),
+        downloader->priv->bus);
+    gst_bus_set_sync_handler (downloader->priv->bus,
+        gst_uri_downloader_bus_handler, downloader);
+
+    pad = gst_element_get_static_pad (downloader->priv->urisrc, "src");
+    if (!pad)
+      return FALSE;
+    gst_pad_link (pad, downloader->priv->pad);
+    gst_object_unref (pad);
+  }
+  gst_uri_handler_set_uri (GST_URI_HANDLER (downloader->priv->urisrc), uri);
+
   return TRUE;
 }
 
@@ -353,15 +370,15 @@ gst_uri_downloader_fetch_fragment (GstUriDownloader * downloader,
 {
   GstStateChangeReturn ret;
   GstFragment *download = NULL;
+  gint64 offset, length;
 
   g_mutex_lock (downloader->priv->usage_lock);
 
   GST_DEBUG_OBJECT (downloader, "Fetching new URI %s", fragment->name);
   downloader->priv->download = fragment;
   downloader->priv->download->download_start_time = GST_CLOCK_TIME_NONE;
-  downloader->priv->length = fragment->length;
-  downloader->priv->offset = fragment->offset;
-  downloader->priv->setting_uri = TRUE;
+  downloader->priv->length = length = fragment->length;
+  downloader->priv->offset = offset = fragment->offset;
 
   if (!gst_uri_downloader_set_uri (downloader, fragment->name)) {
     goto quit;
