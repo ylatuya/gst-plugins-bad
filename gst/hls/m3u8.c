@@ -213,12 +213,13 @@ gst_m3u8_stream_find_next (GstM3U8Stream * stream, guint sequence,
     return NULL;
   }
 
-  if (media_type == GST_M3U8_MEDIA_TYPE_VIDEO)
+  if (media_type == GST_M3U8_MEDIA_TYPE_VIDEO) {
     pl = stream->selected_video;
-  else if (media_type == GST_M3U8_MEDIA_TYPE_AUDIO)
+  } else if (media_type == GST_M3U8_MEDIA_TYPE_AUDIO) {
     pl = stream->selected_audio;
-  else
+  } else {
     return NULL;
+  }
 
   if (pl == NULL)
     return NULL;
@@ -981,6 +982,7 @@ gst_m3u8_playlist_update (GstM3U8Playlist * self, gchar * data,
 //  gboolean discontinuity;
   gint64 offset = -1, length = -1, acc_offset = 0;
   gchar *key_url = NULL, *iv = NULL;
+  gint mediasequence = 0;
   GstFragmentEncodingMethod enc_method = GST_FRAGMENT_ENCODING_METHOD_NONE;
 
   g_return_val_if_fail (self != NULL, FALSE);
@@ -1040,7 +1042,7 @@ gst_m3u8_playlist_update (GstM3U8Playlist * self, gchar * data,
 
 
       file = gst_m3u8_media_file_new (uri, title, duration,
-          self->mediasequence++, offset, length);
+          mediasequence++, offset, length);
       if (enc_method != GST_FRAGMENT_ENCODING_METHOD_NONE) {
         file->enc_method = enc_method;
         file->key_url = g_strdup (key_url);
@@ -1066,7 +1068,7 @@ gst_m3u8_playlist_update (GstM3U8Playlist * self, gchar * data,
         self->targetduration = val * GST_SECOND;
     } else if (g_str_has_prefix (data, "#EXT-X-MEDIA-SEQUENCE:")) {
       if (int_from_string (data + 22, &data, &val))
-        self->mediasequence = val;
+        self->mediasequence = mediasequence = val;
     } else if (g_str_has_prefix (data, "#EXT-X-DISCONTINUITY")) {
       /* discontinuity = TRUE; */
     } else if (g_str_has_prefix (data, "#EXT-X-PROGRAM-DATE-TIME:")) {
@@ -1228,13 +1230,51 @@ gst_m3u8_client_init_sequence (GstM3U8Client * client)
 {
   GstM3U8Stream *stream = client->selected_stream;
 
-  if (client->sequence == -1 && stream != NULL) {
-    GstM3U8Playlist *pl = gst_m3u8_client_get_current_playlist (client);
+  if (stream == NULL)
+    return;
+
+  if (client->video_sequence == -1) {
+    GstM3U8Playlist *pl = stream->selected_video;
     if (pl != NULL && g_list_length (pl->files) > 0) {
-      client->sequence =
-          GST_M3U8_MEDIA_FILE (g_list_first (pl->files)->data)->sequence;
+      if (pl->endlist) {
+        client->video_sequence =
+            GST_M3U8_MEDIA_FILE (g_list_first (pl->files)->data)->sequence;
+      } else {
+        client->video_sequence =
+            GST_M3U8_MEDIA_FILE (g_list_last (pl->files)->data)->sequence - 2;
+      }
+    } else {
+      client->video_sequence = 0;
     }
-    GST_DEBUG ("Setting first sequence at %d", client->sequence);
+    GST_DEBUG ("Setting first video sequence at %d", client->video_sequence);
+  }
+  if (client->audio_sequence == -1) {
+    GstM3U8Playlist *pl = stream->selected_audio;
+    if (pl != NULL && g_list_length (pl->files) > 0) {
+      if (pl->endlist) {
+        client->audio_sequence =
+            GST_M3U8_MEDIA_FILE (g_list_first (pl->files)->data)->sequence;
+      } else {
+        client->audio_sequence =
+            GST_M3U8_MEDIA_FILE (g_list_last (pl->files)->data)->sequence - 2;
+      }
+    } else {
+      client->audio_sequence = 0;
+    }
+    GST_DEBUG ("Setting first audio sequence at %d", client->audio_sequence);
+  }
+  if (client->subtt_sequence == -1) {
+    GstM3U8Playlist *pl = stream->selected_subtt;
+    if (pl != NULL && g_list_length (pl->files) > 0) {
+      if (pl->endlist) {
+        client->subtt_sequence =
+            GST_M3U8_MEDIA_FILE (g_list_first (pl->files)->data)->sequence;
+      } else {
+        client->subtt_sequence =
+            GST_M3U8_MEDIA_FILE (g_list_last (pl->files)->data)->sequence - 2;
+      }
+    }
+    GST_DEBUG ("Setting first subtt sequence at %d", client->subtt_sequence);
   }
 }
 
@@ -1284,6 +1324,137 @@ gst_m3u8_client_update_alternate (GstM3U8Client * client)
   }
 }
 
+static gboolean
+gst_m3u8_client_seek_in_playlist (GstM3U8Client * client, GstM3U8Playlist * pl,
+    gint64 seek_time, gint * sequence)
+{
+  GList *list;
+  GstClockTime ts = 0;
+  GstM3U8MediaFile *fragment, *target_fragment;
+  gboolean ret = FALSE;
+
+  list = g_list_first (pl->files);
+  if (list == NULL)
+    return TRUE;
+  fragment = target_fragment = GST_M3U8_MEDIA_FILE (list->data);
+
+  if (seek_time < ts) {
+    GST_WARNING ("Invalid seek, %" GST_TIME_FORMAT " is earlier than start "
+        "time %" GST_TIME_FORMAT, GST_TIME_ARGS (seek_time),
+        GST_TIME_ARGS (ts));
+    goto exit;
+  }
+
+  /*  Go to the fragment with the highest ts possible */
+  while (ts < seek_time) {
+    target_fragment = fragment;
+    list = g_list_next (list);
+    if (!list) {
+      break;
+    }
+    fragment = GST_M3U8_MEDIA_FILE (list->data);
+    ts += fragment->duration;
+    if (ts == seek_time) {
+      target_fragment = fragment;
+      break;
+    }
+  }
+
+  if (ts + target_fragment->duration <= seek_time) {
+    GST_WARNING ("Invalid seek, %" GST_TIME_FORMAT " is later than end "
+        "time %" GST_TIME_FORMAT, GST_TIME_ARGS (seek_time),
+        GST_TIME_ARGS (ts + target_fragment->duration));
+    goto exit;
+  }
+
+  *sequence = target_fragment->sequence;
+  ret = TRUE;
+
+exit:
+  return ret;
+}
+
+static gboolean
+gst_m3u8_client_check_playlist_sequence_validity (GstM3U8Client * client,
+    GstM3U8Playlist * pl, gint * sequence)
+{
+  guint last_sequence, first_sequence;
+  gboolean ret = TRUE;
+
+  if (pl == NULL || pl->endlist)
+    goto exit;
+
+  last_sequence = pl->mediasequence + g_list_length (pl->files) - 1;
+  first_sequence = pl->mediasequence;
+  GST_DEBUG ("First sequence is: %d. Last sequence is %d", first_sequence,
+      last_sequence);
+
+  if (*sequence > last_sequence || *sequence < first_sequence) {
+    *sequence = last_sequence - 3;
+    ret = FALSE;
+    GST_DEBUG ("Sequence is beyond playlist. Moving to %d", last_sequence - 3);
+  }
+
+exit:
+  return ret;
+}
+
+static void
+_resync_pl_sequences (GstM3U8Playlist * previous,
+    GstM3U8Playlist * selected, gint * sequence)
+{
+  if (previous == NULL || selected == NULL ||
+      g_list_length (previous->files) == 0) {
+    return;
+  }
+  if (previous != selected) {
+    if (previous->mediasequence == selected->mediasequence) {
+      GST_LOG ("Resync sequences: [keep] media sequences are equal %d - %d",
+          previous->mediasequence, selected->mediasequence);
+    } else if (selected->mediasequence == previous->mediasequence + 1 ||
+        selected->mediasequence == previous->mediasequence - 1) {
+      GST_LOG
+          ("Resync sequences: [keep] media sequences seams to be equals %d - %d",
+          previous->mediasequence, selected->mediasequence);
+    } else {
+      *sequence = *sequence - previous->mediasequence;
+      *sequence += selected->mediasequence;
+      GST_LOG
+          ("Resync sequences: [resync] media sequences are not equals %d - %d -> %d",
+          previous->mediasequence, selected->mediasequence, *sequence);
+    }
+  }
+}
+
+static void
+gst_m3u8_client_resync_sequences (GstM3U8Client * client,
+    GstM3U8Stream * previous, GstM3U8Stream * selected)
+{
+  /* From 6.3.4:
+   * "A client MUST NOT assume that segments with the same media sequence
+   * number in different variants or renditions contain matching content."
+   *
+   * We need to find the media sequence for this new stream, which might be
+   * tricky for playlists with media sequences not aligned, happening in some
+   * live streams.
+   * Our best guess is to use the relative position of the last loaded sequence
+   * in the previous playlist (we don't have other usable info) and assume this
+   * new playlists has rotated one position. Therefore we should select the
+   * sequence at the same relative position of the previous one.
+   * */
+
+  if (previous == NULL || selected == NULL)
+    return;
+
+  _resync_pl_sequences (previous->selected_video,
+      selected->selected_video, &client->video_sequence);
+  _resync_pl_sequences (previous->selected_audio,
+      selected->selected_audio, &client->audio_sequence);
+  _resync_pl_sequences (previous->selected_subtt,
+      selected->selected_subtt, &client->subtt_sequence);
+}
+
+
 /*********************************************
  *                                           *
  *              Public API                   *
@@ -1304,7 +1475,9 @@ gst_m3u8_client_new (const gchar * uri)
   client->selected_stream = NULL;
   client->audio_alternate = NULL;
   client->video_alternate = NULL;
-  client->sequence = -1;
+  client->video_sequence = -1;
+  client->audio_sequence = -1;
+  client->subtt_sequence = -1;
   client->update_failed_count = 0;
 
   return client;
@@ -1338,6 +1511,7 @@ gst_m3u8_client_set_current (GstM3U8Client * self, GstM3U8Stream * stream)
 
   GST_M3U8_CLIENT_LOCK (self);
   if (stream != self->selected_stream) {
+    self->previous_stream = self->selected_stream;
     self->selected_stream = stream;
     self->update_failed_count = 0;
   }
@@ -1475,8 +1649,11 @@ gst_m3u8_client_update (GstM3U8Client * self, gchar * video_data,
     }
   }
 
-  if (G_UNLIKELY (self->sequence == -1)) {
-    gst_m3u8_client_init_sequence (self);
+  gst_m3u8_client_init_sequence (self);
+
+  if (self->previous_stream != selected) {
+    gst_m3u8_client_resync_sequences (self, self->previous_stream, selected);
+    self->previous_stream = selected;
   }
 
   ret = TRUE;
@@ -1505,10 +1682,12 @@ gst_m3u8_client_get_current_position (GstM3U8Client * client,
     goto exit;
 
   if (video_pl != NULL) {
-    video_ts = gst_m3u8_playlist_get_position (video_pl, client->sequence);
+    video_ts =
+        gst_m3u8_playlist_get_position (video_pl, client->video_sequence);
   }
   if (audio_pl != NULL) {
-    audio_ts = gst_m3u8_playlist_get_position (audio_pl, client->sequence);
+    audio_ts =
+        gst_m3u8_playlist_get_position (audio_pl, client->audio_sequence);
   }
 
   if (audio_ts == -1)
@@ -1534,8 +1713,7 @@ gst_m3u8_client_get_next_fragment (GstM3U8Client * client,
 {
   GstM3U8MediaFile *video_file, *audio_file, *subtt_file;
   GstClockTime video_ts, audio_ts, end_timestamp;
-  gboolean updated = FALSE;
-  guint client_sequence;
+  gint video_diff, audio_diff;
 
   g_return_val_if_fail (client != NULL, FALSE);
   g_return_val_if_fail (client->selected_stream != NULL, FALSE);
@@ -1548,16 +1726,15 @@ gst_m3u8_client_get_next_fragment (GstM3U8Client * client,
   end_timestamp =
       gst_m3u8_client_get_current_playlist (client)->targetduration + video_ts;
 
-  GST_DEBUG ("Looking for fragment %d", client->sequence);
   *video_fragment = NULL;
   *audio_fragment = NULL;
   *subtt_fragment = NULL;
   video_file = gst_m3u8_stream_find_next (client->selected_stream,
-      client->sequence, end_timestamp, GST_M3U8_MEDIA_TYPE_VIDEO);
+      client->video_sequence, end_timestamp, GST_M3U8_MEDIA_TYPE_VIDEO);
   audio_file = gst_m3u8_stream_find_next (client->selected_stream,
-      client->sequence, end_timestamp, GST_M3U8_MEDIA_TYPE_AUDIO);
+      client->audio_sequence, end_timestamp, GST_M3U8_MEDIA_TYPE_AUDIO);
   subtt_file = gst_m3u8_stream_find_next (client->selected_stream,
-      client->sequence, end_timestamp, GST_M3U8_MEDIA_TYPE_SUBTITLES);
+      client->subtt_sequence, end_timestamp, GST_M3U8_MEDIA_TYPE_SUBTITLES);
 
   if (video_file == NULL && audio_file == NULL && subtt_file == NULL) {
     GST_M3U8_CLIENT_UNLOCK (client);
@@ -1565,30 +1742,30 @@ gst_m3u8_client_get_next_fragment (GstM3U8Client * client,
   }
 
 
-  client_sequence = client->sequence;
-
   if (video_file != NULL) {
     *video_fragment = gst_m3u8_media_file_get_fragment (video_file, video_ts,
-        client_sequence != video_file->sequence);
-    client->sequence = video_file->sequence + 1;
-    updated = TRUE;
+        client->video_sequence != video_file->sequence);
+    video_diff = video_file->sequence + 1 - client->video_sequence;
+    client->video_sequence += video_diff;
   }
 
   if (audio_file != NULL) {
     *audio_fragment = gst_m3u8_media_file_get_fragment (audio_file, audio_ts,
-        client_sequence != audio_file->sequence);
-    if (!updated) {
-      client->sequence = audio_file->sequence + 1;
-      updated = TRUE;
-    }
+        client->audio_sequence != audio_file->sequence);
+    audio_diff = audio_file->sequence + 1 - client->audio_sequence;
+    client->audio_sequence += audio_diff;
   }
 
   if (subtt_file != NULL) {
     *subtt_fragment = gst_m3u8_media_file_get_fragment (subtt_file, video_ts,
-        client_sequence != subtt_file->sequence);
-    if (!updated) {
-      client->sequence = subtt_file->sequence + 1;
-    }
+        client->subtt_sequence != subtt_file->sequence);
+    client->subtt_sequence = subtt_file->sequence + 1;
+  }
+
+  if (video_file == NULL && audio_file != NULL) {
+    client->video_sequence += audio_diff;
+  } else if (audio_file == NULL && video_file != NULL) {
+    client->audio_sequence += video_diff;
   }
 
   GST_M3U8_CLIENT_UNLOCK (client);
@@ -1638,7 +1815,7 @@ gst_m3u8_client_get_prev_i_frames (GstM3U8Client * client,
       break;
   }
 
-  client->sequence -= 1;
+  client->video_sequence -= 1;
   *i_frames = g_list_reverse (*i_frames);
 
   GST_M3U8_CLIENT_UNLOCK (client);
@@ -1688,7 +1865,7 @@ gst_m3u8_client_get_next_i_frames (GstM3U8Client * client,
       break;
   }
 
-  client->sequence += 1;
+  client->video_sequence += 1;
 
   GST_M3U8_CLIENT_UNLOCK (client);
   return TRUE;
@@ -1919,53 +2096,38 @@ gst_m3u8_client_get_next_stream (GstM3U8Client * client)
 gboolean
 gst_m3u8_client_seek (GstM3U8Client * client, gint64 seek_time)
 {
-  GList *list;
-  GstClockTime ts = 0;
-  GstM3U8Playlist *pl;
-  GstM3U8MediaFile *fragment, *target_fragment;
   gboolean ret = FALSE;
+  GstM3U8Stream *stream;
 
   GST_M3U8_CLIENT_LOCK (client);
-  pl = gst_m3u8_client_get_current_playlist (client);
-  if (pl == NULL)
+
+  stream = client->selected_stream;
+  if (stream == NULL)
     goto exit;
 
-  list = g_list_first (pl->files);
-  fragment = target_fragment = GST_M3U8_MEDIA_FILE (list->data);
-
-  if (seek_time < ts) {
-    GST_WARNING ("Invalid seek, %" GST_TIME_FORMAT " is earlier than start "
-        "time %" GST_TIME_FORMAT, GST_TIME_ARGS (seek_time),
-        GST_TIME_ARGS (ts));
-    goto exit;
+  if (stream->selected_video != NULL) {
+    ret = gst_m3u8_client_seek_in_playlist (client,
+        stream->selected_video, seek_time, &client->video_sequence);
   }
-
-  /*  Go to the fragment with the highest ts possible */
-  while (ts < seek_time) {
-    target_fragment = fragment;
-    list = g_list_next (list);
-    if (!list) {
-      break;
-    }
-    fragment = GST_M3U8_MEDIA_FILE (list->data);
-    ts += fragment->duration;
-    if (ts == seek_time) {
-      target_fragment = fragment;
-      break;
+  if (stream->selected_audio != NULL) {
+    if (stream->selected_video != NULL) {
+      if (stream->selected_video->mediasequence ==
+          stream->selected_audio->mediasequence) {
+        client->audio_sequence = client->video_sequence;
+      }
+    } else {
+      ret &= gst_m3u8_client_seek_in_playlist (client,
+          stream->selected_audio, seek_time, &client->audio_sequence);
     }
   }
-
-  if (ts + target_fragment->duration <= seek_time) {
-    GST_WARNING ("Invalid seek, %" GST_TIME_FORMAT " is later than end "
-        "time %" GST_TIME_FORMAT, GST_TIME_ARGS (seek_time),
-        GST_TIME_ARGS (ts + target_fragment->duration));
-    goto exit;
+  if (client->selected_stream->selected_subtt) {
+    ret &= gst_m3u8_client_seek_in_playlist (client,
+        client->selected_stream->selected_subtt, seek_time,
+        &client->subtt_sequence);
   }
-
-  client->sequence = target_fragment->sequence;
-  ret = TRUE;
-  GST_DEBUG ("Seeking successfully to %" GST_TIME_FORMAT,
-      GST_TIME_ARGS (seek_time));
+  if (ret)
+    GST_DEBUG ("Seeking successfully to %" GST_TIME_FORMAT,
+        GST_TIME_ARGS (seek_time));
 
 exit:
   GST_M3U8_CLIENT_UNLOCK (client);
@@ -2057,27 +2219,16 @@ exit:
 gboolean
 gst_m3u8_client_check_sequence_validity (GstM3U8Client * client)
 {
-  guint last_sequence, first_sequence;
-  GstM3U8Playlist *pl;
   gboolean ret = TRUE;
 
   GST_M3U8_CLIENT_LOCK (client);
-  pl = gst_m3u8_client_get_current_playlist (client);
-  if (pl == NULL || pl->endlist)
-    goto exit;
+  ret = gst_m3u8_client_check_playlist_sequence_validity (client,
+      client->selected_stream->selected_video, &client->video_sequence);
+  ret &= gst_m3u8_client_check_playlist_sequence_validity (client,
+      client->selected_stream->selected_audio, &client->audio_sequence);
+  ret &= gst_m3u8_client_check_playlist_sequence_validity (client,
+      client->selected_stream->selected_subtt, &client->subtt_sequence);
 
-  last_sequence = pl->mediasequence - 1;
-  first_sequence = last_sequence - g_list_length (pl->files);
-  GST_DEBUG ("First sequence is: %d. Last sequence is %d", first_sequence,
-      last_sequence);
-
-  if (client->sequence > last_sequence || client->sequence < first_sequence) {
-    client->sequence = last_sequence - 3;
-    ret = FALSE;
-    GST_DEBUG ("Sequence is beyond playlist. Moving to %d", last_sequence - 3);
-  }
-
-exit:
   GST_M3U8_CLIENT_UNLOCK (client);
   return ret;
 }
@@ -2196,6 +2347,7 @@ gst_m3u8_client_get_current_fragment_duration (GstM3U8Client * client)
 {
   guint64 dur;
   GstM3U8Playlist *pl;
+  guint sequence = 0;
   GList *list;
 
   g_return_val_if_fail (client != NULL, FALSE);
@@ -2203,8 +2355,15 @@ gst_m3u8_client_get_current_fragment_duration (GstM3U8Client * client)
 
   GST_M3U8_CLIENT_LOCK (client);
 
+  if (client->selected_stream->selected_video != NULL) {
+    pl = client->selected_stream->selected_video;
+    sequence = client->video_sequence;
+  } else if (client->selected_stream->selected_audio != NULL) {
+    pl = client->selected_stream->selected_audio;
+    sequence = client->audio_sequence;
+  }
   pl = gst_m3u8_client_get_current_playlist (client);
-  list = g_list_find_custom (pl->files, GUINT_TO_POINTER (client->sequence - 1),
+  list = g_list_find_custom (pl->files, GUINT_TO_POINTER (sequence - 1),
       (GCompareFunc) _find_next);
   if (list == NULL) {
     dur = -1;

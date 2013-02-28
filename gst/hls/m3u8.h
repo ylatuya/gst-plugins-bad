@@ -151,11 +151,14 @@ struct _GstM3U8Client
 {
   GstM3U8VariantPlaylist *main;    /* main playlist */
   GstM3U8Stream *selected_stream;  /* currently selected stream */
+  GstM3U8Stream *previous_stream;  /* previously selected stream */
   gchar *video_alternate;          /* selected video alternate */
   gchar *audio_alternate;          /* selected audio alternate */
   gchar *subtt_alternate;          /* selected subtitles alternate */
   guint update_failed_count;
-  gint sequence;                   /* the next sequence for this client */
+  gint video_sequence;                   /* the next sequence for this client */
+  gint audio_sequence;                   /* the next sequence for this client */
+  gint subtt_sequence;                   /* the next sequence for this client */
   guint max_resolution;            /* Maximum resolution (width x height) */
   GMutex *lock;
 };
