@@ -2625,7 +2625,10 @@ gst_hls_demux_proxy_newsegment (GstPad * pad, GstEvent * event,
     /* For live streams where seeking is not supported forward the upstreams
      * events */
     if (gst_m3u8_client_is_live (demux->client)) {
-      ret = TRUE;
+      if (pdata->need_segment) {
+        ret = TRUE;
+        pdata->need_segment = FALSE;
+      }
       goto exit;
     }
     if (pdata->need_segment) {
