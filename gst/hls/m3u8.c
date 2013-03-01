@@ -1403,16 +1403,19 @@ static void
 _resync_pl_sequences (GstM3U8Playlist * previous,
     GstM3U8Playlist * selected, gint * sequence)
 {
+  gint diff;
+
   if (previous == NULL || selected == NULL ||
       g_list_length (previous->files) == 0) {
     return;
   }
   if (previous != selected) {
+    diff = previous->mediasequence - selected->mediasequence;
+
     if (previous->mediasequence == selected->mediasequence) {
       GST_LOG ("Resync sequences: [keep] media sequences are equal %d - %d",
           previous->mediasequence, selected->mediasequence);
-    } else if (selected->mediasequence == previous->mediasequence + 1 ||
-        selected->mediasequence == previous->mediasequence - 1) {
+    } else if (diff >= -2 && diff <= 2) {
       GST_LOG
           ("Resync sequences: [keep] media sequences seams to be equals %d - %d",
           previous->mediasequence, selected->mediasequence);
