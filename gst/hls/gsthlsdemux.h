@@ -56,22 +56,19 @@ struct _GstHLSDemuxPadData
   GstM3U8MediaType type;
   GstPad *pad;
   GstPad *in_pad;
+  GstPad *pad_to_link;
   GQueue *queue;
   gboolean need_segment;
-  gboolean drop_next_segment;
   guint *signal;
   const gchar *desc;
   gboolean pad_added;
   gboolean is_eos;
+  gboolean active;
+  GstStaticPadTemplate *pad_template;
 
   /* Stream selection */
   GHashTable *streams;
   gint current_stream;
-
-  /* Audio stream selection */
-  GstPad *active_pad;
-  GstPad *main_pad;
-  GstPad *alt_pad;
 };
 
 /**
@@ -125,24 +122,26 @@ struct _GstHLSDemux
   /* Bin */
   GstElement *avdemux;          /* Demuxer for the main stream */
   GstElement *ademux;           /* Demuxer for the audio stream */
-  GstElement *selector;         /* input selector for the audio stream */
-  GstEvent *newsegment;         /* New segment events */
+  GstElement *identity;         /* Demuxer for the subtitles stream */
+  gboolean avdemux_added;
+  gboolean ademux_added;
+  gboolean identity_added;
+  gboolean avdemux_no_more_pads;
+  gboolean ademux_no_more_pads;
 
+  GstEvent *newsegment;         /* New segment events */
+  gboolean seek_pending;        /* Pending seek */
+  GstClockTime seek_start;      /* seek start time */
+
+  gboolean stream_changed;      /* A stream has changed */
   gboolean bitrate_switched;    /* Indicates there is bitrate switch */
-  GstEvent *demux_switch_eos; /* EOS to flush the demuxer before switching it */
-  GMutex * demux_switch_lock;   /* Lock for the demuxer switch */
-  GCond * demux_switch_cond;    /* Condition to wait for the EOS on the demuxer switch */
-  gboolean drop_new_segment;    /* Drop the new segment after resetting the demuxer */
+  GstEvent *demux_switch_eos;   /* EOS to flush the demuxer before switching it */
+  GMutex *demux_switch_lock;    /* Lock for the demuxer switch */
+  GCond *demux_switch_cond;     /* Condition to wait for the EOS on the demuxer switch */
 
   guint64 start_ts;
   gboolean need_pts_sync;
   GstClockTime pts_diff;
-  gboolean signal_no_more_pads;
-  gboolean avdemux_added;
-  gboolean ademux_added;
-  gboolean need_audio_switch;
-  gboolean delay_audio_switch;
-  GstClockTime next_audio_switch;
 };
 
 struct _GstHLSDemuxClass
@@ -165,8 +164,8 @@ struct _GstHLSDemuxClass
 
 GType gst_hls_demux_get_type (void);
 
-void gst_hls_demux_set_adaptation_algorithm_func (GstHLSDemux *demux,
-                                                  GstHLSAdaptationAlgorithmFunc func);
+void gst_hls_demux_set_adaptation_algorithm_func (GstHLSDemux * demux,
+    GstHLSAdaptationAlgorithmFunc func);
 
 G_END_DECLS
 #endif /* __GST_HLS_DEMUX_H__ */

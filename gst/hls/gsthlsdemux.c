@@ -57,17 +57,19 @@
 #include "gsthlsdemux.h"
 #include "gsthlsdemux-marshal.h"
 
-static GstStaticPadTemplate videosrctemplate = GST_STATIC_PAD_TEMPLATE ("video",
+static GstStaticPadTemplate videosrctemplate =
+GST_STATIC_PAD_TEMPLATE ("video%d",
     GST_PAD_SRC,
     GST_PAD_SOMETIMES,
     GST_STATIC_CAPS_ANY);
 
-static GstStaticPadTemplate audiosrctemplate = GST_STATIC_PAD_TEMPLATE ("audio",
+static GstStaticPadTemplate audiosrctemplate =
+GST_STATIC_PAD_TEMPLATE ("audio%d",
     GST_PAD_SRC,
     GST_PAD_SOMETIMES,
     GST_STATIC_CAPS_ANY);
 
-static GstStaticPadTemplate subssrctemplate = GST_STATIC_PAD_TEMPLATE ("subs",
+static GstStaticPadTemplate subssrctemplate = GST_STATIC_PAD_TEMPLATE ("subs%d",
     GST_PAD_SRC,
     GST_PAD_SOMETIMES,
     GST_STATIC_CAPS ("application/x-subtitle-webvtt"));
@@ -182,6 +184,8 @@ static guint gst_hls_demux_signals[LAST_SIGNAL] = { 0 };
 #define GST_HLS_DEMUX_DEMUX_SWITCH_COND_SIGNAL(x) g_cond_signal(x->demux_switch_cond)
 #define GST_HLS_DEMUX_DEMUX_SWITCH_COND_WAIT(x) \
     g_cond_wait (x->demux_switch_cond, x->demux_switch_lock);
+#define GST_HLS_DEMUX_PAD_CHANGED(p) (p->active && p->pad == NULL) ||\
+      (!p->active && p->pad != NULL)
 
 /* GObject */
 static void gst_hls_demux_set_property (GObject * object, guint prop_id,
@@ -225,7 +229,10 @@ static void gst_hls_demux_av_pad_added (GstElement * el, GstPad * pad,
     GstHLSDemux * demux);
 static void gst_hls_demux_audio_pad_added (GstElement * el, GstPad * pad,
     GstHLSDemux * demux);
-static void gst_hls_demux_switch_audio_pads (GstHLSDemux * demux);
+static void gst_hls_demux_switch_pads (GstHLSDemux * demux,
+    GstHLSDemuxPadData * pdata, gboolean new_pads);
+static void gst_hls_demux_no_more_pads_cb (GstElement * el,
+    GstHLSDemux * demux);
 
 static GstHLSDemuxPadData *
 gst_hls_demux_pad_data_new (GstHLSDemux * demux, GstM3U8MediaType type)
@@ -236,22 +243,20 @@ gst_hls_demux_pad_data_new (GstHLSDemux * demux, GstM3U8MediaType type)
   pdata = g_new0 (GstHLSDemuxPadData, 1);
 
   pdata->pad = NULL;
+  pdata->pad_to_link = NULL;
   pdata->type = type;
   if (type == GST_M3U8_MEDIA_TYPE_VIDEO) {
     pdata->signal = &gst_hls_demux_signals[SIGNAL_VIDEO_CHANGED];
     pdata->desc = "video";
-    pdata->pad = gst_ghost_pad_new_no_target_from_template ("video",
-        gst_static_pad_template_get (&videosrctemplate));
+    pdata->pad_template = &videosrctemplate;
   } else if (type == GST_M3U8_MEDIA_TYPE_AUDIO) {
     pdata->signal = &gst_hls_demux_signals[SIGNAL_AUDIO_CHANGED];
     pdata->desc = "audio";
-    pdata->pad = gst_ghost_pad_new_no_target_from_template ("audio",
-        gst_static_pad_template_get (&audiosrctemplate));
+    pdata->pad_template = &audiosrctemplate;
   } else {
     pdata->signal = &gst_hls_demux_signals[SIGNAL_TEXT_CHANGED];
     pdata->desc = "subtitles";
-    pdata->pad = gst_ghost_pad_new_no_target_from_template ("subs",
-        gst_static_pad_template_get (&subssrctemplate));
+    pdata->pad_template = &subssrctemplate;
   }
 
   pdata->current_stream = -1;
@@ -265,7 +270,6 @@ gst_hls_demux_pad_data_new (GstHLSDemux * demux, GstM3U8MediaType type)
   pdata->in_pad = gst_pad_new_from_static_template (&intsrctemplate, pad_name);
   gst_pad_set_element_private (pdata->in_pad, GST_ELEMENT (demux));
   g_free (pad_name);
-
 
   gst_pad_set_event_function (pdata->in_pad, gst_hls_demux_src_event);
   gst_pad_set_query_function (pdata->in_pad, gst_hls_demux_src_query);
@@ -730,18 +734,28 @@ gst_hls_demux_init (GstHLSDemux * demux, GstHLSDemuxClass * klass)
   /* Demuxer for the main stream */
   demux->avdemux = gst_element_factory_make ("decodebin2", "avdemux");
   caps = gst_caps_from_string (GST_HLS_DEMUX_SUPPORTED_AV_CAPS);
-  g_object_set (demux->avdemux, "caps", caps, NULL);
+  g_object_set (demux->avdemux, "caps", caps, "max-size-time",
+      5 * GST_SECOND, NULL);
   gst_caps_unref (caps);
   g_signal_connect (demux->avdemux, "pad-added",
       G_CALLBACK (gst_hls_demux_av_pad_added), demux);
+  g_signal_connect (demux->avdemux, "no-more-pads",
+      G_CALLBACK (gst_hls_demux_no_more_pads_cb), demux);
 
   /* Demuxer for the audio stream */
   demux->ademux = gst_element_factory_make ("decodebin2", "ademux");
   caps = gst_caps_from_string (GST_HLS_DEMUX_SUPPORTED_AUDIO_CAPS);
+  g_object_set (demux->ademux, "caps", caps, "max-size-time",
+      5 * GST_SECOND, NULL);
   g_object_set (demux->ademux, "caps", caps, NULL);
   gst_caps_unref (caps);
   g_signal_connect (demux->ademux, "pad-added",
       G_CALLBACK (gst_hls_demux_audio_pad_added), demux);
+  g_signal_connect (demux->ademux, "no-more-pads",
+      G_CALLBACK (gst_hls_demux_no_more_pads_cb), demux);
+
+  /* Demuxer for the subtitles stream */
+  demux->identity = gst_element_factory_make ("identity", "identity");
 
   demux->demux_switch_cond = g_cond_new ();
   demux->demux_switch_lock = g_mutex_new ();
@@ -945,6 +959,7 @@ gst_hls_demux_seek (GstHLSDemux * demux, gint64 start, gint64 stop,
   if (rate < 0)
     start = stop;
 
+  demux->seek_start = start;
   if (!gst_m3u8_client_seek (demux->client, start)) {
     GST_WARNING_OBJECT (demux, "Could not find seeked fragment");
     return FALSE;
@@ -997,15 +1012,11 @@ gst_hls_demux_seek (GstHLSDemux * demux, gint64 start, gint64 stop,
     gst_hls_demux_push_event (demux, gst_event_new_flush_stop ());
     GST_HLS_DEMUX_DEMUX_SWITCH_LOCK (demux);
     demux->flushing = FALSE;
-    gst_element_set_state (demux->avdemux, GST_STATE_NULL);
-    g_object_ref (demux->avdemux);
-    gst_bin_remove (GST_BIN (demux), demux->avdemux);
-    demux->avdemux_added = FALSE;
     GST_HLS_DEMUX_DEMUX_SWITCH_UNLOCK (demux);
   }
 
   demux->cancelled = FALSE;
-  demux->drop_new_segment = FALSE;
+  demux->seek_pending = TRUE;
   gst_task_start (demux->stream_task);
   g_static_rec_mutex_unlock (&demux->stream_lock);
   return TRUE;
@@ -1349,6 +1360,10 @@ gst_hls_demux_select_stream (GstHLSDemux * demux, GstM3U8MediaType type)
   GST_INFO_OBJECT (demux, "Switch to %s stream %s", pdata->desc, alt_name);
   gst_m3u8_client_set_alternate (demux->client, type, alt_name);
 
+  GST_HLS_DEMUX_PADS_LOCK (demux);
+  demux->stream_changed = TRUE;
+  GST_HLS_DEMUX_PADS_UNLOCK (demux);
+
   g_signal_emit (demux, *(pdata->signal), 0);
 }
 
@@ -1484,8 +1499,9 @@ gst_hls_demux_prepare_pads (GstHLSDemux * demux, GstHLSDemuxPadData * pdata)
   if (G_UNLIKELY (pdata == demux->video_srcpad && !demux->avdemux_added)) {
     /* If we have fragments in the main stream add the demuxer and link our
      * internal pad */
+    GST_DEBUG_OBJECT (demux, "Adding video demuxer");
     gst_bin_add (GST_BIN (demux), demux->avdemux);
-    gst_element_set_state (GST_ELEMENT (demux), GST_STATE_PLAYING);
+    gst_element_set_state (demux->avdemux, GST_STATE_PLAYING);
     gst_pad_link (demux->video_srcpad->in_pad,
         gst_element_get_static_pad (demux->avdemux, "sink"));
     gst_pad_activate_push (demux->video_srcpad->in_pad, TRUE);
@@ -1494,23 +1510,27 @@ gst_hls_demux_prepare_pads (GstHLSDemux * demux, GstHLSDemuxPadData * pdata)
   if (G_UNLIKELY (pdata == demux->audio_srcpad && !demux->ademux_added)) {
     /* If we have fragments in the audio stream add the audio demuxer and link
      * our internal pad */
+    GST_DEBUG_OBJECT (demux, "Adding audio demuxer");
     gst_bin_add (GST_BIN (demux), demux->ademux);
-    gst_element_set_state (GST_ELEMENT (demux), GST_STATE_PLAYING);
+    gst_element_set_state (demux->ademux, GST_STATE_PLAYING);
     gst_pad_link (demux->audio_srcpad->in_pad,
         gst_element_get_static_pad (demux->ademux, "sink"));
     gst_pad_activate_push (demux->audio_srcpad->in_pad, TRUE);
     demux->ademux_added = TRUE;
   }
-  if (G_UNLIKELY (pdata == demux->subtt_srcpad
-          && !demux->subtt_srcpad->pad_added)) {
+  if (G_UNLIKELY (pdata == demux->subtt_srcpad && !demux->identity_added)) {
     /* If we have fragments in the subtitles stream active our internal pad and
      * update the source ghost pad */
-    gst_pad_set_active (demux->subtt_srcpad->pad, TRUE);
-    gst_ghost_pad_set_target (GST_GHOST_PAD (demux->subtt_srcpad->pad),
-        demux->subtt_srcpad->in_pad);
-    gst_element_add_pad (GST_ELEMENT (demux), demux->subtt_srcpad->pad);
-    gst_pad_activate_push (demux->audio_srcpad->in_pad, TRUE);
-    demux->subtt_srcpad->pad_added = TRUE;
+    GST_DEBUG_OBJECT (demux, "Adding subtitles identity");
+    gst_bin_add (GST_BIN (demux), demux->identity);
+    gst_element_set_state (demux->identity, GST_STATE_PLAYING);
+    gst_pad_link (demux->subtt_srcpad->in_pad,
+        gst_element_get_static_pad (demux->identity, "sink"));
+    demux->subtt_srcpad->pad_to_link =
+        gst_element_get_static_pad (demux->identity, "src");
+    demux->subtt_srcpad->active = TRUE;
+    demux->subtt_srcpad->is_eos = FALSE;
+    demux->identity_added = TRUE;
   }
 }
 
@@ -1541,27 +1561,7 @@ gst_hls_demux_push_fragment (GstHLSDemux * demux, GstM3U8MediaType type)
 
   gst_hls_demux_prepare_pads (demux, pdata);
   need_segment = pdata->need_segment;
-  pdata->need_segment = FALSE;
   GST_HLS_DEMUX_PADS_UNLOCK (demux);
-
-  /* In some HLS streams, the PID's for audio and video are switched in the
-   * different bitrate alternative. This makes it impossible to concatenate
-   * the MPEG-TS stream for 2 different bandwiths in this case as the PID can
-   * be inverted and the muxer ends up pushing audio buffers from the video pad
-   * Before doing a bitrate switch or after a discont, we must flush all the
-   * pending data in the demuxer and reset it to make it parse the new PMT table
-   * with the new PID's and create the new pads. */
-  if (fragment->discontinuous && type == GST_M3U8_MEDIA_TYPE_VIDEO) {
-    demux->demux_switch_eos = gst_event_new_eos ();
-    gst_pad_push_event (pdata->in_pad, gst_event_ref (demux->demux_switch_eos));
-    GST_HLS_DEMUX_DEMUX_SWITCH_COND_WAIT (demux);
-    if (!demux->flushing) {
-      gst_element_set_state (demux->avdemux, GST_STATE_READY);
-      gst_element_sync_state_with_parent (demux->avdemux);
-      gst_event_replace (&demux->demux_switch_eos, NULL);
-      demux->drop_new_segment = TRUE;
-    }
-  }
 
   buffer_list = gst_fragment_get_buffer_list (fragment);
   /* Work with the first buffer of the list */
@@ -1573,23 +1573,41 @@ gst_hls_demux_push_fragment (GstHLSDemux * demux, GstM3U8MediaType type)
       GST_TIME_ARGS (GST_BUFFER_DURATION (buf))
       );
 
-  g_object_unref (fragment);
+  if (demux->newsegment == NULL) {
+    demux->newsegment =
+        gst_event_new_new_segment (FALSE, demux->rate, GST_FORMAT_TIME,
+        fragment->start_time, GST_CLOCK_TIME_NONE, fragment->start_time);
+  }
 
   if (need_segment) {
     gint64 start;
+    GstEvent *event;
 
-    gst_event_parse_new_segment (demux->newsegment, NULL, NULL, NULL, &start,
-        NULL, NULL);
-    /* And send a newsegment */
-    GST_DEBUG_OBJECT (demux, "Sending new-segment. segment start:%"
-        GST_TIME_FORMAT, GST_TIME_ARGS (start));
-    demux->drop_new_segment = FALSE;
-    gst_pad_push_event (pdata->in_pad, gst_event_ref (demux->newsegment));
+    /* The mpegts demuxer will create its own newsegment events for dummy
+     * segments or forward the upstream newsegment event assuming that upstream
+     * knows about the timestamps in the stream.
+     * When a seek happens, for instance with a start time of 0:20:00,000
+     * the demuxer will forward it. If the PTS diff is 0:30:00,000, the first
+     * buffer pushed by the demuxer will have a TS of 0:50:00,000 which will
+     * fill immediately the multiqueue thinking it has already 0:30:00,000 of
+     * buffers and only one of the pads of the demuxer will be exposed.
+     * In this case we let the demuxer create its own segment*/
+    if (pdata->type != GST_M3U8_MEDIA_TYPE_VIDEO) {
+      event = gst_event_ref (demux->newsegment);
+      gst_event_parse_new_segment (event, NULL, NULL, NULL, &start, NULL, NULL);
+      /* And send a newsegment */
+      GST_DEBUG_OBJECT (demux, "Sending new-segment. segment start:%"
+          GST_TIME_FORMAT, GST_TIME_ARGS (start));
+      gst_pad_push_event (pdata->in_pad, event);
+    }
   }
+  g_object_unref (fragment);
 
   ret = gst_pad_push_list (pdata->in_pad, buffer_list);
   if (ret != GST_FLOW_OK) {
-    if (ret == GST_FLOW_NOT_LINKED || ret < GST_FLOW_UNEXPECTED) {
+    if (ret == GST_FLOW_NOT_LINKED && type == GST_M3U8_MEDIA_TYPE_SUBTITLES) {
+      GST_WARNING_OBJECT (demux, "stream stopped, subtitles not linked");
+    } else if (ret == GST_FLOW_NOT_LINKED || ret < GST_FLOW_UNEXPECTED) {
       GST_ELEMENT_ERROR (demux, STREAM, FAILED, (NULL),
           ("stream stopped, reason %s", gst_flow_get_name (ret)));
       gst_hls_demux_push_event (demux, gst_event_new_eos ());
@@ -1603,41 +1621,22 @@ gst_hls_demux_push_fragment (GstHLSDemux * demux, GstM3U8MediaType type)
   return TRUE;
 }
 
-static void
-gst_hls_demux_check_for_audio_switch (GstHLSDemux * demux)
+static gboolean
+gst_hls_demux_check_for_discont (GstHLSDemux * demux)
 {
-  GstFragment *afrag, *vfrag;
-  GstHLSDemuxPadData *pdata = demux->audio_srcpad;
-  gboolean switched = FALSE;
+  GstFragment *afrag, *vfrag, *sfrag;
 
-  if (pdata->active_pad == NULL)
-    return;
-
-  afrag = GST_FRAGMENT (g_queue_peek_head (pdata->queue));
   vfrag = GST_FRAGMENT (g_queue_peek_head (demux->video_srcpad->queue));
+  afrag = GST_FRAGMENT (g_queue_peek_head (demux->audio_srcpad->queue));
+  sfrag = GST_FRAGMENT (g_queue_peek_head (demux->audio_srcpad->queue));
 
-  if (!g_strcmp0 (afrag->name, GST_HLS_DEMUX_EMPTY_FRAGMENT)) {
-    if (pdata->active_pad == pdata->alt_pad) {
-      switched = TRUE;
-    }
-  } else if (pdata->active_pad == pdata->main_pad) {
-    switched = TRUE;
-  }
-
-  if (switched) {
-    demux->next_audio_switch = vfrag->start_time;
-    GST_ERROR_OBJECT (demux, "Switching audio stream at %" GST_TIME_FORMAT,
-        GST_TIME_ARGS (demux->next_audio_switch));
-  }
+  return vfrag->discontinuous || afrag->discontinuous || sfrag->discontinuous;
 }
 
 static void
 gst_hls_demux_push_video_fragment (GstHLSDemux * demux)
 {
-  GST_HLS_DEMUX_DEMUX_SWITCH_LOCK (demux);
-  if (G_LIKELY (!demux->flushing))
-    gst_hls_demux_push_fragment (demux, GST_M3U8_MEDIA_TYPE_VIDEO);
-  GST_HLS_DEMUX_DEMUX_SWITCH_UNLOCK (demux);
+  gst_hls_demux_push_fragment (demux, GST_M3U8_MEDIA_TYPE_VIDEO);
 }
 
 static void
@@ -1652,10 +1651,73 @@ gst_hls_demux_push_subtt_fragment (GstHLSDemux * demux)
   gst_hls_demux_push_fragment (demux, GST_M3U8_MEDIA_TYPE_SUBTITLES);
 }
 
+static gboolean
+gst_hls_demux_push_eos (GstHLSDemux * demux)
+{
+  if (demux->avdemux_added) {
+    gst_pad_push_event (demux->video_srcpad->in_pad,
+        gst_event_ref (demux->demux_switch_eos));
+  }
+  if (demux->ademux_added) {
+    gst_pad_push_event (demux->audio_srcpad->in_pad,
+        gst_event_ref (demux->demux_switch_eos));
+  }
+  return FALSE;
+}
+
+static void
+gst_hls_demux_drain_streams (GstHLSDemux * demux)
+{
+  GST_HLS_DEMUX_DEMUX_SWITCH_LOCK (demux);
+
+  demux->demux_switch_eos = gst_event_new_eos ();
+  /* This can block for the audio stream so it needs to be pushed from a
+   * different thread and the main thread can't be used either */
+  g_thread_new ("eos", (GThreadFunc) gst_hls_demux_push_eos, demux);
+  GST_HLS_DEMUX_DEMUX_SWITCH_COND_WAIT (demux);
+
+  if (demux->flushing) {
+    GST_HLS_DEMUX_DEMUX_SWITCH_UNLOCK (demux);
+    return;
+  }
+  gst_event_replace (&demux->demux_switch_eos, NULL);
+  GST_HLS_DEMUX_DEMUX_SWITCH_UNLOCK (demux);
+
+  GST_HLS_DEMUX_PADS_LOCK (demux);
+  if (demux->avdemux_added) {
+    GST_DEBUG_OBJECT (demux, "Removing video demuxer");
+    g_object_ref (demux->avdemux);
+    gst_element_set_state (demux->avdemux, GST_STATE_READY);
+    gst_bin_remove (GST_BIN (demux), demux->avdemux);
+    demux->avdemux_added = FALSE;
+  }
+  if (demux->ademux_added) {
+    GST_DEBUG_OBJECT (demux, "Removing audio demuxer");
+    g_object_ref (demux->ademux);
+    gst_element_set_state (demux->ademux, GST_STATE_READY);
+    gst_bin_remove (GST_BIN (demux), demux->ademux);
+    demux->ademux_added = FALSE;
+  }
+  if (demux->identity_added) {
+    GST_DEBUG_OBJECT (demux, "Removing subtitles identity");
+    g_object_ref (demux->identity);
+    gst_element_set_state (demux->identity, GST_STATE_READY);
+    gst_bin_remove (GST_BIN (demux), demux->identity);
+    demux->identity_added = FALSE;
+  }
+  demux->avdemux_no_more_pads = FALSE;
+  demux->ademux_no_more_pads = FALSE;
+  demux->video_srcpad->active = FALSE;
+  demux->audio_srcpad->active = FALSE;
+  demux->subtt_srcpad->active = FALSE;
+  GST_HLS_DEMUX_PADS_UNLOCK (demux);
+}
+
 static void
 gst_hls_demux_stream_loop (GstHLSDemux * demux)
 {
   GThread *video_thread, *audio_thread, *subtt_thread;
+  gboolean discont = FALSE;
 
   /* Loop for the source pad task. The task is started when we have
    * received the main playlist from the source element. It tries first to
@@ -1684,18 +1746,24 @@ gst_hls_demux_stream_loop (GstHLSDemux * demux)
 
   if (!demux->i_frames_mode) {
     /* Wait until we have fetched all fragments for the current sequence. This can
-     * happend when the video fragment has been already downloaded and the audio
+     * happen when the video fragment has been already downloaded and the audio
      * is being downloaded. We pause the task and will be started by the updates
      * thread when the download finished. */
     if (g_queue_get_length (demux->video_srcpad->queue) !=
         g_queue_get_length (demux->audio_srcpad->queue))
       goto pause_task;
 
-    /* Check if we need to switch audio for this fragment */
-    if (demux->need_audio_switch)
-      gst_hls_demux_check_for_audio_switch (demux);
+    /* Check if there is any discontinuity in the stream */
+    discont = gst_hls_demux_check_for_discont (demux);
   }
   GST_HLS_DEMUX_PADS_UNLOCK (demux);
+
+  if (discont) {
+    gst_hls_demux_drain_streams (demux);
+    if (!demux->seek_pending)
+      gst_event_replace (&demux->newsegment, NULL);
+    demux->seek_pending = FALSE;
+  }
 
   video_thread =
       g_thread_new ("video", (GThreadFunc) gst_hls_demux_push_video_fragment,
@@ -1763,12 +1831,10 @@ gst_hls_demux_reset (GstHLSDemux * demux, gboolean dispose)
   demux->need_pts_sync = TRUE;
   demux->pts_diff = 0;
   demux->start_ts = GST_CLOCK_TIME_NONE;
-  demux->signal_no_more_pads = TRUE;
-  demux->need_audio_switch = FALSE;
-  demux->next_audio_switch = GST_CLOCK_TIME_NONE;
-  demux->delay_audio_switch = FALSE;
   demux->bitrate_switched = FALSE;
-  demux->drop_new_segment = FALSE;
+  demux->stream_changed = FALSE;
+  demux->seek_pending = FALSE;
+  demux->seek_start = GST_CLOCK_TIME_NONE;
   gst_event_replace (&demux->newsegment, NULL);
   gst_event_replace (&demux->demux_switch_eos, NULL);
 
@@ -1783,6 +1849,12 @@ gst_hls_demux_reset (GstHLSDemux * demux, gboolean dispose)
       gst_object_ref (demux->ademux);
     gst_bin_remove (GST_BIN (demux), demux->ademux);
     demux->ademux_added = FALSE;
+  }
+  if (demux->identity_added) {
+    if (!dispose)
+      gst_object_ref (demux->identity);
+    gst_bin_remove (GST_BIN (demux), demux->identity);
+    demux->identity_added = FALSE;
   }
 
   gst_hls_demux_pad_data_reset (demux->video_srcpad);
@@ -1949,6 +2021,15 @@ gst_hls_demux_cache_fragments (GstHLSDemux * demux)
 
   if (!gst_hls_demux_update_playlist (demux, FALSE)) {
     return FALSE;
+  }
+
+  if (demux->seek_start != GST_CLOCK_TIME_NONE) {
+    /* We need to seek again since we might have added new playlists */
+    if (!gst_m3u8_client_seek (demux->client, demux->seek_start)) {
+      GST_WARNING_OBJECT (demux, "Could not find seeked fragment");
+      return FALSE;
+    }
+    demux->seek_start = GST_CLOCK_TIME_NONE;
   }
 
   if (demux->newsegment == NULL) {
@@ -2503,11 +2584,18 @@ gst_hls_demux_get_next_fragment (GstHLSDemux * demux, gboolean caching)
           GST_M3U8_MEDIA_TYPE_SUBTITLES))
     goto error;
 
-  if (demux->bitrate_switched) {
+  if (demux->bitrate_switched || demux->stream_changed) {
     if (v_fragment != NULL) {
       v_fragment->discontinuous = TRUE;
-      demux->bitrate_switched = FALSE;
     }
+    if (a_fragment != NULL) {
+      a_fragment->discontinuous = TRUE;
+    }
+    if (s_fragment != NULL) {
+      s_fragment->discontinuous = TRUE;
+    }
+    demux->bitrate_switched = FALSE;
+    demux->stream_changed = FALSE;
   }
 
 start_streaming:
@@ -2543,31 +2631,20 @@ gst_hls_demux_proxy_newsegment (GstPad * pad, GstEvent * event,
   gboolean ret = FALSE;
 
   if (event->type == GST_EVENT_NEWSEGMENT) {
-    GST_HLS_DEMUX_PADS_LOCK (demux);
-    if (demux->drop_new_segment) {
-      GST_HLS_DEMUX_PADS_UNLOCK (demux);
+    /* For live streams where seeking is not supported forward the upstreams
+     * events */
+    if (gst_m3u8_client_is_live (demux->client)) {
+      ret = TRUE;
       goto exit;
     }
-    /* Discard new segments from the audio pad that's not active */
-    if (pdata == demux->audio_srcpad) {
-      if (pdata->active_pad == pdata->alt_pad) {
-        GstElement *parent = gst_pad_get_parent_element (pad);
-        if (parent == demux->avdemux &&
-            !GST_CLOCK_TIME_IS_VALID (demux->next_audio_switch)) {
-          gst_object_unref (parent);
-          GST_HLS_DEMUX_PADS_UNLOCK (demux);
-          goto exit;
-        }
-        gst_object_unref (parent);
+    if (pdata->need_segment) {
+      /* Override new segments created by other elements */
+      if (event != demux->newsegment) {
+        gst_pad_push_event (pdata->pad, gst_event_ref (demux->newsegment));
+      } else {
+        gst_pad_push_event (pdata->pad, gst_event_ref (event));
       }
-    }
-    GST_HLS_DEMUX_PADS_UNLOCK (demux);
-
-    /* Override new segments created by other elements */
-    if (event != demux->newsegment) {
-      gst_pad_push_event (pdata->pad, gst_event_ref (demux->newsegment));
-    } else {
-      gst_pad_push_event (pdata->pad, gst_event_ref (event));
+      pdata->need_segment = FALSE;
     }
     goto exit;
   }
@@ -2575,14 +2652,17 @@ gst_hls_demux_proxy_newsegment (GstPad * pad, GstEvent * event,
 
   if (event->type == GST_EVENT_EOS) {
     gboolean signal_drained;
+
     GST_HLS_DEMUX_PADS_LOCK (demux);
     if (event == demux->demux_switch_eos) {
+      GST_LOG_OBJECT (demux, "Got EOS on %s pad", pdata->desc);
       pdata->is_eos = TRUE;
       ret = FALSE;
     }
     signal_drained = demux->audio_srcpad->is_eos && demux->video_srcpad->is_eos;
     GST_HLS_DEMUX_PADS_UNLOCK (demux);
     if (signal_drained) {
+      GST_LOG_OBJECT (demux, "Signaling drained");
       GST_HLS_DEMUX_DEMUX_SWITCH_LOCK (demux);
       GST_HLS_DEMUX_DEMUX_SWITCH_COND_SIGNAL (demux);
       GST_HLS_DEMUX_DEMUX_SWITCH_UNLOCK (demux);
@@ -2610,11 +2690,19 @@ gst_hls_demux_proxy_newsegment_audio (GstPad * pad, GstEvent * event,
 }
 
 static gboolean
+gst_hls_demux_proxy_newsegment_subtt (GstPad * pad, GstEvent * event,
+    GstHLSDemux * demux)
+{
+  return gst_hls_demux_proxy_newsegment (pad, event, demux,
+      demux->subtt_srcpad);
+}
+
+static gboolean
 gst_hls_demux_retimestamp (GstPad * pad, GstBuffer * buffer,
     GstHLSDemux * demux, const gchar * type)
 {
   if (GST_BUFFER_TIMESTAMP_IS_VALID (buffer)) {
-    if (G_UNLIKELY (demux->need_pts_sync)) {
+    if (G_UNLIKELY (demux->need_pts_sync) && demux->avdemux_added) {
       demux->pts_diff = GST_BUFFER_TIMESTAMP (buffer) - demux->start_ts;
       demux->need_pts_sync = FALSE;
       GST_DEBUG_OBJECT (demux, "PTS diff is %" GST_TIME_FORMAT,
@@ -2637,24 +2725,6 @@ gst_hls_demux_audio_retimestamp (GstPad * pad, GstBuffer * buffer,
 
   ret = gst_hls_demux_retimestamp (pad, buffer, demux, "audio");
 
-  GST_HLS_DEMUX_PADS_LOCK (demux);
-
-  if (GST_CLOCK_TIME_IS_VALID (demux->next_audio_switch) &&
-      GST_BUFFER_TIMESTAMP_IS_VALID (buffer) &&
-      GST_BUFFER_TIMESTAMP (buffer) >= demux->next_audio_switch) {
-    if (demux->audio_srcpad->alt_pad == NULL) {
-      GST_DEBUG_OBJECT (demux, "Delaying audio pad switch");
-      demux->delay_audio_switch = TRUE;
-    } else {
-      gst_hls_demux_switch_audio_pads (demux);
-    }
-    demux->next_audio_switch = GST_CLOCK_TIME_NONE;
-  }
-
-  if (demux->delay_audio_switch)
-    ret = FALSE;
-
-  GST_HLS_DEMUX_PADS_UNLOCK (demux);
   return ret;
 }
 
@@ -2666,40 +2736,125 @@ gst_hls_demux_video_retimestamp (GstPad * pad, GstBuffer * buffer,
 }
 
 static void
-gst_hls_demux_switch_audio_pads (GstHLSDemux * demux)
+gst_hls_demux_pad_blocked (GstElement * el, GstPad * pad)
 {
-  GstPad *new_pad, *old_pad;
-  GstHLSDemuxPadData *pdata = demux->audio_srcpad;
-
-  if (pdata->active_pad == pdata->main_pad) {
-    new_pad = pdata->alt_pad;
-    old_pad = pdata->main_pad;
-  } else {
-    new_pad = pdata->main_pad;
-    old_pad = pdata->alt_pad;
-  }
-  pdata->active_pad = new_pad;
-  gst_ghost_pad_set_target (GST_GHOST_PAD (pdata->pad), new_pad);
-  if (new_pad == pdata->main_pad) {
-    gst_element_set_state (GST_ELEMENT (demux->ademux), GST_STATE_NULL);
-    gst_object_ref (demux->ademux);
-    gst_bin_remove (GST_BIN (demux), demux->ademux);
-    demux->ademux_added = FALSE;
-    pdata->alt_pad = NULL;
-  }
-  GST_DEBUG_OBJECT (demux, "Switching audio pads %s:%s -> %s:%s",
-      GST_DEBUG_PAD_NAME (old_pad), GST_DEBUG_PAD_NAME (new_pad));
+  /* We don't need to do anything here, but we want to block async and a
+   * callback is needed instead of NULL */
 }
 
 static void
-gst_hls_demux_no_more_pads (GstHLSDemux * demux)
+gst_hls_demux_drain_pad (GstHLSDemux * demux, GstHLSDemuxPadData * pdata,
+    GstPad * pad)
 {
-  /* FIXME: Handle video only streams */
-  if (G_UNLIKELY (demux->signal_no_more_pads) &&
-      demux->video_srcpad->pad_added && demux->audio_srcpad->pad_added) {
-    gst_element_no_more_pads (GST_ELEMENT (demux));
-    demux->signal_no_more_pads = FALSE;
+  if (pad == NULL)
+    return;
+
+  /* Push out EOS */
+  GST_DEBUG_OBJECT (demux, "Draining %s pad", pdata->desc);
+  gst_pad_push_event (pad, gst_event_new_eos ());
+  gst_pad_set_active (pad, FALSE);
+  gst_element_remove_pad (GST_ELEMENT (demux), pad);
+  pdata->pad_added = FALSE;
+}
+
+static void
+gst_hls_demux_switch_pads (GstHLSDemux * demux, GstHLSDemuxPadData * pdata,
+    gboolean new_pads)
+{
+  GstPad *pad;
+  GstPad *oldpad = NULL;
+
+  GST_DEBUG ("Switching %s pads", pdata->desc);
+
+  pad = pdata->pad_to_link;
+  if (new_pads || !pdata->active) {
+    oldpad = pdata->pad;
   }
+
+  if (pdata->active) {
+    if (new_pads) {
+      pdata->pad = gst_ghost_pad_new_no_target_from_template (NULL,
+          gst_static_pad_template_get (pdata->pad_template));
+    }
+    if (pdata->type == GST_M3U8_MEDIA_TYPE_VIDEO) {
+      gst_pad_add_event_probe (pad,
+          G_CALLBACK (gst_hls_demux_proxy_newsegment_video), demux);
+    } else if (pdata->type == GST_M3U8_MEDIA_TYPE_AUDIO) {
+      gst_pad_add_event_probe (pad,
+          G_CALLBACK (gst_hls_demux_proxy_newsegment_audio), demux);
+    } else if (pdata->type == GST_M3U8_MEDIA_TYPE_SUBTITLES) {
+      gst_pad_add_event_probe (pad,
+          G_CALLBACK (gst_hls_demux_proxy_newsegment_subtt), demux);
+    }
+    gst_pad_set_active (pdata->pad, TRUE);
+    gst_ghost_pad_set_target (GST_GHOST_PAD (pdata->pad), pad);
+    gst_pad_set_blocked_async (pad, FALSE,
+        (GstPadBlockCallback) gst_hls_demux_pad_blocked, NULL);
+    if (new_pads) {
+      gst_element_add_pad (GST_ELEMENT (demux), pdata->pad);
+    }
+    pdata->pad_added = TRUE;
+  }
+
+  if (oldpad) {
+    gst_hls_demux_drain_pad (demux, pdata, oldpad);
+  }
+}
+
+static inline void
+_prepare_new_pad (GstHLSDemuxPadData * pdata, GstPad * pad)
+{
+  pdata->is_eos = FALSE;
+  pdata->active = TRUE;
+  pdata->pad_to_link = pad;
+  gst_pad_set_blocked_async (pad, TRUE,
+      (GstPadBlockCallback) gst_hls_demux_pad_blocked, NULL);
+}
+
+static void
+gst_hls_demux_no_more_pads_cb (GstElement * el, GstHLSDemux * demux)
+{
+  gboolean new_pads = FALSE;
+
+  if (el == demux->avdemux) {
+    demux->avdemux_no_more_pads = TRUE;
+  } else if (el == demux->ademux) {
+    demux->ademux_no_more_pads = TRUE;
+  }
+
+  if ((demux->avdemux_added && !demux->avdemux_no_more_pads) ||
+      (demux->ademux_added && !demux->ademux_no_more_pads)) {
+    GST_DEBUG_OBJECT (demux, "Waiting for the no-more-pads signal in the "
+        "other demuxer");
+    return;
+  }
+
+  /* Check if the topology of the stream changed and video/audio/subtt
+   * pads are going to be added or removed with respect of the last state */
+  if (GST_HLS_DEMUX_PAD_CHANGED (demux->video_srcpad) ||
+      GST_HLS_DEMUX_PAD_CHANGED (demux->audio_srcpad) ||
+      GST_HLS_DEMUX_PAD_CHANGED (demux->subtt_srcpad)) {
+    new_pads = TRUE;
+    GST_DEBUG_OBJECT (demux, "Stream topology changed, creating a new decoding"
+        " chain");
+  } else {
+    GST_DEBUG_OBJECT (demux, "Keeping old pads");
+  }
+
+  gst_hls_demux_switch_pads (demux, demux->video_srcpad, new_pads);
+  gst_hls_demux_switch_pads (demux, demux->audio_srcpad, new_pads);
+  gst_hls_demux_switch_pads (demux, demux->subtt_srcpad, new_pads);
+  if (!demux->video_srcpad->active) {
+    demux->video_srcpad->pad = NULL;
+  }
+  if (!demux->audio_srcpad->active) {
+    demux->audio_srcpad->pad = NULL;
+  }
+  if (!demux->subtt_srcpad->active) {
+    demux->subtt_srcpad->pad = NULL;
+  }
+
+  gst_element_no_more_pads (GST_ELEMENT (demux));
 }
 
 static void
@@ -2707,29 +2862,7 @@ gst_hls_demux_audio_pad_added (GstElement * el, GstPad * pad,
     GstHLSDemux * demux)
 {
   GST_HLS_DEMUX_PADS_LOCK (demux);
-
-  gst_pad_add_event_probe (pad,
-      G_CALLBACK (gst_hls_demux_proxy_newsegment_audio), demux);
-
-  if (!demux->need_audio_switch) {
-    gst_pad_set_active (demux->audio_srcpad->pad, TRUE);
-    gst_ghost_pad_set_target (GST_GHOST_PAD (demux->audio_srcpad->pad), pad);
-    if (!demux->audio_srcpad->pad_added)
-      gst_element_add_pad (GST_ELEMENT (demux), demux->audio_srcpad->pad);
-    demux->audio_srcpad->pad_added = TRUE;
-    demux->audio_srcpad->main_pad = pad;
-    demux->audio_srcpad->active_pad = pad;
-  } else {
-    demux->audio_srcpad->alt_pad = pad;
-    GST_DEBUG_OBJECT (demux, "Alternative audio pad added");
-    if (demux->delay_audio_switch) {
-      gst_hls_demux_switch_audio_pads (demux);
-      demux->delay_audio_switch = FALSE;
-    }
-  }
-
-  gst_hls_demux_no_more_pads (demux);
-
+  _prepare_new_pad (demux->audio_srcpad, pad);
   GST_HLS_DEMUX_PADS_UNLOCK (demux);
 }
 
@@ -2747,42 +2880,28 @@ gst_hls_demux_av_pad_added (GstElement * el, GstPad * pad, GstHLSDemux * demux)
   GST_HLS_DEMUX_PADS_LOCK (demux);
 
   if (g_str_has_prefix (mime, "audio")) {
+    if (demux->ademux_added) {
+      GST_DEBUG_OBJECT (demux, "Skipping unused audio pad");
+      goto exit;
+    }
     /* The main stream has an audio track muxed */
     GST_DEBUG_OBJECT (demux, "New audio stream with caps %" GST_PTR_FORMAT,
         caps);
-    demux->need_audio_switch = TRUE;
-    demux->audio_srcpad->is_eos = FALSE;
-    demux->audio_srcpad->main_pad = pad;
-    demux->audio_srcpad->active_pad = pad;
-    gst_pad_set_active (demux->audio_srcpad->pad, TRUE);
-    gst_ghost_pad_set_target (GST_GHOST_PAD (demux->audio_srcpad->pad), pad);
-    if (!demux->audio_srcpad->pad_added)
-      gst_element_add_pad (GST_ELEMENT (demux), demux->audio_srcpad->pad);
-    demux->audio_srcpad->pad_added = TRUE;
-    gst_pad_add_buffer_probe (pad, G_CALLBACK (gst_hls_demux_audio_retimestamp),
-        demux);
-    gst_pad_add_event_probe (pad,
-        G_CALLBACK (gst_hls_demux_proxy_newsegment_audio), demux);
+    _prepare_new_pad (demux->audio_srcpad, pad);
+    if (!gst_m3u8_client_is_live (demux->client)) {
+      gst_pad_add_buffer_probe (pad,
+          G_CALLBACK (gst_hls_demux_audio_retimestamp), demux);
+    }
   } else if (g_str_has_prefix (mime, "video")) {
-    /* This pad is added for the video track and proxied using the video source
-     * ghost pad */
+    /* The main stream has a video track muxed */
     GST_DEBUG_OBJECT (demux, "New video stream with caps %" GST_PTR_FORMAT,
         caps);
-    demux->video_srcpad->is_eos = FALSE;
-    demux->video_srcpad->active_pad = pad;
-    gst_ghost_pad_set_target (GST_GHOST_PAD (demux->video_srcpad->pad), pad);
-    gst_pad_set_active (demux->video_srcpad->pad, TRUE);
-    if (!demux->video_srcpad->pad_added)
-      gst_element_add_pad (GST_ELEMENT (demux), demux->video_srcpad->pad);
-    demux->video_srcpad->pad_added = TRUE;
-    gst_pad_add_buffer_probe (pad, G_CALLBACK (gst_hls_demux_video_retimestamp),
-        demux);
-    gst_pad_add_event_probe (pad,
-        G_CALLBACK (gst_hls_demux_proxy_newsegment_video), demux);
-  } else {
-    goto exit;
+    _prepare_new_pad (demux->video_srcpad, pad);
+    if (!gst_m3u8_client_is_live (demux->client)) {
+      gst_pad_add_buffer_probe (pad,
+          G_CALLBACK (gst_hls_demux_video_retimestamp), demux);
+    }
   }
-  gst_hls_demux_no_more_pads (demux);
 
 exit:
   GST_HLS_DEMUX_PADS_UNLOCK (demux);
