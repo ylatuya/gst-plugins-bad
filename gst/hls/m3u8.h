@@ -176,7 +176,9 @@ gboolean gst_m3u8_client_parse_main_playlist          (GstM3U8Client * self,
 gboolean gst_m3u8_client_update                       (GstM3U8Client * client,
                                                        gchar * video_pl,
                                                        gchar * audio_pl,
-                                                       gchar * subtt_pl);
+                                                       gchar * subtt_pl,
+						       gboolean *updated
+						       );
 
 gboolean gst_m3u8_client_update_i_frame               (GstM3U8Client * client,
                                                        gchar * iframe_pl);
