@@ -350,8 +350,6 @@ gst_uri_downloader_set_uri (GstUriDownloader * downloader, const gchar * uri)
     /* add a sync handler for the bus messages to detect errors in the download */
     gst_element_set_bus (GST_ELEMENT (downloader->priv->urisrc),
         downloader->priv->bus);
-    gst_bus_set_sync_handler (downloader->priv->bus,
-        gst_uri_downloader_bus_handler, downloader);
 
     pad = gst_element_get_static_pad (downloader->priv->urisrc, "src");
     if (!pad)
@@ -359,6 +357,8 @@ gst_uri_downloader_set_uri (GstUriDownloader * downloader, const gchar * uri)
     gst_pad_link (pad, downloader->priv->pad);
     gst_object_unref (pad);
   }
+  gst_bus_set_sync_handler (downloader->priv->bus,
+      gst_uri_downloader_bus_handler, downloader);
   gst_uri_handler_set_uri (GST_URI_HANDLER (downloader->priv->urisrc), uri);
 
   return TRUE;
@@ -433,6 +433,8 @@ gst_uri_downloader_fetch_fragment (GstUriDownloader * downloader,
   download = downloader->priv->download;
   downloader->priv->download = NULL;
   GST_OBJECT_UNLOCK (downloader);
+
+  gst_bus_set_sync_handler (downloader->priv->bus, NULL, NULL);
 
   if (download != NULL)
     GST_INFO_OBJECT (downloader, "URI fetched successfully");
