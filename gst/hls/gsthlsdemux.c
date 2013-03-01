@@ -1911,10 +1911,9 @@ gst_hls_demux_updates_loop (GstHLSDemux * demux)
     if (!gst_hls_demux_update_playlist (demux, TRUE)) {
       if (demux->cancelled)
         goto quit;
-      demux->client->update_failed_count++;
       if (demux->client->update_failed_count < DEFAULT_FAILED_COUNT) {
-        GST_WARNING_OBJECT (demux, "Could not update the playlist");
-        continue;
+        GST_WARNING_OBJECT (demux, "Could not update the playlist failed:%d",
+            demux->client->update_failed_count);
       } else {
         GST_ELEMENT_ERROR (demux, RESOURCE, NOT_FOUND,
             ("Could not update the playlist"), (NULL));
@@ -1931,17 +1930,6 @@ gst_hls_demux_updates_loop (GstHLSDemux * demux)
       goto resume_playback;
     }
 
-    /* if it's a live source and the playlist couldn't be updated, there aren't
-     * more fragments in the playlist, so we just wait for the next schedulled
-     * update */
-    if (gst_m3u8_client_is_live (demux->client) &&
-        demux->client->update_failed_count > 0) {
-      GST_WARNING_OBJECT (demux,
-          "The playlist hasn't been updated, failed count is %d",
-          demux->client->update_failed_count);
-      continue;
-    }
-
     if (demux->cancelled)
       goto quit;
 
@@ -1950,7 +1938,6 @@ gst_hls_demux_updates_loop (GstHLSDemux * demux)
       if (demux->cancelled) {
         goto quit;
       } else if (!demux->end_of_playlist && !demux->cancelled) {
-        demux->client->update_failed_count++;
         if (demux->client->update_failed_count < DEFAULT_FAILED_COUNT) {
           GST_WARNING_OBJECT (demux, "Could not fetch the next fragment");
           continue;
@@ -1961,8 +1948,6 @@ gst_hls_demux_updates_loop (GstHLSDemux * demux)
         }
       }
     } else {
-      demux->client->update_failed_count = 0;
-
       if (demux->cancelled)
         goto quit;
 
@@ -2176,8 +2161,10 @@ gst_hls_demux_update_playlist (GstHLSDemux * demux, gboolean update)
       return FALSE;
     s_playlist = gst_hls_demux_get_playlist_from_fragment (demux, download);
   }
-  updated = gst_m3u8_client_update (demux->client, v_playlist, a_playlist,
-      s_playlist);
+  if (!gst_m3u8_client_update (demux->client, v_playlist, a_playlist,
+          s_playlist, &updated)) {
+    return FALSE;
+  }
 
   /*  If it's a live source, do not let the sequence number go beyond
    * three fragments before the end of the list */
@@ -2187,7 +2174,9 @@ gst_hls_demux_update_playlist (GstHLSDemux * demux, gboolean update)
     }
   }
 
-  return updated;
+  if (update)
+    return updated;
+  return TRUE;
 }
 
 static gboolean
@@ -2559,7 +2548,9 @@ gst_hls_demux_get_next_fragment (GstHLSDemux * demux, gboolean caching)
   if (!gst_m3u8_client_get_next_fragment (demux->client, &v_fragment,
           &a_fragment, &s_fragment)) {
     GST_INFO_OBJECT (demux, "This playlist doesn't contain more fragments");
-    demux->end_of_playlist = TRUE;
+    if (!gst_m3u8_client_is_live (demux->client)) {
+      demux->end_of_playlist = TRUE;
+    }
     gst_task_start (demux->stream_task);
     return FALSE;
   }

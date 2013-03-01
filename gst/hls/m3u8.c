@@ -981,7 +981,7 @@ gst_m3u8_playlist_update (GstM3U8Playlist * self, gchar * data,
   gchar *title = NULL, *end = NULL;
 //  gboolean discontinuity;
   gint64 offset = -1, length = -1, acc_offset = 0;
-  gchar *key_url = NULL, *iv = NULL;
+  gchar *key_url = NULL, *iv = NULL, *data_ptr = NULL;
   gint mediasequence = 0;
   GstFragmentEncodingMethod enc_method = GST_FRAGMENT_ENCODING_METHOD_NONE;
 
@@ -1007,7 +1007,8 @@ gst_m3u8_playlist_update (GstM3U8Playlist * self, gchar * data,
   }
 
   g_free (self->last_data);
-  self->last_data = data;
+  self->last_data = g_strdup (data);
+  data_ptr = data;
 
   if (self->files) {
     g_list_foreach (self->files, (GFunc) gst_m3u8_media_file_free, NULL);
@@ -1149,6 +1150,9 @@ gst_m3u8_playlist_update (GstM3U8Playlist * self, gchar * data,
   }
   if (key_url != NULL) {
     g_free (key_url);
+  }
+  if (data_ptr) {
+    g_free (data_ptr);
   }
 
   return TRUE;
@@ -1612,9 +1616,8 @@ out:
 
 gboolean
 gst_m3u8_client_update (GstM3U8Client * self, gchar * video_data,
-    gchar * audio_data, gchar * subtt_data)
+    gchar * audio_data, gchar * subtt_data, gboolean * updated)
 {
-  gboolean updated = TRUE;
   gboolean ret = FALSE;
   GstM3U8Stream *selected;
 
@@ -1626,33 +1629,40 @@ gst_m3u8_client_update (GstM3U8Client * self, gchar * video_data,
   /* Update the playlists for the selected streams */
   if (selected->selected_video != NULL && video_data != NULL) {
     if (!gst_m3u8_playlist_update (selected->selected_video,
-            video_data, &updated))
+            video_data, updated)) {
       goto out;
-    if (!updated) {
+    }
+    if (!*updated) {
       self->update_failed_count++;
+      ret = TRUE;
       goto out;
     }
   }
   if (selected->selected_audio != NULL && audio_data != NULL) {
     if (!gst_m3u8_playlist_update (selected->selected_audio,
-            audio_data, &updated))
+            audio_data, updated)) {
       goto out;
-    if (!updated) {
+    }
+    if (!*updated) {
       self->update_failed_count++;
+      ret = TRUE;
       goto out;
     }
   }
   if (selected->selected_subtt != NULL && subtt_data != NULL) {
     if (!gst_m3u8_playlist_update (selected->selected_subtt,
-            subtt_data, &updated))
+            subtt_data, updated)) {
       goto out;
-    if (!updated) {
+    }
+    if (!*updated) {
       self->update_failed_count++;
+      ret = TRUE;
       goto out;
     }
   }
 
   gst_m3u8_client_init_sequence (self);
+  self->update_failed_count = 0;
 
   if (self->previous_stream != selected) {
     gst_m3u8_client_resync_sequences (self, self->previous_stream, selected);
