@@ -1476,7 +1476,7 @@ mpegts_base_chain (GstPad * pad, GstBuffer * buf)
 static GstFlowReturn
 mpegts_base_scan (MpegTSBase * base)
 {
-  GstFlowReturn ret;
+  GstFlowReturn ret = GST_FLOW_OK;
   GstBuffer *buf = NULL;
   guint i;
   gboolean done = FALSE;
