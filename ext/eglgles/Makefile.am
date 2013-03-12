@@ -1,6 +1,6 @@
 plugin_LTLIBRARIES = libgsteglglessink.la
 
-libgsteglglessink_la_SOURCES = gsteglglessink.c video_platform_wrapper.c
+libgsteglglessink_la_SOURCES = gsteglglessink.c video_platform_wrapper.c gstegladaptation.c
 
 libgsteglglessink_la_CFLAGS = $(GST_PLUGINS_BASE_CFLAGS) \
                               $(GST_BASE_CFLAGS) \
@@ -17,4 +17,4 @@ if !GST_PLUGIN_BUILD_STATIC
 libgsteglglessink_la_LIBTOOLFLAGS = --tag=disable-static
 endif
 
-noinst_HEADERS = gsteglglessink.h video_platform_wrapper.h
+noinst_HEADERS = gsteglglessink.h video_platform_wrapper.h gstegladaptation.h
