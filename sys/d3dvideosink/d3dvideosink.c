@@ -2057,7 +2057,7 @@ gst_d3dvideosink_initialize_d3d_device (GstD3DVideoSink * sink)
   /* Check the filter type. */
   if ((d3dcaps.StretchRectFilterCaps & D3DPTFILTERCAPS_MINFLINEAR) ==
       D3DPTFILTERCAPS_MINFLINEAR
-      && (d3dcaps.StretchRectFilterCaps & D3DPTFILTERCAPS_MAGFLINEAR) ==
+      || (d3dcaps.StretchRectFilterCaps & D3DPTFILTERCAPS_MAGFLINEAR) ==
       D3DPTFILTERCAPS_MAGFLINEAR) {
     d3dfiltertype = D3DTEXF_LINEAR;
   } else {
