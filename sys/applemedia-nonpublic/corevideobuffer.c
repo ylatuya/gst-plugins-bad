@@ -31,35 +31,40 @@ static void
 gst_core_video_buffer_finalize (GstMiniObject * mini_object)
 {
   GstCoreVideoBuffer *self = GST_CORE_VIDEO_BUFFER_CAST (mini_object);
+  GstCVApi *cv = self->ctx->cv;
 
   if (self->pixbuf != NULL) {
-    CVPixelBufferUnlockBaseAddress (self->pixbuf, kCVPixelBufferLock_ReadOnly);
+    cv->CVPixelBufferUnlockBaseAddress (self->pixbuf,
+        kCVPixelBufferLock_ReadOnly);
   }
 
-  CVBufferRelease (self->cvbuf);
+  cv->CVBufferRelease (self->cvbuf);
+
+  g_object_unref (self->ctx);
 
   GST_MINI_OBJECT_CLASS (gst_core_video_buffer_parent_class)->finalize
       (mini_object);
 }
 
 GstBuffer *
-gst_core_video_buffer_new (CVBufferRef cvbuf)
+gst_core_video_buffer_new (GstCoreMediaCtx * ctx, CVBufferRef cvbuf)
 {
+  GstCVApi *cv = ctx->cv;
   void *data;
   size_t size;
   CVPixelBufferRef pixbuf = NULL;
   GstCoreVideoBuffer *buf;
 
-  if (CFGetTypeID (cvbuf) == CVPixelBufferGetTypeID ()) {
+  if (CFGetTypeID (cvbuf) == cv->CVPixelBufferGetTypeID ()) {
     pixbuf = (CVPixelBufferRef) cvbuf;
 
-    if (CVPixelBufferLockBaseAddress (pixbuf,
+    if (cv->CVPixelBufferLockBaseAddress (pixbuf,
             kCVPixelBufferLock_ReadOnly) != kCVReturnSuccess) {
       goto error;
     }
-    data = CVPixelBufferGetBaseAddress (pixbuf);
-    size = CVPixelBufferGetBytesPerRow (pixbuf) *
-        CVPixelBufferGetHeight (pixbuf);
+    data = cv->CVPixelBufferGetBaseAddress (pixbuf);
+    size = cv->CVPixelBufferGetBytesPerRow (pixbuf) *
+        cv->CVPixelBufferGetHeight (pixbuf);
   } else {
     /* TODO: Do we need to handle other buffer types? */
     goto error;
@@ -67,7 +72,8 @@ gst_core_video_buffer_new (CVBufferRef cvbuf)
 
   buf = GST_CORE_VIDEO_BUFFER_CAST (gst_mini_object_new
       (GST_TYPE_CORE_VIDEO_BUFFER));
-  buf->cvbuf = CVBufferRetain (cvbuf);
+  buf->ctx = g_object_ref (ctx);
+  buf->cvbuf = cv->CVBufferRetain (cvbuf);
   buf->pixbuf = pixbuf;
 
   GST_BUFFER_DATA (buf) = data;

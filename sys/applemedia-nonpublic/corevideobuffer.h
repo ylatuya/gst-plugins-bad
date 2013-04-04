@@ -22,7 +22,7 @@
 
 #include <gst/gst.h>
 
-#include "CoreVideo/CoreVideo.h"
+#include "coremediactx.h"
 
 G_BEGIN_DECLS
 
@@ -41,6 +41,7 @@ struct _GstCoreVideoBuffer
 {
   GstBuffer buffer;
 
+  GstCoreMediaCtx *ctx;
   CVBufferRef cvbuf;
   CVPixelBufferRef pixbuf;
 };
@@ -51,7 +52,8 @@ struct _GstCoreVideoBufferClass
 };
 
 GType       gst_core_video_buffer_get_type (void) G_GNUC_CONST;
-GstBuffer * gst_core_video_buffer_new      (CVBufferRef cvbuf);
+GstBuffer * gst_core_video_buffer_new      (GstCoreMediaCtx * ctx,
+                                            CVBufferRef cvbuf);
 
 G_END_DECLS
 

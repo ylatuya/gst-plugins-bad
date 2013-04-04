@@ -179,7 +179,7 @@ didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer
   BOOL success = NO, *successPtr = &success;
   GError *error;
 
-  bufferFactory = [[GstAMBufferFactory alloc] initWithError:&error];
+  bufferFactory = [[GstAMBufferFactory alloc] init];
   if (bufferFactory == nil) {
     GST_ELEMENT_ERROR (element, RESOURCE, FAILED, ("API error"),
         ("%s", error->message));

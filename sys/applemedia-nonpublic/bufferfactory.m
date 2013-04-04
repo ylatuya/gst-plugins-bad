@@ -24,14 +24,38 @@
 
 @implementation GstAMBufferFactory
 
+- (id)initWithError:(GError **)error
+{
+  GstCoreMediaCtx *ctx;
+
+  ctx =
+      gst_core_media_ctx_new (GST_API_CORE_VIDEO | GST_API_CORE_MEDIA, error);
+  if (ctx == NULL)
+    return nil;
+
+  if ((self = [super init]))
+    coreMediaCtx = ctx;
+  else
+    g_object_unref (ctx);
+
+  return self;
+}
+
+- (void)finalize
+{
+  g_object_unref (coreMediaCtx);
+
+  [super finalize];
+}
+
 - (GstBuffer *)createGstBufferForCoreVideoBuffer:(CFTypeRef)cvbuf
 {
-  return gst_core_video_buffer_new ((CVBufferRef) cvbuf);
+  return gst_core_video_buffer_new (coreMediaCtx, (CVBufferRef) cvbuf);
 }
 
 - (GstBuffer *)createGstBufferForSampleBuffer:(CFTypeRef)sbuf
 {
-  return gst_core_media_buffer_new ((CMSampleBufferRef) sbuf);
+  return gst_core_media_buffer_new (coreMediaCtx, sbuf);
 }
 
 @end

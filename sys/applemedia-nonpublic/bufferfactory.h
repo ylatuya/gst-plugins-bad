@@ -17,21 +17,18 @@
  * Boston, MA 02111-1307, USA.
  */
 
-#import "bufferfactory.h"
+#import <Foundation/Foundation.h>
 
-#include "coremediabuffer.h"
-#include "corevideobuffer.h"
+#include <gst/gst.h>
 
-@implementation GstAMBufferFactory
-
-- (GstBuffer *)createGstBufferForCoreVideoBuffer:(CFTypeRef)cvbuf
-{
-  return gst_core_video_buffer_new ((CVBufferRef) cvbuf);
+@interface GstAMBufferFactory : NSObject {
+  gpointer coreMediaCtx;
 }
 
-- (GstBuffer *)createGstBufferForSampleBuffer:(CFTypeRef)sbuf
-{
-  return gst_core_media_buffer_new ((CMSampleBufferRef) sbuf);
-}
+- (id)initWithError:(GError **)error;
+- (void)finalize;
+
+- (GstBuffer *)createGstBufferForCoreVideoBuffer:(CFTypeRef)cvbuf;
+- (GstBuffer *)createGstBufferForSampleBuffer:(CFTypeRef)sbuf;
 
 @end

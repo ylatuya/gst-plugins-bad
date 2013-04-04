@@ -33,67 +33,72 @@ gst_core_media_buffer_finalize (GstMiniObject * mini_object)
   GstCoreMediaBuffer *self = GST_CORE_MEDIA_BUFFER_CAST (mini_object);
 
   if (self->image_buf != NULL) {
-    CVPixelBufferUnlockBaseAddress (self->image_buf,
+    GstCVApi *cv = self->ctx->cv;
+    cv->CVPixelBufferUnlockBaseAddress (self->image_buf,
         kCVPixelBufferLock_ReadOnly);
   }
-  CFRelease (self->sample_buf);
+  self->ctx->cm->FigSampleBufferRelease (self->sample_buf);
+  g_object_unref (self->ctx);
 
   GST_MINI_OBJECT_CLASS (gst_core_media_buffer_parent_class)->finalize
       (mini_object);
 }
 
 GstBuffer *
-gst_core_media_buffer_new (CMSampleBufferRef sample_buf)
+gst_core_media_buffer_new (GstCoreMediaCtx * ctx, CMSampleBufferRef sample_buf)
 {
+  GstCVApi *cv = ctx->cv;
+  GstCMApi *cm = ctx->cm;
   CVImageBufferRef image_buf;
   CVPixelBufferRef pixel_buf;
   CMBlockBufferRef block_buf;
-  char *data = NULL;
+  Byte *data = NULL;
   UInt32 size;
   OSStatus status;
   GstCoreMediaBuffer *buf;
 
-  image_buf = CMSampleBufferGetImageBuffer (sample_buf);
+  image_buf = cm->CMSampleBufferGetImageBuffer (sample_buf);
   pixel_buf = NULL;
-  block_buf = CMSampleBufferGetDataBuffer (sample_buf);
+  block_buf = cm->CMSampleBufferGetDataBuffer (sample_buf);
 
   if (image_buf != NULL &&
-      CFGetTypeID (image_buf) == CVPixelBufferGetTypeID ()) {
+      CFGetTypeID (image_buf) == cv->CVPixelBufferGetTypeID ()) {
     pixel_buf = (CVPixelBufferRef) image_buf;
 
-    if (CVPixelBufferLockBaseAddress (pixel_buf,
+    if (cv->CVPixelBufferLockBaseAddress (pixel_buf,
             kCVPixelBufferLock_ReadOnly) != kCVReturnSuccess) {
       goto error;
     }
 
-    if (CVPixelBufferIsPlanar (pixel_buf)) {
+    if (cv->CVPixelBufferIsPlanar (pixel_buf)) {
       gint plane_count, plane_idx;
 
-      data = CVPixelBufferGetBaseAddressOfPlane (pixel_buf, 0);
+      data = cv->CVPixelBufferGetBaseAddressOfPlane (pixel_buf, 0);
 
       size = 0;
-      plane_count = CVPixelBufferGetPlaneCount (pixel_buf);
+      plane_count = cv->CVPixelBufferGetPlaneCount (pixel_buf);
       for (plane_idx = 0; plane_idx != plane_count; plane_idx++) {
-        size += CVPixelBufferGetBytesPerRowOfPlane (pixel_buf, plane_idx) *
-            CVPixelBufferGetHeightOfPlane (pixel_buf, plane_idx);
+        size += cv->CVPixelBufferGetBytesPerRowOfPlane (pixel_buf, plane_idx) *
+            cv->CVPixelBufferGetHeightOfPlane (pixel_buf, plane_idx);
       }
     } else {
-      data = CVPixelBufferGetBaseAddress (pixel_buf);
-      size = CVPixelBufferGetBytesPerRow (pixel_buf) *
-          CVPixelBufferGetHeight (pixel_buf);
+      data = cv->CVPixelBufferGetBaseAddress (pixel_buf);
+      size = cv->CVPixelBufferGetBytesPerRow (pixel_buf) *
+          cv->CVPixelBufferGetHeight (pixel_buf);
     }
   } else if (block_buf != NULL) {
-    status = CMBlockBufferGetDataPointer (block_buf, 0, 0, 0, &data);
+    status = cm->CMBlockBufferGetDataPointer (block_buf, 0, 0, 0, &data);
     if (status != noErr)
       goto error;
-    size = CMBlockBufferGetDataLength (block_buf);
+    size = cm->CMBlockBufferGetDataLength (block_buf);
   } else {
     goto error;
   }
 
   buf =
       GST_CORE_MEDIA_BUFFER (gst_mini_object_new (GST_TYPE_CORE_MEDIA_BUFFER));
-  buf->sample_buf = CFRetain (sample_buf);
+  buf->ctx = g_object_ref (ctx);
+  buf->sample_buf = cm->FigSampleBufferRetain (sample_buf);
   buf->image_buf = image_buf;
   buf->pixel_buf = pixel_buf;
   buf->block_buf = block_buf;
@@ -110,7 +115,7 @@ error:
 CVPixelBufferRef
 gst_core_media_buffer_get_pixel_buffer (GstCoreMediaBuffer * buf)
 {
-  return CVPixelBufferRetain (buf->pixel_buf);
+  return buf->ctx->cv->CVPixelBufferRetain (buf->pixel_buf);
 }
 
 static void

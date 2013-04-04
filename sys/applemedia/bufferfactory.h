@@ -22,11 +22,7 @@
 #include <gst/gst.h>
 
 @interface GstAMBufferFactory : NSObject {
-  gpointer coreMediaCtx;
 }
-
-- (id)initWithError:(GError **)error;
-- (void)finalize;
 
 - (GstBuffer *)createGstBufferForCoreVideoBuffer:(CFTypeRef)cvbuf;
 - (GstBuffer *)createGstBufferForSampleBuffer:(CFTypeRef)sbuf;
