@@ -2335,7 +2335,7 @@ gst_d3dvideosink_navigation_send_event (GstNavigation * navigation,
   gint window_height;
   GstEvent *e;
   GstVideoRectangle src, dst, result;
-  double x, y, old_x, old_y;
+  double x, y, old_x, old_y, xscale = 1.0, yscale = 1.0;
   GstPad *pad = NULL;
 
   gst_d3dvideosink_window_size (sink, &window_width, &window_height);
@@ -2356,36 +2356,29 @@ gst_d3dvideosink_navigation_send_event (GstNavigation * navigation,
     result.h = dst.h;
   }
 
-  /* Our coordinates can be wrong here if we centered the video */
+  /* We calculate scaling using the original video frames geometry to include
+     pixel aspect ratio scaling. */
+  xscale = (gdouble) sink->width / result.w;
+  yscale = (gdouble) sink->height / result.h;
 
   /* Converting pointer coordinates to the non scaled geometry */
   if (gst_structure_get_double (structure, "pointer_x", &old_x)) {
     x = old_x;
-
-    if (x <= result.x) {
-      x = 0;
-    } else if (x >= result.x + result.w) {
-      x = src.w;
-    } else {
-      x = MAX (0, MIN (src.w, MAX (0, x - result.x) / result.w * src.w));
-    }
+    x = MIN (x, result.x + result.w);
+    x = MAX (x - result.x, 0);
+    gst_structure_set (structure, "pointer_x", G_TYPE_DOUBLE,
+        (gdouble) x * xscale, NULL);
     GST_DEBUG_OBJECT (sink,
         "translated navigation event x coordinate from %f to %f", old_x, x);
-    gst_structure_set (structure, "pointer_x", G_TYPE_DOUBLE, x, NULL);
   }
   if (gst_structure_get_double (structure, "pointer_y", &old_y)) {
     y = old_y;
-
-    if (y <= result.y) {
-      y = 0;
-    } else if (y >= result.y + result.h) {
-      y = src.h;
-    } else {
-      y = MAX (0, MIN (src.h, MAX (0, y - result.y) / result.h * src.h));
-    }
+    y = MIN (y, result.y + result.h);
+    y = MAX (y - result.y, 0);
+    gst_structure_set (structure, "pointer_y", G_TYPE_DOUBLE,
+        (gdouble) y * yscale, NULL);
     GST_DEBUG_OBJECT (sink,
-        "translated navigation event y coordinate from %f to %f", old_y, y);
-    gst_structure_set (structure, "pointer_y", G_TYPE_DOUBLE, y, NULL);
+        "translated navigation event x coordinate from %f to %f", old_y, y);
   }
 
   pad = gst_pad_get_peer (GST_VIDEO_SINK_PAD (sink));
