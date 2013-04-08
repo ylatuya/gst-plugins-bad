@@ -111,6 +111,7 @@ struct _GstHLSDemux
   GStaticRecMutex stream_lock;
   gboolean stop_stream_task;
   gboolean flushing;
+  gboolean draining;
 
   /* Updates task */
   GstTask *updates_task;
