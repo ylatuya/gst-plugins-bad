@@ -1017,6 +1017,7 @@ gst_hls_demux_seek (GstHLSDemux * demux, gint64 start, gint64 stop,
 
   demux->cancelled = FALSE;
   demux->seek_pending = TRUE;
+  demux->bitrate_switched = TRUE;
   gst_task_start (demux->stream_task);
   g_static_rec_mutex_unlock (&demux->stream_lock);
   return TRUE;
