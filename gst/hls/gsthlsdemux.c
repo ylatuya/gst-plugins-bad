@@ -155,7 +155,7 @@ gst_hls_adaptation_algorithm_get_type (void)
   return algorithm_type;
 }
 
-static const float update_interval_factor[] = { 1, 0.5, 1.5, 3 };
+static const float update_interval_factor[] = { 1, 0.5 };
 
 static guint gst_hls_demux_signals[LAST_SIGNAL] = { 0 };
 
@@ -2260,10 +2260,10 @@ gst_hls_demux_schedule (GstHLSDemux * demux)
    * 0.5 for the first attempt, 1.5 for the second, and 3.0 thereafter."
    */
   count = demux->client->update_failed_count;
-  if (count < 3)
-    update_factor = update_interval_factor[count];
+  if (count == 0)
+    update_factor = update_interval_factor[0];
   else
-    update_factor = update_interval_factor[3];
+    update_factor = update_interval_factor[1];
 
   /* schedule the next update using the target duration field of the
    * playlist */
