@@ -186,6 +186,7 @@ static guint gst_hls_demux_signals[LAST_SIGNAL] = { 0 };
     g_cond_wait (x->demux_switch_cond, x->demux_switch_lock);
 #define GST_HLS_DEMUX_PAD_CHANGED(p) (p->active && p->pad == NULL) ||\
       (!p->active && p->pad != NULL)
+#define GST_HLS_DEMUX_PAD_IS_EOS(p) (p->is_eos || !gst_pad_is_linked(p->pad))
 
 /* GObject */
 static void gst_hls_demux_set_property (GObject * object, guint prop_id,
@@ -1672,10 +1673,12 @@ gst_hls_demux_drain_streams (GstHLSDemux * demux)
   GST_HLS_DEMUX_DEMUX_SWITCH_LOCK (demux);
 
   demux->demux_switch_eos = gst_event_new_eos ();
+  demux->draining = TRUE;
   /* This can block for the audio stream so it needs to be pushed from a
    * different thread and the main thread can't be used either */
   g_thread_new ("eos", (GThreadFunc) gst_hls_demux_push_eos, demux);
   GST_HLS_DEMUX_DEMUX_SWITCH_COND_WAIT (demux);
+  demux->draining = FALSE;
 
   if (demux->flushing) {
     GST_HLS_DEMUX_DEMUX_SWITCH_UNLOCK (demux);
@@ -2648,20 +2651,19 @@ gst_hls_demux_proxy_newsegment (GstPad * pad, GstEvent * event,
   if (event->type == GST_EVENT_EOS) {
     gboolean signal_drained;
 
-    GST_HLS_DEMUX_PADS_LOCK (demux);
+    GST_HLS_DEMUX_DEMUX_SWITCH_LOCK (demux);
     if (event == demux->demux_switch_eos) {
       GST_LOG_OBJECT (demux, "Got EOS on %s pad", pdata->desc);
       pdata->is_eos = TRUE;
       ret = FALSE;
     }
-    signal_drained = demux->audio_srcpad->is_eos && demux->video_srcpad->is_eos;
-    GST_HLS_DEMUX_PADS_UNLOCK (demux);
-    if (signal_drained) {
+    signal_drained = GST_HLS_DEMUX_PAD_IS_EOS (demux->video_srcpad) &&
+        GST_HLS_DEMUX_PAD_IS_EOS (demux->audio_srcpad);
+    if (signal_drained && demux->draining) {
       GST_LOG_OBJECT (demux, "Signaling drained");
-      GST_HLS_DEMUX_DEMUX_SWITCH_LOCK (demux);
       GST_HLS_DEMUX_DEMUX_SWITCH_COND_SIGNAL (demux);
-      GST_HLS_DEMUX_DEMUX_SWITCH_UNLOCK (demux);
     }
+    GST_HLS_DEMUX_DEMUX_SWITCH_UNLOCK (demux);
   }
 
 exit:
