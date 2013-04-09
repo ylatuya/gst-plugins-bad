@@ -15,8 +15,7 @@ libgsteglglessink_la_CFLAGS = $(GST_PLUGINS_BASE_CFLAGS) \
 libgsteglglessink_la_OBJCFLAGS = $(GST_PLUGINS_BASE_OBJCFLAGS) \
                                  $(GST_BASE_OBJCFLAGS) \
                                  $(GST_OBJCFLAGS) \
-                                 $(EGLGLES_OBJCFLAGS) \
-				 -fobjc-abi-version=2 -fobjc-legacy-dispatch
+                                 $(EGLGLES_OBJCFLAGS)
 
 libgsteglglessink_la_LIBADD = $(GST_LIBS) $(GST_BASE_LIBS) \
 	$(GST_PLUGINS_BASE_LIBS) $(EGLGLES_LIBS) \

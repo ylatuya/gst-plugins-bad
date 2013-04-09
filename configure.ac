@@ -740,6 +740,9 @@ AC_CHECK_HEADER(MobileCoreServices/MobileCoreServices.h, HAVE_IOS="yes", HAVE_IO
 AM_CONDITIONAL(HAVE_IOS, test "x$HAVE_IOS" = "xyes")
 if test "x$HAVE_IOS" = "xyes"; then
   AC_DEFINE(HAVE_IOS, 1, [Define if building for Apple iOS])
+  if test "x$HAVE_CPU_I386" == "xyes"; then
+    OBJCFLAGS="$OBJCFLAGS -fobjc-abi-version=2 -fobjc-legacy-dispatch"
+  fi
 fi
 
 dnl *** OS X videosrc ***
