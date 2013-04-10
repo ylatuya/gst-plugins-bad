@@ -511,18 +511,8 @@ mpegts_base_free_program (MpegTSBaseProgram * program)
 void
 mpegts_base_remove_program (MpegTSBase * base, gint program_number)
 {
-  MpegTSBaseProgram *program;
-  MpegTSBaseClass *klass = GST_MPEGTS_BASE_GET_CLASS (base);
-
   GST_DEBUG_OBJECT (base, "program_number : %d", program_number);
 
-  if (klass->program_stopped) {
-    program =
-        (MpegTSBaseProgram *) g_hash_table_lookup (base->programs,
-        GINT_TO_POINTER (program_number));
-    if (program)
-      klass->program_stopped (base, program);
-  }
   g_hash_table_remove (base->programs, GINT_TO_POINTER (program_number));
 }
 
@@ -674,10 +664,6 @@ mpegts_base_deactivate_program (MpegTSBase * base, MpegTSBaseProgram * program)
   program->active = FALSE;
 
   if (program->pmt_info) {
-    /* Inform subclasses we're deactivating this program */
-    if (klass->program_stopped)
-      klass->program_stopped (base, program);
-
     streams = gst_structure_id_get_value (program->pmt_info, QUARK_STREAMS);
     nbstreams = gst_value_list_get_size (streams);
 
@@ -702,6 +688,10 @@ mpegts_base_deactivate_program (MpegTSBase * base, MpegTSBaseProgram * program)
 
     GST_DEBUG ("program stream_list is now %p", program->stream_list);
   }
+
+  /* Inform subclasses we're deactivating this program */
+  if (klass->program_stopped)
+    klass->program_stopped (base, program);
 }
 
 static void
@@ -1289,13 +1279,8 @@ static gboolean
 remove_each_program (gpointer key, MpegTSBaseProgram * program,
     MpegTSBase * base)
 {
-  MpegTSBaseClass *klass = GST_MPEGTS_BASE_GET_CLASS (base);
-
   /* First deactivate it */
   mpegts_base_deactivate_program (base, program);
-  /* Then remove it */
-  if (klass->program_stopped)
-    klass->program_stopped (base, program);
 
   return TRUE;
 }
