@@ -1573,9 +1573,8 @@ gst_ts_demux_push_pending_data (GstTSDemux * demux, TSDemuxStream * stream)
         demux->program->pcr_pid);
 
   GST_DEBUG_OBJECT (stream->pad,
-      "Pushing buffer with PTS: %" GST_TIME_FORMAT " , DTS: %" GST_TIME_FORMAT,
-      GST_TIME_ARGS (GST_BUFFER_PTS (buffer)),
-      GST_TIME_ARGS (GST_BUFFER_DTS (buffer)));
+      "Pushing buffer with PTS: %" GST_TIME_FORMAT,
+      GST_TIME_ARGS (GST_BUFFER_TIMESTAMP (buffer)));
 
   res = gst_pad_push (stream->pad, buffer);
   GST_DEBUG_OBJECT (stream->pad, "Returned %s", gst_flow_get_name (res));

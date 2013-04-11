@@ -1394,7 +1394,7 @@ mpegts_packetizer_parse_nit (MpegTSPacketizer2 * packetizer,
           default:
             transmission_mode_str = "reserved";
         }
-        delivery_structure = gst_structure_new_id (QUARK_TERRESTRIAL,
+        delivery_structure = gst_structure_id_new (QUARK_TERRESTRIAL,
             QUARK_FREQUENCY, G_TYPE_UINT, frequency,
             QUARK_BANDWIDTH, G_TYPE_UINT, bandwidth,
             QUARK_CONSTELLATION, G_TYPE_STRING, constellation_str,
@@ -1488,7 +1488,7 @@ mpegts_packetizer_parse_nit (MpegTSPacketizer2 * packetizer,
           default:
             modulation_str = "reserved";
         }
-        delivery_structure = gst_structure_new_id (QUARK_CABLE,
+        delivery_structure = gst_structure_id_new (QUARK_CABLE,
             QUARK_MODULATION, G_TYPE_STRING, modulation_str,
             QUARK_FREQUENCY, G_TYPE_UINT, frequency,
             QUARK_SYMBOL_RATE, G_TYPE_UINT, symbol_rate,
@@ -1515,7 +1515,7 @@ mpegts_packetizer_parse_nit (MpegTSPacketizer2 * packetizer,
 
           current_pos += 2;
           logical_channel_number = GST_READ_UINT16_BE (current_pos) & 0x03ff;
-          channel = gst_structure_new_id (QUARK_CHANNELS,
+          channel = gst_structure_id_new (QUARK_CHANNELS,
               QUARK_SERVICE_ID, G_TYPE_UINT,
               service_id, QUARK_LOGICAL_CHANNEL_NUMBER, G_TYPE_UINT,
               logical_channel_number, NULL);
@@ -1955,7 +1955,7 @@ mpegts_packetizer_parse_eit (MpegTSPacketizer2 * packetizer,
 
     /* TODO: send tag event down relevant pad saying what is currently playing */
     event_name = g_strdup_printf ("event-%d", event_id);
-    event = gst_structure_new_empty (event_name);
+    event = gst_structure_empty_new (event_name);
     g_free (event_name);
     gst_structure_id_set (event,
         QUARK_EVENT_ID, G_TYPE_UINT, event_id,
@@ -2053,7 +2053,7 @@ mpegts_packetizer_parse_eit (MpegTSPacketizer2 * packetizer,
                   length_aux);
               items_aux += length_aux;
 
-              extended_item = gst_structure_new_id (QUARK_EXTENDED_ITEM,
+              extended_item = gst_structure_id_new (QUARK_EXTENDED_ITEM,
                   QUARK_DESCRIPTION, G_TYPE_STRING, description,
                   QUARK_TEXT, G_TYPE_STRING, text, NULL);
 
