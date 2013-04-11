@@ -159,7 +159,9 @@ static gboolean gst_d3dvideosink_notify_device_init (GstD3DVideoSink * sink);
 static gboolean gst_d3dvideosink_notify_device_lost (GstD3DVideoSink * sink);
 static gboolean gst_d3dvideosink_notify_device_reset (GstD3DVideoSink * sink);
 static gboolean gst_d3dvideosink_notify_device_reinit (GstD3DVideoSink * sink);
+static gboolean gst_d3dvideosink_notify_device_resize (GstD3DVideoSink * sink);
 static gboolean gst_d3dvideosink_device_lost (GstD3DVideoSink * sink);
+static gboolean gst_d3dvideosink_resize_device (GstD3DVideoSink * sink);
 static gboolean gst_d3dvideosink_release_d3d_device (GstD3DVideoSink * sink);
 static gboolean gst_d3dvideosink_release_direct3d (GstD3DVideoSink * sink);
 static gboolean gst_d3dvideosink_window_size (GstD3DVideoSink * sink,
@@ -510,6 +512,30 @@ gst_d3dvideosink_close_window (GstD3DVideoSink * sink)
   sink->is_new_window = FALSE;
 }
 
+/* Call this function with the D3D_DEVICE lock */
+static gboolean
+gst_d3dvideosink_resize (GstD3DVideoSink *sink)
+{
+  gint width, height;
+  gboolean resized = FALSE;
+
+  gst_d3dvideosink_window_size(sink, &width, &height);
+  if (sink->d3dpp.BackBufferWidth == 0 && sink->d3dpp.BackBufferHeight == 0) {
+    return FALSE;
+  }
+  if (sink->d3dpp.BackBufferWidth != width ||
+      sink->d3dpp.BackBufferHeight != height) {
+    GST_DEBUG_OBJECT (sink, "Resizing device to %d %d",
+        (gint) sink->d3dpp.BackBufferWidth,
+        (gint) sink->d3dpp.BackBufferHeight);
+    sink->d3dpp.BackBufferWidth = width;
+    sink->d3dpp.BackBufferHeight = height;
+    gst_d3dvideosink_notify_device_resize (sink);
+    resized = TRUE;
+  }
+  return resized;
+}
+
 static gboolean
 gst_d3dvideosink_create_shared_hidden_window (GstD3DVideoSink * sink)
 {
@@ -704,7 +730,7 @@ SharedHiddenWndProc (HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     }
     case WM_DIRECTX_D3D_RESIZE:
     {
-      return gst_d3dvideosink_device_lost (sink);
+      return gst_d3dvideosink_resize_device (sink);
     }
   }
 
@@ -1607,14 +1633,12 @@ gst_d3dvideosink_wait_for_vsync (GstD3DVideoSink * sink)
   }
 }
 
+/* Call this function with the D3D_DEV lock */
 static GstFlowReturn
-gst_d3dvideosink_show_frame (GstVideoSink * vsink, GstBuffer * buffer)
+gst_d3dvideosink_copy_frame (GstD3DVideoSink * sink, GstBuffer * buffer)
 {
-  GstD3DVideoSink *sink = GST_D3DVIDEOSINK (vsink);
   LPDIRECT3DSURFACE9 drawSurface = NULL;
 
-  if (!GST_D3DVIDEOSINK_D3D_DEVICE_TRYLOCK (sink))
-    return GST_FLOW_OK;
   if (!sink->d3ddev) {
     if (!shared.device_lost) {
       GST_ERROR_OBJECT (sink, "No Direct3D device has been created, stopping");
@@ -1744,12 +1768,25 @@ gst_d3dvideosink_show_frame (GstVideoSink * vsink, GstBuffer * buffer)
     IDirect3DDevice9_EndScene (sink->d3ddev);
   }
 success:
-  GST_D3DVIDEOSINK_D3D_DEVICE_UNLOCK (sink);
-  gst_d3dvideosink_refresh (sink);
   return GST_FLOW_OK;
 error:
-  GST_D3DVIDEOSINK_D3D_DEVICE_UNLOCK (sink);
   return GST_FLOW_ERROR;
+}
+
+static GstFlowReturn
+gst_d3dvideosink_show_frame (GstVideoSink * vsink, GstBuffer * buffer)
+{
+  GstFlowReturn ret;
+  GstD3DVideoSink *sink = GST_D3DVIDEOSINK (vsink);
+
+  if (!GST_D3DVIDEOSINK_D3D_DEVICE_TRYLOCK (sink))
+    return GST_FLOW_CUSTOM_ERROR;
+  ret = gst_d3dvideosink_copy_frame (sink, buffer);
+  GST_D3DVIDEOSINK_D3D_DEVICE_UNLOCK (sink);
+  if (ret == GST_FLOW_OK) {
+    gst_d3dvideosink_refresh (sink);
+  }
+  return ret;
 }
 
 /* Simply redraws the last item on our offscreen surface to the window */
@@ -1776,6 +1813,24 @@ gst_d3dvideosink_refresh (GstD3DVideoSink * sink)
   if (sink->window_closed) {
     GST_DEBUG ("Window has been closed");
     goto error;
+  }
+
+  /* Check if the window size changed and resize our device.
+   * Our backbuffer must have the size of the output window so scalling
+   * happens in StretchRect using the bilinear filters and not in the window
+   * itself.
+   * Ideally we should track the window size with WM_SIZE messages, but those
+   * are dropped when an external window is set */
+  if (gst_d3dvideosink_resize (sink)) {
+    /* If the resize succeed, update the newly created offscreen surface with
+     * the last buffer */
+    GstBuffer *buf;
+
+    buf = gst_base_sink_get_last_buffer (GST_BASE_SINK (sink));
+    if (buf) {
+      gst_d3dvideosink_copy_frame (sink, buf);
+      gst_buffer_unref (buf);
+    }
   }
 
   /* Set the render target to our swap chain */
@@ -1852,13 +1907,9 @@ static void
 gst_d3dvideosink_stretch (GstD3DVideoSink * sink, LPDIRECT3DSURFACE9 backBuffer)
 {
   if (sink->keep_aspect_ratio) {
-    gint window_width;
-    gint window_height;
+    gint window_width, window_height;
     RECT r;
-    GstVideoRectangle src;
-    GstVideoRectangle dst;
-    GstVideoRectangle result;
-    gdouble x_scale, y_scale;
+    GstVideoRectangle src, dst, result;
 
     gst_d3dvideosink_window_size (sink, &window_width, &window_height);
 
@@ -1872,17 +1923,7 @@ gst_d3dvideosink_stretch (GstD3DVideoSink * sink, LPDIRECT3DSURFACE9 backBuffer)
     dst.w = window_width;
     dst.h = window_height;
 
-    x_scale = (gdouble) src.w / (gdouble) dst.w;
-    y_scale = (gdouble) src.h / (gdouble) dst.h;
     gst_video_sink_center_rect (src, dst, &result, TRUE);
-
-    result.x = result.x * x_scale;
-    result.y = result.y * y_scale;
-    result.w = result.w * x_scale;
-    result.h = result.h * y_scale;
-
-    //clip to src
-    gst_video_sink_center_rect (result, src, &result, FALSE);
 
     r.left = result.x;
     r.top = result.y;
@@ -2202,6 +2243,33 @@ gst_d3dvideosink_notify_device_reset (GstD3DVideoSink * sink)
   }
   GST_DEBUG ("Successfully sent notification of device reset event for sink %p",
       sink);
+  return TRUE;
+}
+
+static gboolean
+gst_d3dvideosink_notify_device_resize (GstD3DVideoSink * sink)
+{
+  /* Send notification synchronously */
+  SendMessage (shared.hidden_window_handle, WM_DIRECTX_D3D_RESIZE, 0,
+      (LPARAM) sink);
+  return TRUE;
+}
+
+static gboolean
+gst_d3dvideosink_resize_device (GstD3DVideoSink *sink)
+{
+  /* Release all resources allocated in the current device's pool */
+  GST_LOG_OBJECT (sink, "Reset device and recreate offscreen surface");
+  while (IDirect3DSurface9_Release (sink->d3d_offscreen_surface) != 0);
+  if (FAILED (IDirect3DDevice9_Reset (sink->d3ddev, &sink->d3dpp))) {
+    return gst_d3dvideosink_notify_device_lost (sink);
+  }
+
+  if (FAILED (IDirect3DDevice9_CreateOffscreenPlainSurface (sink->d3ddev,
+              sink->width, sink->height, sink->d3dfourcc, D3DPOOL_DEFAULT,
+              &sink->d3d_offscreen_surface, NULL))) {
+    return gst_d3dvideosink_notify_device_lost (sink);
+  }
   return TRUE;
 }
 
