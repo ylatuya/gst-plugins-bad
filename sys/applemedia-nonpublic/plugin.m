@@ -24,7 +24,6 @@
 #ifdef HAVE_IOS
 #include "celvideosrc.h"
 #else
-#include "qtkitvideosrc.h"
 #include "miovideosrc.h"
 #include <Foundation/Foundation.h>
 #endif
@@ -55,8 +54,6 @@ plugin_init (GstPlugin * plugin)
 #else
   enable_mt_mode ();
 
-  res = gst_element_register (plugin, "qtkitvideosrc", GST_RANK_PRIMARY,
-      GST_TYPE_QTKIT_VIDEO_SRC);
   res &= gst_element_register (plugin, "miovideosrc", GST_RANK_NONE,
       GST_TYPE_MIO_VIDEO_SRC);
 #endif

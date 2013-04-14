@@ -40,6 +40,7 @@ libgstapplemedia_nonpublic_la_LDFLAGS =			\
 	$(GST_PLUGIN_LDFLAGS)			\
 	$(GST_BASE_LDFLAGS)			\
 	$(GST_PLUGINS_BASE_LDFLAGS)		\
+	-Wl,-framework -Wl,Foundation		\
 	-Wl,-framework -Wl,CoreFoundation	\
 	-Wl,-framework -Wl,CoreVideo
 
