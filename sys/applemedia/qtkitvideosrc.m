@@ -164,13 +164,7 @@ GST_BOILERPLATE (GstQTKitVideoSrc, gst_qtkit_video_src, GstPushSrc,
   NSString *mediaType = QTMediaTypeVideo;
   NSError *error = nil;
 
-  bufferFactory = [[GstAMBufferFactory alloc] initWithError:&gerror];
-  if (bufferFactory == nil) {
-    GST_ELEMENT_ERROR (element, RESOURCE, FAILED, ("API error"),
-        ("%s", gerror->message));
-    g_clear_error (&gerror);
-    goto openFailed;
-  }
+  bufferFactory = [[GstAMBufferFactory alloc] init];
 
   if (deviceIndex == -1) {
     device = [QTCaptureDevice defaultInputDeviceWithMediaType:mediaType];
