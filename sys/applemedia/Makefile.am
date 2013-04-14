@@ -31,6 +31,7 @@ libgstapplemedia_la_LDFLAGS =			\
 	$(GST_BASE_LDFLAGS)			\
 	$(GST_PLUGINS_BASE_LDFLAGS)		\
 	-Wl,-framework -Wl,CoreFoundation	\
+	-Wl,-framework -Wl,CoreMedia		\
 	-Wl,-framework -Wl,CoreVideo
 
 noinst_HEADERS =				\
@@ -46,7 +47,6 @@ libgstapplemedia_la_SOURCES +=			\
 	avfvideosrc.m
 
 libgstapplemedia_la_LDFLAGS +=			\
-	-Wl,-framework -Wl,CoreMedia		\
 	-Wl,-framework -Wl,Foundation		\
 	-Wl,-framework -Wl,AVFoundation
 
