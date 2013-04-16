@@ -1,5 +1,6 @@
 /* GStreamer
  * Copyright (C) 2012, Fluendo S.A <support@fluendo.com>
+ * Copyright (C) 2013 SoftAtHome. All rights reserved.
  *  Author: Andoni Morales Alastruey <amorales@fluendo.com>
  *
  * gsthlscache.h:
