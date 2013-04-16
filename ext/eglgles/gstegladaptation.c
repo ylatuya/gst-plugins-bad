@@ -471,15 +471,15 @@ gst_egl_adaptation_init_egl_surface (GstEglAdaptationContext * ctx,
     goto HANDLE_ERROR_LOCKED;
   }
 
-  gst_egl_adaptation_query_buffer_preserved (ctx);
-
   if (!gst_egl_adaptation_make_current (ctx, TRUE))
     goto HANDLE_ERROR_LOCKED;
 
-  gst_egl_adaptation_query_par (ctx);
+  gst_egl_adaptation_query_buffer_preserved (ctx);
 
   /* Save surface dims */
   gst_egl_adaptation_update_surface_dimensions (ctx);
+
+  gst_egl_adaptation_query_par (ctx);
 
   /* We have a surface! */
   ctx->have_surface = TRUE;
