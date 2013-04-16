@@ -32,7 +32,7 @@ G_BEGIN_DECLS
 typedef struct _GstHLSAdaptation GstHLSAdaptation;
 typedef struct _GstHLSAdaptationFragment GstHLSAdaptationFragment;
 typedef struct _GstHLSAdaptationStream GstHLSAdaptationStream;
-typedef guint (*GstHLSAdaptationAlgorithmFunc) (GstHLSAdaptation * adaptation);
+typedef guint (*GstHLSAdaptationAlgorithmFunc) (GstHLSAdaptation * adaptation, gint64 deadline);
 
 #define GST_HLS_ADAPTATION_FRAGMENT(f) ((GstHLSAdaptationFragment*)f)
 #define GST_HLS_ADAPTATION_STREAM(b) ((GstHLSAdaptationStream*)b)
@@ -87,21 +87,21 @@ void gst_hls_adaptation_set_max_resolution      (GstHLSAdaptation *adaptation, g
 
 void gst_hls_adaptation_update_qos_proportion   (GstHLSAdaptation *adaptation, gdouble proportion);
 
-gint gst_hls_adaptation_get_target_bitrate     (GstHLSAdaptation * adaptation);
+gint gst_hls_adaptation_get_target_bitrate     (GstHLSAdaptation * adaptation, gint64 deadline);
 
 /* Algorithms */
 
-guint gst_hls_adaptation_always_lowest          (GstHLSAdaptation *adaptation);
+guint gst_hls_adaptation_always_lowest          (GstHLSAdaptation *adaptation, gint64 deadline);
 
-guint gst_hls_adaptation_always_highest         (GstHLSAdaptation *adaptation);
+guint gst_hls_adaptation_always_highest         (GstHLSAdaptation *adaptation, gint64 deadline);
 
-guint gst_hls_adaptation_fixed_bitrate          (GstHLSAdaptation *adaptation);
+guint gst_hls_adaptation_fixed_bitrate          (GstHLSAdaptation *adaptation, gint64 deadline);
 
-guint gst_hls_adaptation_disabled               (GstHLSAdaptation *adaptation);
+guint gst_hls_adaptation_disabled               (GstHLSAdaptation *adaptation, gint64 deadline);
 
-guint gst_hls_adaptation_bandwidth_estimation   (GstHLSAdaptation *adaptation);
+guint gst_hls_adaptation_bandwidth_estimation   (GstHLSAdaptation *adaptation, gint64 deadline);
 
-guint gst_hls_adaptation_rotation               (GstHLSAdaptation *adaptation);
+guint gst_hls_adaptation_rotation               (GstHLSAdaptation *adaptation, gint64 deadline);
 
 G_END_DECLS
 

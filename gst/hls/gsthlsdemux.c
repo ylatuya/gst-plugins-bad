@@ -1994,7 +1994,11 @@ gst_hls_demux_cache_fragments (GstHLSDemux * demux)
   /* If this playlist is a variant playlist, select the first one
    * and update it */
 
-  target_bitrate = gst_hls_adaptation_get_target_bitrate (demux->adaptation);
+  /* While caching we don't have to worry about being late fetching
+   * so we set 100 seconds as the available time */
+  target_bitrate = gst_hls_adaptation_get_target_bitrate (demux->adaptation,
+      100 * GST_SECOND);
+
   /* If we set the connection speed, use it for the first fragments. Otherwise
    * use the default stream selected by the client */
   if (target_bitrate > 0) {
@@ -2292,10 +2296,16 @@ static gboolean
 gst_hls_demux_switch_playlist (GstHLSDemux * demux)
 {
   gint old_bitrate, target_bitrate;
+  GTimeVal now;
+  gint64 time_avail;
   gboolean ret;
 
   old_bitrate = demux->client->selected_stream->bandwidth;
-  target_bitrate = gst_hls_adaptation_get_target_bitrate (demux->adaptation);
+  g_get_current_time (&now);
+  time_avail = GST_TIMEVAL_TO_TIME (demux->next_update) -
+      GST_TIMEVAL_TO_TIME (now);
+  target_bitrate = gst_hls_adaptation_get_target_bitrate (demux->adaptation,
+      time_avail);
 
   ret = gst_hls_demux_change_playlist (demux, target_bitrate);
   if (old_bitrate != demux->client->selected_stream->bandwidth) {
