@@ -1,6 +1,7 @@
 /* GStreamer
  * Copyright (C) 2010 Marc-Andre Lureau <marcandre.lureau@gmail.com>
  * Copyright (C) 2010 Andoni Morales Alastruey <ylatuya@gmail.com>
+ * Copyright (C) 2013 SoftAtHome. All rights reserved.
  *
  * m3u8.h:
  *

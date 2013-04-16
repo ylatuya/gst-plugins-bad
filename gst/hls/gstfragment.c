@@ -1,5 +1,6 @@
 /* GStreamer
  * Copyright (C) 2011 Andoni Morales Alastruey <ylatuya@gmail.com>
+ * Copyright (C) 2013 SoftAtHome. All rights reserved.
  *
  * gstfragment.c:
  *

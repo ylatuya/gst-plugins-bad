@@ -1,6 +1,7 @@
 /* GStreamer
  * Copyright (C) 2010 Marc-Andre Lureau <marcandre.lureau@gmail.com>
  * Copyright (C) 2012 Fluendo S.A. <support@fluendo.com>
+ * Copyright (C) 2013 SoftAtHome. All rights reserved.
  *   Authors: Andoni Morales Alastruey <amorales@fluendo.com>
  *
  * m3u8.c:
