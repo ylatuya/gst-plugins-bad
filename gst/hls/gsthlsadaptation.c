@@ -167,7 +167,8 @@ gst_hls_adaptation_set_algorithm_func (GstHLSAdaptation * adaptation,
 }
 
 gint
-gst_hls_adaptation_get_target_bitrate (GstHLSAdaptation * adaptation)
+gst_hls_adaptation_get_target_bitrate (GstHLSAdaptation * adaptation,
+    gint64 deadline)
 {
   gint ret = -1;
 
@@ -176,7 +177,7 @@ gst_hls_adaptation_get_target_bitrate (GstHLSAdaptation * adaptation)
   if (adaptation->adaptation_func == NULL)
     goto exit;
 
-  ret = adaptation->adaptation_func (adaptation);
+  ret = adaptation->adaptation_func (adaptation, deadline);
 
 exit:
   GST_HLS_ADAPTATION_UNLOCK (adaptation);
@@ -219,7 +220,8 @@ gst_hls_adaptation_update_qos_proportion (GstHLSAdaptation * adaptation,
 
 /* Returns always the lowest bitrate */
 guint
-gst_hls_adaptation_always_lowest (GstHLSAdaptation * adaptation)
+gst_hls_adaptation_always_lowest (GstHLSAdaptation * adaptation,
+    gint64 deadline)
 {
   if (adaptation->streams == NULL)
     return -1;
@@ -231,7 +233,8 @@ gst_hls_adaptation_always_lowest (GstHLSAdaptation * adaptation)
 /* Returns always the highest bitrate, but smaller than connection
  * speed if it's set */
 guint
-gst_hls_adaptation_always_highest (GstHLSAdaptation * adaptation)
+gst_hls_adaptation_always_highest (GstHLSAdaptation * adaptation,
+    gint64 deadline)
 {
   guint bitrate = 0;
 
@@ -259,19 +262,20 @@ gst_hls_adaptation_always_highest (GstHLSAdaptation * adaptation)
 
 /* Returns always a fixed bitrate, the one set by connection speed */
 guint
-gst_hls_adaptation_fixed_bitrate (GstHLSAdaptation * adaptation)
+gst_hls_adaptation_fixed_bitrate (GstHLSAdaptation * adaptation,
+    gint64 deadline)
 {
   return adaptation->connection_speed;
 }
 
 guint
-gst_hls_adaptation_disabled (GstHLSAdaptation * adaptation)
+gst_hls_adaptation_disabled (GstHLSAdaptation * adaptation, gint64 deadline)
 {
   return -1;
 }
 
 guint
-gst_hls_adaptation_rotation (GstHLSAdaptation * adaptation)
+gst_hls_adaptation_rotation (GstHLSAdaptation * adaptation, gint64 deadline)
 {
   GList *walk;
   GstHLSAdaptationStream *stream = NULL;
@@ -296,7 +300,8 @@ gst_hls_adaptation_rotation (GstHLSAdaptation * adaptation)
 /* Returns an estimation of the average bandwidth, based on a pondered
  * mean of the last downloaded fragments */
 guint
-gst_hls_adaptation_bandwidth_estimation (GstHLSAdaptation * adaptation)
+gst_hls_adaptation_bandwidth_estimation (GstHLSAdaptation * adaptation,
+    gint64 deadline)
 {
   guint avg_bitrate, ret;
   gdouble bitrates_sum = 0;
@@ -339,6 +344,10 @@ gst_hls_adaptation_bandwidth_estimation (GstHLSAdaptation * adaptation)
 
   if (adaptation->max_bitrate != 0)
     ret *= adaptation->max_bitrate;
+
+  /* Do not select a higher bandwidth if we are late */
+  if (deadline < 0 && ret > adaptation->selected_bandwidth)
+    ret = adaptation->selected_bandwidth;
 
   return ret;
 }
