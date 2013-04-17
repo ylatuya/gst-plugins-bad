@@ -18,8 +18,7 @@
  */
 
 #include "qtkitvideosrc.h"
-
-#import "bufferfactory.h"
+#include "corevideobuffer.h"
 
 #import <QTKit/QTKit.h>
 
@@ -91,7 +90,6 @@ GST_BOILERPLATE (GstQTKitVideoSrc, gst_qtkit_video_src, GstPushSrc,
 
   int deviceIndex;
 
-  GstAMBufferFactory *bufferFactory;
   QTCaptureSession *session;
   QTCaptureDeviceInput *input;
   QTCaptureDecompressedVideoOutput *output;
@@ -164,8 +162,6 @@ GST_BOILERPLATE (GstQTKitVideoSrc, gst_qtkit_video_src, GstPushSrc,
   NSString *mediaType = QTMediaTypeVideo;
   NSError *error = nil;
 
-  bufferFactory = [[GstAMBufferFactory alloc] init];
-
   if (deviceIndex == -1) {
     device = [QTCaptureDevice defaultInputDeviceWithMediaType:mediaType];
     if (device == nil) {
@@ -201,9 +197,6 @@ openFailed:
     [device release];
     device = nil;
 
-    [bufferFactory release];
-    bufferFactory = nil;
-
     return NO;
   }
 }
@@ -224,8 +217,6 @@ openFailed:
   [device release];
   device = nil;
 
-  [bufferFactory release];
-  bufferFactory = nil;
 }
 
 - (BOOL)setCaps:(GstCaps *)caps
@@ -437,7 +428,7 @@ openFailed:
   [queueLock unlockWithCondition:
       ([queue count] == 0) ? NO_FRAMES : HAS_FRAME_OR_STOP_REQUEST];
 
-  *buf = [bufferFactory createGstBufferForCoreVideoBuffer:frame];
+  *buf = gst_core_video_buffer_new ((CVBufferRef) frame);
   CVBufferRelease (frame);
 
   [self timestampBuffer:*buf];

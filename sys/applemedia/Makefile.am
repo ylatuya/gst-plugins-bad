@@ -2,7 +2,6 @@ plugin_LTLIBRARIES = libgstapplemedia.la
 
 libgstapplemedia_la_SOURCES =			\
 	plugin.m				\
-	bufferfactory.m				\
 	corevideobuffer.c			\
 	coremediabuffer.c
 
@@ -37,7 +36,6 @@ libgstapplemedia_la_LDFLAGS =			\
 noinst_HEADERS =				\
 	qtkitvideosrc.h				\
 	avfvideosrc.h				\
-	bufferfactory.h				\
 	corevideobuffer.h			\
 	coremediabuffer.h
 
