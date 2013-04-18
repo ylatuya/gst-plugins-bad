@@ -334,6 +334,7 @@ gst_egl_adaptation_choose_config (GstEglAdaptationContext * ctx)
     goto HANDLE_ERROR;
   }
 
+  gst_egl_adaptation_init_egl_exts (ctx);
   return TRUE;
 
   /* Errors */

@@ -207,8 +207,6 @@ egl_init (GstEglGlesSink * eglglessink)
     goto HANDLE_ERROR;
   }
 
-  gst_egl_adaptation_init_egl_exts (eglglessink->egl_context);
-
   if (!gst_egl_adaptation_fill_supported_fbuffer_configs
       (eglglessink->egl_context, &eglglessink->sinkcaps)) {
     GST_ERROR_OBJECT (eglglessink, "Display support NONE of our configs");
