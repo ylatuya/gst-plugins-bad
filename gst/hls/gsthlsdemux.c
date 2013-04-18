@@ -210,6 +210,8 @@ static gboolean gst_hls_demux_get_next_fragment (GstHLSDemux * demux,
     gboolean caching);
 static gboolean gst_hls_demux_update_playlist (GstHLSDemux * demux,
     gboolean update);
+static gboolean gst_hls_demux_change_playlist (GstHLSDemux * demux,
+    guint32 target_bitrate);
 static void gst_hls_demux_reset (GstHLSDemux * demux, gboolean dispose);
 static gboolean gst_hls_demux_set_location (GstHLSDemux * demux,
     const gchar * uri);
@@ -2008,7 +2010,15 @@ gst_hls_demux_cache_fragments (GstHLSDemux * demux)
   }
 
   if (!gst_hls_demux_update_playlist (demux, FALSE)) {
-    return FALSE;
+    /* Handle the special in which we get a 404 from the first playlist
+     * and start with the failover protection. */
+    if (target_bitrate == -1) {
+      /* If the connexion speed is not set start with the highest bitrate */
+      target_bitrate = G_MAXINT32;
+    }
+    if (!gst_hls_demux_change_playlist (demux, G_MAXINT32)) {
+      return FALSE;
+    }
   }
 
   if (demux->seek_start != GST_CLOCK_TIME_NONE) {
@@ -2188,7 +2198,7 @@ gst_hls_demux_update_playlist (GstHLSDemux * demux, gboolean update)
 }
 
 static gboolean
-gst_hls_demux_change_playlist (GstHLSDemux * demux, guint target_bitrate)
+gst_hls_demux_change_playlist (GstHLSDemux * demux, guint32 target_bitrate)
 {
   GstM3U8Stream *previous_stream, *current_stream;
   gint old_bandwidth, new_bandwidth;
