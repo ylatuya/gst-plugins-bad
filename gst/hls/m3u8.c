@@ -622,18 +622,19 @@ gst_m3u8_parse_media_codec (gchar * data,
 static gboolean
 gst_m3u8_variant_playlist_parse (GstM3U8VariantPlaylist * self, gchar * data)
 {
-  gchar *end;
-  gboolean first_stream = TRUE;
+  gchar *end, *data_ptr;
+  gboolean first_stream = TRUE, ret = FALSE;
   GstM3U8Stream *stream = NULL;
   GstM3U8Stream *last_stream = NULL;
   gchar *audio_alternate = NULL;
   gchar *video_alternate = NULL;
   gchar *subtt_alternate = NULL;
 
+  data_ptr = data;
+
   if (!g_str_has_prefix (data, "#EXTM3U")) {
     GST_WARNING ("Data doesn't start with #EXTM3U");
-    g_free (data);
-    return FALSE;
+    goto exit;
   }
 
   data += 7;
@@ -805,7 +806,7 @@ gst_m3u8_variant_playlist_parse (GstM3U8VariantPlaylist * self, gchar * data)
       }
       if (error) {
         gst_m3u8_media_free (media);
-        return FALSE;
+        goto exit;
       }
       if (not_supported) {
         gst_m3u8_media_free (media);
@@ -906,7 +907,7 @@ gst_m3u8_variant_playlist_parse (GstM3U8VariantPlaylist * self, gchar * data)
 
       if (error) {
         gst_m3u8_stream_free (stream);
-        return FALSE;
+        goto exit;
       }
 
       self->streams = g_list_append (self->streams, stream);
@@ -959,6 +960,14 @@ gst_m3u8_variant_playlist_parse (GstM3U8VariantPlaylist * self, gchar * data)
     data = g_utf8_next_char (end);      /* skip \n */
   }
 
+  /* order streams by bitrate */
+  self->streams = g_list_sort (self->streams,
+      (GCompareFunc) gst_m3u8_stream_compare_by_bitrate);
+  ret = TRUE;
+
+exit:
+  if (data_ptr)
+    g_free (data_ptr);
   if (audio_alternate)
     g_free (audio_alternate);
   if (video_alternate)
@@ -966,11 +975,7 @@ gst_m3u8_variant_playlist_parse (GstM3U8VariantPlaylist * self, gchar * data)
   if (subtt_alternate)
     g_free (subtt_alternate);
 
-  /* order streams by bitrate */
-  self->streams = g_list_sort (self->streams,
-      (GCompareFunc) gst_m3u8_stream_compare_by_bitrate);
-
-  return TRUE;
+  return ret;
 }
 
 static gboolean
@@ -984,6 +989,7 @@ gst_m3u8_playlist_update (GstM3U8Playlist * self, gchar * data,
   gint64 offset = -1, length = -1, acc_offset = 0;
   gchar *key_url = NULL, *iv = NULL, *data_ptr = NULL;
   gint mediasequence = 0;
+  gboolean ret = FALSE;
   GstFragmentEncodingMethod enc_method = GST_FRAGMENT_ENCODING_METHOD_NONE;
 
   g_return_val_if_fail (self != NULL, FALSE);
@@ -996,15 +1002,13 @@ gst_m3u8_playlist_update (GstM3U8Playlist * self, gchar * data,
   if (self->last_data && g_str_equal (self->last_data, data)) {
     GST_DEBUG ("Playlist is the same as previous one");
     *updated = FALSE;
-    g_free (data);
-    return TRUE;
+    goto exit;
   }
 
   if (!g_str_has_prefix (data, "#EXTM3U")) {
     GST_WARNING ("Data doesn't start with #EXTM3U");
     *updated = FALSE;
-    g_free (data);
-    return FALSE;
+    goto exit;
   }
 
   g_free (self->last_data);
@@ -1102,7 +1106,7 @@ gst_m3u8_playlist_update (GstM3U8Playlist * self, gchar * data,
       if (!int64_from_string (content[0], NULL, &length)) {
         GST_WARNING ("Error while reading the lenght in #EXT-X-BYTERANGE");
         g_strfreev (content);
-        return FALSE;
+        goto exit;
       }
       if (content[1] == NULL) {
         offset = acc_offset;
@@ -1110,7 +1114,7 @@ gst_m3u8_playlist_update (GstM3U8Playlist * self, gchar * data,
       } else if (!int64_from_string (content[1], NULL, &offset)) {
         GST_WARNING ("Error while reading the offset in #EXT-X-BYTERANGE");
         g_strfreev (content);
-        return FALSE;
+        goto exit;
       }
       g_strfreev (content);
     }
@@ -1128,7 +1132,7 @@ gst_m3u8_playlist_update (GstM3U8Playlist * self, gchar * data,
             enc_method = GST_FRAGMENT_ENCODING_METHOD_AES_128;
           } else {
             GST_ERROR ("Unsupported encryption method %s", v);
-            return FALSE;
+            goto exit;
           }
         } else if (g_str_equal (a, "URI")) {
           key_url = gst_m3u8_strip_quotes (v);
@@ -1145,6 +1149,9 @@ gst_m3u8_playlist_update (GstM3U8Playlist * self, gchar * data,
       break;
     data = g_utf8_next_char (end);      /* skip \n */
   }
+  ret = TRUE;
+
+exit:
 
   if (iv != NULL) {
     g_free (iv);
@@ -1156,7 +1163,7 @@ gst_m3u8_playlist_update (GstM3U8Playlist * self, gchar * data,
     g_free (data_ptr);
   }
 
-  return TRUE;
+  return ret;
 }
 
 static gboolean
@@ -1558,11 +1565,9 @@ gst_m3u8_client_parse_main_playlist (GstM3U8Client * self, gchar * data)
     /* Parse the variant playlist */
     GST_DEBUG ("Parsing variant playlist");
     if (!gst_m3u8_variant_playlist_parse (self->main, data)) {
-      g_free (data);
       goto out;
     }
     gst_m3u8_client_select_defaults (self);
-    g_free (data);
   }
 
   ret = TRUE;
