@@ -64,6 +64,7 @@ struct _GstVTDec
 
   gint negotiated_width, negotiated_height;
   gint negotiated_fps_n, negotiated_fps_d;
+  gint negotiated_par_n, negotiated_par_d;
   gint caps_width, caps_height;
   gint caps_fps_n, caps_fps_d;
   CMFormatDescriptionRef fmt_desc;
