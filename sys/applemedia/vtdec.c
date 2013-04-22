@@ -361,8 +361,6 @@ gst_vtdec_create_session (GstVTDec * self, CMFormatDescriptionRef fmt_desc)
       self->negotiated_width);
   gst_vtutil_dict_set_i32 (pb_attrs, kCVPixelBufferHeightKey,
       self->negotiated_height);
-  gst_vtutil_dict_set_i32 (pb_attrs,
-      *(cv->kCVPixelBufferBytesPerRowAlignmentKey), 2 * self->negotiated_width);
 
   callback.func = gst_vtdec_enqueue_frame;
   callback.data = self;

@@ -57,9 +57,22 @@ gst_core_video_buffer_new (CVBufferRef cvbuf)
             kCVPixelBufferLock_ReadOnly) != kCVReturnSuccess) {
       goto error;
     }
-    data = CVPixelBufferGetBaseAddress (pixbuf);
-    size = CVPixelBufferGetBytesPerRow (pixbuf) *
-        CVPixelBufferGetHeight (pixbuf);
+    if (CVPixelBufferIsPlanar (pixbuf)) {
+      gint plane_count, plane_idx;
+
+      data = CVPixelBufferGetBaseAddressOfPlane (pixbuf, 0);
+
+      size = 0;
+      plane_count = CVPixelBufferGetPlaneCount (pixbuf);
+      for (plane_idx = 0; plane_idx != plane_count; plane_idx++) {
+        size += CVPixelBufferGetBytesPerRowOfPlane (pixbuf, plane_idx) *
+            CVPixelBufferGetHeightOfPlane (pixbuf, plane_idx);
+      }
+    } else {
+      data = CVPixelBufferGetBaseAddress (pixbuf);
+      size = CVPixelBufferGetBytesPerRow (pixbuf) *
+          CVPixelBufferGetHeight (pixbuf);
+    }
   } else {
     /* TODO: Do we need to handle other buffer types? */
     goto error;
