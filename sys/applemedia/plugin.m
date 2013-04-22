@@ -27,6 +27,10 @@
 #include "qtkitvideosrc.h"
 #include <Foundation/Foundation.h>
 #endif
+#include "vth264decbin.h"
+#include "vth264encbin.h"
+#include "vtenc.h"
+#include "vtdec.h"
 
 #ifndef HAVE_IOS
 static void
@@ -53,6 +57,15 @@ plugin_init (GstPlugin * plugin)
   res = gst_element_register (plugin, "qtkitvideosrc", GST_RANK_PRIMARY,
       GST_TYPE_QTKIT_VIDEO_SRC);
 #endif
+
+  res &= gst_element_register (plugin, "vth264decbin", GST_RANK_NONE,
+      GST_TYPE_VT_H264_DEC_BIN);
+  res &= gst_element_register (plugin, "vth264encbin", GST_RANK_NONE,
+      GST_TYPE_VT_H264_ENC_BIN);
+
+  gst_vtenc_register_elements (plugin);
+  gst_vtdec_register_elements (plugin);
+
   return res;
 }
 

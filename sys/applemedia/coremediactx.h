@@ -20,13 +20,7 @@
 #ifndef __GST_CORE_MEDIA_CTX_H__
 #define __GST_CORE_MEDIA_CTX_H__
 
-#include "cvapi.h"
-#include "cmapi.h"
-
-#include "mioapi.h"
-
-#include "mtapi.h"
-#include "celapi.h"
+#include "vtapi.h"
 
 #include <glib.h>
 
@@ -55,15 +49,7 @@ struct _GstCoreMediaCtx
   GObject parent;
 
   /* Common */
-  GstCVApi *cv;
-  GstCMApi *cm;
-
-  /* OS X */
-  GstMIOApi *mio;
-
-  /* iPhone */
-  GstMTApi *mt;
-  GstCelApi *cel;
+  GstVTApi *vt;
 };
 
 struct _GstCoreMediaCtxClass
