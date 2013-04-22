@@ -3,7 +3,15 @@ plugin_LTLIBRARIES = libgstapplemedia.la
 libgstapplemedia_la_SOURCES =			\
 	plugin.m				\
 	corevideobuffer.c			\
-	coremediabuffer.c
+	coremediabuffer.c			\
+	coremediactx.c				\
+	dynapi.c				\
+	vtapi.c					\
+	vtdec.c					\
+	vtenc.c					\
+	vth264decbin.c				\
+	vth264encbin.c				\
+	vtutil.c
 
 libgstapplemedia_la_CFLAGS =			\
 	$(GST_CFLAGS)			\
@@ -34,10 +42,19 @@ libgstapplemedia_la_LDFLAGS =			\
 	-Wl,-framework -Wl,CoreVideo
 
 noinst_HEADERS =				\
+	dynapi-internal.h			\
+	dynapi.h				\
+	coremediactx.h				\
 	qtkitvideosrc.h				\
 	avfvideosrc.h				\
 	corevideobuffer.h			\
-	coremediabuffer.h
+	coremediabuffer.h			\
+	vtapi.h					\
+	vtdec.h					\
+	vtenc.h					\
+	vth264decbin.h				\
+	vth264encbin.h				\
+	vtutil.h
 
 if HAVE_IOS
 

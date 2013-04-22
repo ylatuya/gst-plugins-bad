@@ -2,18 +2,12 @@ plugin_LTLIBRARIES = libgstapplemedia_nonpublic.la
 
 libgstapplemedia_nonpublic_la_SOURCES =			\
 	plugin.m				\
-	vth264decbin.c				\
-	vth264encbin.c				\
-	vtenc.c					\
-	vtdec.c					\
-	vtutil.c				\
 	bufferfactory.m				\
 	corevideobuffer.c			\
 	coremediabuffer.c			\
 	coremediactx.c				\
 	cvapi.c					\
 	cmapi.c					\
-	vtapi.c					\
 	dynapi.c
 
 libgstapplemedia_nonpublic_la_CFLAGS =			\
@@ -48,11 +42,6 @@ noinst_HEADERS =				\
 	miovideosrc.h				\
 	miovideodevice.h			\
 	celvideosrc.h				\
-	vth264decbin.h				\
-	vth264encbin.h				\
-	vtenc.h					\
-	vtdec.h					\
-	vtutil.h				\
 	bufferfactory.h				\
 	corevideobuffer.h			\
 	coremediabuffer.h			\
@@ -62,7 +51,6 @@ noinst_HEADERS =				\
 	mioapi.h				\
 	mtapi.h					\
 	celapi.h				\
-	vtapi.h					\
 	dynapi.h				\
 	dynapi-internal.h
 

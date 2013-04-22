@@ -22,6 +22,11 @@
 #include "corevideobuffer.h"
 #include "vtutil.h"
 
+extern  OSStatus FigVideoFormatDescriptionCreateWithSampleDescriptionExtensionAtom (
+    CFAllocatorRef allocator, UInt32 formatId, UInt32 width, UInt32 height,
+    UInt32 atomId, const UInt8 * data, CFIndex len, void* unk,
+    CMFormatDescriptionRef * formatDesc);
+
 GST_DEBUG_CATEGORY (gst_vtdec_debug);
 #define GST_CAT_DEFAULT (gst_vtdec_debug)
 
@@ -157,7 +162,7 @@ gst_vtdec_change_state (GstElement * element, GstStateChange transition)
   if (transition == GST_STATE_CHANGE_READY_TO_NULL) {
     gst_vtdec_destroy_session (self, &self->session);
 
-    self->ctx->cm->FigFormatDescriptionRelease (self->fmt_desc);
+    CFRelease (self->fmt_desc);
     self->fmt_desc = NULL;
 
     self->negotiated_width = self->negotiated_height = 0;
@@ -220,7 +225,8 @@ gst_vtdec_sink_setcaps (GstPad * pad, GstCaps * caps)
 
   if (fmt_desc != NULL) {
     gst_vtdec_destroy_session (self, &self->session);
-    self->ctx->cm->FigFormatDescriptionRelease (self->fmt_desc);
+    if (self->fmt_desc != NULL)
+      CFRelease (self->fmt_desc);
 
     self->fmt_desc = fmt_desc;
     self->session = gst_vtdec_create_session (self, fmt_desc);
@@ -312,7 +318,7 @@ gst_vtdec_create_format_description (GstVTDec * self)
   CMFormatDescriptionRef fmt_desc;
   OSStatus status;
 
-  status = self->ctx->cm->CMVideoFormatDescriptionCreate (NULL,
+  status = CMVideoFormatDescriptionCreate (NULL,
       self->details->format_id, self->negotiated_width, self->negotiated_height,
       NULL, &fmt_desc);
   if (status == noErr)
@@ -329,10 +335,9 @@ gst_vtdec_create_format_description_from_codec_data (GstVTDec * self,
   OSStatus status;
 
   status =
-      self->ctx->cm->
       FigVideoFormatDescriptionCreateWithSampleDescriptionExtensionAtom (NULL,
       self->details->format_id, self->negotiated_width, self->negotiated_height,
-      'avcC', GST_BUFFER_DATA (codec_data), GST_BUFFER_SIZE (codec_data),
+      'avcC', GST_BUFFER_DATA (codec_data), GST_BUFFER_SIZE (codec_data), NULL,
       &fmt_desc);
   if (status == noErr)
     return fmt_desc;
@@ -344,18 +349,17 @@ static VTDecompressionSessionRef
 gst_vtdec_create_session (GstVTDec * self, CMFormatDescriptionRef fmt_desc)
 {
   VTDecompressionSessionRef session = NULL;
-  GstCVApi *cv = self->ctx->cv;
   CFMutableDictionaryRef pb_attrs;
   VTDecompressionOutputCallback callback;
   VTStatus status;
 
-  pb_attrs = CFDictionaryCreateMutable (NULL, 0, &kCFTypeDictionaryKeyCallBacks,
+  pb_attrs= CFDictionaryCreateMutable (NULL, 0, &kCFTypeDictionaryKeyCallBacks,
       &kCFTypeDictionaryValueCallBacks);
-  gst_vtutil_dict_set_i32 (pb_attrs, *(cv->kCVPixelBufferPixelFormatTypeKey),
+  gst_vtutil_dict_set_i32 (pb_attrs, kCVPixelBufferPixelFormatTypeKey,
       kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange);
-  gst_vtutil_dict_set_i32 (pb_attrs, *(cv->kCVPixelBufferWidthKey),
+  gst_vtutil_dict_set_i32 (pb_attrs, kCVPixelBufferWidthKey,
       self->negotiated_width);
-  gst_vtutil_dict_set_i32 (pb_attrs, *(cv->kCVPixelBufferHeightKey),
+  gst_vtutil_dict_set_i32 (pb_attrs, kCVPixelBufferHeightKey,
       self->negotiated_height);
   gst_vtutil_dict_set_i32 (pb_attrs,
       *(cv->kCVPixelBufferBytesPerRowAlignmentKey), 2 * self->negotiated_width);
@@ -405,7 +409,7 @@ gst_vtdec_decode_buffer (GstVTDec * self, GstBuffer * buf)
         "VTDecompressionSessionWaitForAsynchronousFrames returned %d", status);
   }
 
-  self->ctx->cm->FigSampleBufferRelease (sbuf);
+  CFRelease (sbuf);
   self->cur_inbuf = NULL;
   gst_buffer_unref (buf);
 
@@ -439,7 +443,7 @@ gst_vtdec_enqueue_frame (void *data, gsize unk1, VTStatus result, gsize unk2,
   if (result != kVTSuccess)
     goto beach;
 
-  buf = gst_core_video_buffer_new (self->ctx, cvbuf);
+  buf = gst_core_video_buffer_new (cvbuf);
   gst_buffer_copy_metadata (buf, self->cur_inbuf,
       GST_BUFFER_COPY_FLAGS | GST_BUFFER_COPY_TIMESTAMPS);
 
@@ -452,26 +456,25 @@ beach:
 static CMSampleBufferRef
 gst_vtdec_sample_buffer_from (GstVTDec * self, GstBuffer * buf)
 {
-  GstCMApi *cm = self->ctx->cm;
   OSStatus status;
   CMBlockBufferRef bbuf = NULL;
   CMSampleBufferRef sbuf = NULL;
 
   g_assert (self->fmt_desc != NULL);
 
-  status = cm->CMBlockBufferCreateWithMemoryBlock (NULL,
+  status = CMBlockBufferCreateWithMemoryBlock (NULL,
       GST_BUFFER_DATA (buf), GST_BUFFER_SIZE (buf), kCFAllocatorNull, NULL,
       0, GST_BUFFER_SIZE (buf), FALSE, &bbuf);
   if (status != noErr)
     goto beach;
 
-  status = cm->CMSampleBufferCreate (NULL, bbuf, TRUE, 0, 0, self->fmt_desc,
+  status = CMSampleBufferCreate (NULL, bbuf, TRUE, 0, 0, self->fmt_desc,
       1, 0, NULL, 0, NULL, &sbuf);
   if (status != noErr)
     goto beach;
 
 beach:
-  cm->FigBlockBufferRelease (bbuf);
+  CFRelease (bbuf);
   return sbuf;
 }
 
