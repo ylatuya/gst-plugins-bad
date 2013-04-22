@@ -50,7 +50,9 @@ enum _VTStatus
 enum _VTFormat
 {
   kVTFormatH264 = 'avc1',
-  kVTFormatJPEG = 'jpeg'
+  kVTFormatJPEG = 'jpeg',
+  kVTFormatMPEG4Video   = 'mp4v',
+  kVTFormatMPEG2Video   = 'mp2v',
 };
 
 struct _VTCompressionOutputCallback
