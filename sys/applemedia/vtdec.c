@@ -22,11 +22,6 @@
 #include "corevideobuffer.h"
 #include "vtutil.h"
 
-extern  OSStatus FigVideoFormatDescriptionCreateWithSampleDescriptionExtensionAtom (
-    CFAllocatorRef allocator, UInt32 formatId, UInt32 width, UInt32 height,
-    UInt32 atomId, const UInt8 * data, CFIndex len, void* unk,
-    CMFormatDescriptionRef * formatDesc);
-
 GST_DEBUG_CATEGORY (gst_vtdec_debug);
 #define GST_CAT_DEFAULT (gst_vtdec_debug)
 
@@ -209,6 +204,13 @@ gst_vtdec_sink_setcaps (GstPad * pad, GstCaps * caps)
   if (self->negotiated_fps_d == 0)
     self->negotiated_fps_d = 1;
 
+  gst_structure_get_fraction (structure, "pixel-aspect-ratio",
+      &self->negotiated_par_n, &self->negotiated_par_d);
+  if (self->negotiated_par_n == 0)
+    self->negotiated_par_n = 1;
+  if (self->negotiated_par_d == 0)
+    self->negotiated_par_d = 1;
+
   if (self->details->format_id == kVTFormatH264) {
     const GValue *codec_data_value;
 
@@ -332,13 +334,40 @@ gst_vtdec_create_format_description_from_codec_data (GstVTDec * self,
     GstBuffer * codec_data)
 {
   CMFormatDescriptionRef fmt_desc;
+  CFMutableDictionaryRef extensions, par, atoms;
   OSStatus status;
 
-  status =
-      FigVideoFormatDescriptionCreateWithSampleDescriptionExtensionAtom (NULL,
+  /* CVPixelAspectRatio dict */
+  par = CFDictionaryCreateMutable (NULL, 0, &kCFTypeDictionaryKeyCallBacks,
+      &kCFTypeDictionaryValueCallBacks);
+  gst_vtutil_dict_set_i32 (par, CFSTR ("HorizontalSpacing"),
+      self->negotiated_par_n);
+  gst_vtutil_dict_set_i32 (par, CFSTR ("VerticalSpacing"),
+      self->negotiated_par_d);
+
+  /* SampleDescriptionExtensionAtoms dict */
+  atoms = CFDictionaryCreateMutable (NULL, 0, &kCFTypeDictionaryKeyCallBacks,
+      &kCFTypeDictionaryValueCallBacks);
+  gst_vtutil_dict_set_data (atoms, CFSTR ("avcC"),
+      GST_BUFFER_DATA (codec_data),
+      GST_BUFFER_SIZE (codec_data));
+
+  /* Extensions dict */
+  extensions = CFDictionaryCreateMutable (NULL, 0, &kCFTypeDictionaryKeyCallBacks,
+      &kCFTypeDictionaryValueCallBacks);
+  gst_vtutil_dict_set_string (extensions,
+      CFSTR ("CVImageBufferChromaLocationBottomField"), "left");
+  gst_vtutil_dict_set_string (extensions,
+      CFSTR ("CVImageBufferChromaLocationTopField"), "left");
+  gst_vtutil_dict_set_boolean (extensions, CFSTR("FullRangeVideo"), FALSE);
+  gst_vtutil_dict_set_object (extensions, CFSTR ("CVPixelAspectRatio"),
+      (CFTypeRef *) par);
+  gst_vtutil_dict_set_object (extensions,
+      CFSTR ("SampleDescriptionExtensionAtoms"), (CFTypeRef *) atoms);
+
+  status = CMVideoFormatDescriptionCreate (NULL,
       self->details->format_id, self->negotiated_width, self->negotiated_height,
-      'avcC', GST_BUFFER_DATA (codec_data), GST_BUFFER_SIZE (codec_data), NULL,
-      &fmt_desc);
+      extensions, &fmt_desc);
   if (status == noErr)
     return fmt_desc;
   else
