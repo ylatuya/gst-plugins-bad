@@ -45,10 +45,11 @@ gst_core_video_buffer_finalize (GstMiniObject * mini_object)
 GstBuffer *
 gst_core_video_buffer_new (CVBufferRef cvbuf)
 {
-  void *data;
+  guint8 *data;
   size_t size;
   CVPixelBufferRef pixbuf = NULL;
   GstCoreVideoBuffer *buf;
+  gboolean needs_copy = FALSE;
 
   if (CFGetTypeID (cvbuf) == CVPixelBufferGetTypeID ()) {
     pixbuf = (CVPixelBufferRef) cvbuf;
@@ -65,10 +66,19 @@ gst_core_video_buffer_new (CVBufferRef cvbuf)
       size = 0;
       plane_count = CVPixelBufferGetPlaneCount (pixbuf);
       for (plane_idx = 0; plane_idx != plane_count; plane_idx++) {
-        size += CVPixelBufferGetBytesPerRowOfPlane (pixbuf, plane_idx) *
+        size_t plane_size =
+            CVPixelBufferGetBytesPerRowOfPlane (pixbuf, plane_idx) *
             CVPixelBufferGetHeightOfPlane (pixbuf, plane_idx);
+        if (plane_idx == 1 && !needs_copy) {
+          long plane_stride =
+              (guint8 *) CVPixelBufferGetBaseAddressOfPlane (pixbuf, plane_idx) - data;
+          if (plane_stride != size) {
+            needs_copy = TRUE;
+          }
+        }
+        size += plane_size;
       }
-    } else {
+    }else {
       data = CVPixelBufferGetBaseAddress (pixbuf);
       size = CVPixelBufferGetBytesPerRow (pixbuf) *
           CVPixelBufferGetHeight (pixbuf);
@@ -82,6 +92,24 @@ gst_core_video_buffer_new (CVBufferRef cvbuf)
       (GST_TYPE_CORE_VIDEO_BUFFER));
   buf->cvbuf = CVBufferRetain (cvbuf);
   buf->pixbuf = pixbuf;
+
+  if (needs_copy) {
+    guint8 *ptr;
+    gint plane_count, plane_idx;
+
+    data = g_malloc0(size);
+    ptr = data;
+    GST_BUFFER_MALLOCDATA(buf) = data;
+    plane_count = CVPixelBufferGetPlaneCount (pixbuf);
+    for (plane_idx = 0; plane_idx != plane_count; plane_idx++) {
+      size_t plane_size =
+          CVPixelBufferGetBytesPerRowOfPlane (pixbuf, plane_idx) *
+          CVPixelBufferGetHeightOfPlane (pixbuf, plane_idx);
+      memcpy(ptr, CVPixelBufferGetBaseAddressOfPlane (pixbuf, plane_idx),
+          plane_size);
+      ptr += plane_size;
+    }
+  }
 
   GST_BUFFER_DATA (buf) = data;
   GST_BUFFER_SIZE (buf) = size;
