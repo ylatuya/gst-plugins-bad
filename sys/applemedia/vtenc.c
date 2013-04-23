@@ -553,7 +553,7 @@ static void
 gst_vtenc_destroy_session (GstVTEnc * self, VTCompressionSessionRef * session)
 {
   self->ctx->vt->VTCompressionSessionInvalidate (*session);
-  self->ctx->vt->VTCompressionSessionRelease (*session);
+  CFRelease (*session);
   *session = NULL;
 }
 

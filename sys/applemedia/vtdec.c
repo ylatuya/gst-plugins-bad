@@ -419,7 +419,7 @@ static void
 gst_vtdec_destroy_session (GstVTDec * self, VTDecompressionSessionRef * session)
 {
   self->ctx->vt->VTDecompressionSessionInvalidate (*session);
-  self->ctx->vt->VTDecompressionSessionRelease (*session);
+  CFRelease (*session);
   *session = NULL;
 }
 
