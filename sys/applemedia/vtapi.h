@@ -90,10 +90,6 @@ struct _GstVTApi
       void * sourceFrameRefCon);
   void (* VTCompressionSessionInvalidate)
       (VTCompressionSessionRef session);
-  void (* VTCompressionSessionRelease)
-      (VTCompressionSessionRef session);
-  VTCompressionSessionRef (* VTCompressionSessionRetain)
-      (VTCompressionSessionRef session);
   VTStatus (* VTCompressionSessionSetProperty)
       (VTCompressionSessionRef session, CFStringRef propName,
       CFTypeRef propValue);
@@ -109,10 +105,6 @@ struct _GstVTApi
       (VTDecompressionSessionRef session, CMSampleBufferRef sbuf, gsize unk1,
       gsize unk2, gsize unk3);
   void (* VTDecompressionSessionInvalidate)
-      (VTDecompressionSessionRef session);
-  void (* VTDecompressionSessionRelease)
-      (VTDecompressionSessionRef session);
-  VTDecompressionSessionRef (* VTDecompressionSessionRetain)
       (VTDecompressionSessionRef session);
   VTStatus (* VTDecompressionSessionWaitForAsynchronousFrames)
       (VTDecompressionSessionRef session);

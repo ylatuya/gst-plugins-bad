@@ -48,15 +48,11 @@ gst_vt_api_obtain (GError ** error)
     SYM_SPEC (VTCompressionSessionCreate),
     SYM_SPEC (VTCompressionSessionEncodeFrame),
     SYM_SPEC (VTCompressionSessionInvalidate),
-    SYM_SPEC (VTCompressionSessionRelease),
-    SYM_SPEC (VTCompressionSessionRetain),
     SYM_SPEC (VTCompressionSessionSetProperty),
 
     SYM_SPEC (VTDecompressionSessionCreate),
     SYM_SPEC (VTDecompressionSessionDecodeFrame),
     SYM_SPEC (VTDecompressionSessionInvalidate),
-    SYM_SPEC (VTDecompressionSessionRelease),
-    SYM_SPEC (VTDecompressionSessionRetain),
     SYM_SPEC (VTDecompressionSessionWaitForAsynchronousFrames),
 
     SYM_SPEC (kVTCompressionPropertyKey_AllowTemporalCompression),
