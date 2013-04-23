@@ -98,7 +98,11 @@ gst_vtdec_base_init (GstVTDecClass * klass)
       GST_PAD_SRC,
       GST_PAD_ALWAYS,
       gst_caps_new_simple ("video/x-raw-yuv",
+#ifdef HAVE_IOS
           "format", GST_TYPE_FOURCC, GST_MAKE_FOURCC ('N', 'V', '1', '2'),
+#else
+          "format", GST_TYPE_FOURCC, GST_MAKE_FOURCC ('U', 'Y', 'V', 'Y'),
+#endif
           "width", GST_TYPE_INT_RANGE, min_width, max_width,
           "height", GST_TYPE_INT_RANGE, min_height, max_height,
           "framerate", GST_TYPE_FRACTION_RANGE,
@@ -388,7 +392,11 @@ gst_vtdec_create_session (GstVTDec * self, CMFormatDescriptionRef fmt_desc)
   pb_attrs= CFDictionaryCreateMutable (NULL, 0, &kCFTypeDictionaryKeyCallBacks,
       &kCFTypeDictionaryValueCallBacks);
   gst_vtutil_dict_set_i32 (pb_attrs, kCVPixelBufferPixelFormatTypeKey,
+#ifdef HAVE_IOS
       kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange);
+#else
+      kCVPixelFormatType_422YpCbCr8);
+#endif
   gst_vtutil_dict_set_i32 (pb_attrs, kCVPixelBufferWidthKey,
       self->negotiated_width);
   gst_vtutil_dict_set_i32 (pb_attrs, kCVPixelBufferHeightKey,
