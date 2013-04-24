@@ -3,7 +3,6 @@ plugin_LTLIBRARIES = libgstmpegdemux.la
 libgstmpegdemux_la_SOURCES = \
 	flumpegdemux.c \
 	gstmpegdemux.c \
-	gstmpegdesc.c \
 	gstpesfilter.c \
 	gstsectionfilter.c
 
@@ -20,10 +19,8 @@ endif
 
 noinst_HEADERS = \
 	gstmpegdefs.h   \
-	gstmpegdesc.h   \
 	gstmpegdemux.h  \
 	gstpesfilter.h  \
-	gstmpegtsdemux.h \
 	gstsectionfilter.h
 
 Android.mk: Makefile.am $(BUILT_SOURCES)
