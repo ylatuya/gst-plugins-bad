@@ -10,10 +10,7 @@ libgstapplemedia_nonpublic_la_SOURCES =			\
 	cmapi.c					\
 	dynapi.c
 
-libgstapplemedia_nonpublic_la_CFLAGS =			\
-	$(GST_CFLAGS)			\
-	$(GST_BASE_CFLAGS)			\
-	$(GST_PLUGINS_BASE_CFLAGS)		\
+libgstapplemedia_nonpublic_la_CPPFLAGS =			\
 	-Dgst_dyn_api_get_type=gst_dyn_api_priv_get_type			\
 	-Dgst_dyn_api_debug=gst_dyn_api_priv_debug				\
 	-D_gst_dyn_api_new=_gst_dyn_api_priv_new				\
@@ -24,6 +21,11 @@ libgstapplemedia_nonpublic_la_CFLAGS =			\
 	-Dgst_core_video_buffer_get_type=gst_core_video_buffer_priv_get_type	\
 	-Dgst_core_media_ctx_new=gst_core_media_ctx_priv_new			\
 	-Dgst_core_media_ctx_get_type=gst_core_media_ctx_priv_get_type
+
+libgstapplemedia_nonpublic_la_CFLAGS =			\
+	$(GST_CFLAGS)			\
+	$(GST_BASE_CFLAGS)			\
+	$(GST_PLUGINS_BASE_CFLAGS)
 
 libgstapplemedia_nonpublic_la_OBJCFLAGS =			\
 	$(GST_OBJCFLAGS)			\
