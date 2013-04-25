@@ -11,7 +11,10 @@ noinst_HEADERS = gstrtpvp8depay.h \
 
 libgstrtpvp8_la_CFLAGS = $(GST_PLUGINS_BASE_CFLAGS) \
 	$(GST_BASE_CFLAGS) $(GST_CFLAGS)\
-	-Dvp8_norm=gst_rtpvp8_vp8_norm
+	-Dvp8_norm=gst_rtpvp8_vp8_norm \
+	-Dvp8dx_start_decode=gst_rtpvp8_vp8dx_start_decode \
+	-Dvp8dx_bool_decoder_fill=gst_rtpvp8_vp8dx_bool_decoder_fill
+
 libgstrtpvp8_la_LIBADD = $(GST_PLUGINS_BASE_LIBS) -lgstrtp-@GST_MAJORMINOR@ \
 	$(GST_BASE_LIBS) $(GST_LIBS)
 libgstrtpvp8_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
