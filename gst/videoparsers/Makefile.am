@@ -14,7 +14,9 @@ libgstvideoparsersbad_la_CFLAGS = \
 	-Dschro_video_format_set_std_frame_rate=gst_videoparsers_schro_video_format_set_std_frame_rate\
 	-Dschro_video_format_set_std_aspect_ratio=gst_videoparsers_schro_video_format_set_std_aspect_ratio\
 	-Dschro_video_format_set_std_signal_range=gst_videoparsers_schro_video_format_set_std_signal_range\
-	-Dschro_video_format_set_std_colour_spec=gst_videoparsers_schro_video_format_set_std_colour_spec
+	-Dschro_video_format_set_std_colour_spec=gst_videoparsers_schro_video_format_set_std_colour_spec \
+	-Ddirac_sequence_header_parse=gst_videoparsers_dirac_sequence_header_parse
+
 libgstvideoparsersbad_la_LIBADD = \
 	$(top_builddir)/gst-libs/gst/codecparsers/libgstcodecparsers-$(GST_MAJORMINOR).la \
 	$(GST_PLUGINS_BASE_LIBS) -lgstpbutils-$(GST_MAJORMINOR) -lgstvideo-$(GST_MAJORMINOR) \
