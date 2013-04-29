@@ -49,7 +49,7 @@ noinst_HEADERS =				\
 	avfvideosrc.h				\
 	corevideobuffer.h			\
 	coremediabuffer.h			\
-	iosassertsrc.h				\
+	iosassetsrc.h				\
 	vtapi.h					\
 	vtdec.h					\
 	vtenc.h					\
@@ -61,7 +61,7 @@ if HAVE_IOS
 
 libgstapplemedia_la_SOURCES +=			\
 	avfvideosrc.m \
-	iosassertsrc.c
+	iosassetsrc.m
 
 libgstapplemedia_la_LDFLAGS +=			\
 	-Wl,-framework -Wl,Foundation		\
