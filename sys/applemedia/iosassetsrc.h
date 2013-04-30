@@ -49,8 +49,6 @@ typedef struct _GstIOSAssetSrcClass GstIOSAssetSrcClass;
 
 @interface GstAssetsLibrary : ALAssetsLibrary
 {
-  GMutex lock;
-  GCond cond;
   ALAssetRepresentation *result;
 }
 
