@@ -433,40 +433,39 @@ gst_ios_asset_src_uri_handler_init (gpointer g_iface, gpointer iface_data)
 - (id) init
 {
   self = [super init];
-  g_mutex_init (&self->lock);
-  g_cond_init (&self->cond);
 
   return self;
 }
 
 - (void) release
 {
-  g_cond_clear (&self->cond);
-  g_mutex_clear (&self->lock);
 }
 
 - (ALAssetRepresentation *) assetForURLSync:(NSURL*) uri
 {
+  dispatch_semaphore_t sema = dispatch_semaphore_create(0);
+  dispatch_queue_t queue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT,0);
   ALAssetsLibraryAssetForURLResultBlock resultblock = ^(ALAsset *myasset)
   {
     self->result = [myasset defaultRepresentation];
-    g_cond_signal (&self->cond);
+    dispatch_semaphore_signal(sema);
   };
 
 
   ALAssetsLibraryAccessFailureBlock failureblock  = ^(NSError *myerror)
   {
     self->result = nil;
-    g_cond_signal (&self->cond);
+    dispatch_semaphore_signal(sema);
   };
 
-  g_mutex_lock (&self->lock);
-  [self assetForURL:uri
-                    resultBlock:resultblock
-                    failureBlock:failureblock];
-  g_cond_wait_until (&self->cond, &self->lock,
-     g_get_monotonic_time () + 5 * G_TIME_SPAN_SECOND);
-  g_mutex_unlock (&self->lock);
+  dispatch_async(queue, ^{
+    [self assetForURL:uri resultBlock:resultblock
+      failureBlock:failureblock
+    ];
+  });
+
+  dispatch_semaphore_wait(sema, DISPATCH_TIME_FOREVER);
+  dispatch_release(sema);
 
   return self->result;
 }
