@@ -23,6 +23,7 @@
 
 #ifdef HAVE_IOS
 #include "avfvideosrc.h"
+#include "iosassetsrc.h"
 #else
 #include "qtkitvideosrc.h"
 #include <Foundation/Foundation.h>
@@ -51,6 +52,8 @@ plugin_init (GstPlugin * plugin)
 #ifdef HAVE_IOS
   res = gst_element_register (plugin, "avfvideosrc", GST_RANK_NONE,
       GST_TYPE_AVF_VIDEO_SRC);
+  res &= gst_element_register (plugin, "iosassetsrc", GST_RANK_PRIMARY,
+      GST_TYPE_IOS_ASSET_SRC);
 #else
   enable_mt_mode ();
 
