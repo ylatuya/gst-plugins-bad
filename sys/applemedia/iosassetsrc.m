@@ -407,7 +407,7 @@ gst_ios_asset_src_uri_set_uri (GstURIHandler * handler, const gchar * uri)
   GstIOSAssetSrc *src = GST_IOS_ASSET_SRC (handler);
   GError *error = NULL;
 
-  if (! g_str_has_prefix (uri, "ios-asset://")) {
+  if (! g_str_has_prefix (uri, "assets-library://")) {
     GST_WARNING_OBJECT (src, "Invalid URI '%s' for ios_assetsrc: %s", uri,
         error->message);
     return FALSE;
