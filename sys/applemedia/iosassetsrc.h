@@ -49,6 +49,7 @@ typedef struct _GstIOSAssetSrcClass GstIOSAssetSrcClass;
 
 @interface GstAssetsLibrary : ALAssetsLibrary
 {
+  ALAsset *asset;
   ALAssetRepresentation *result;
 }
 
