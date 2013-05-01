@@ -439,6 +439,8 @@ gst_ios_asset_src_uri_handler_init (gpointer g_iface, gpointer iface_data)
 
 - (void) release
 {
+  [self->result release];
+  [self->asset release];
 }
 
 - (ALAssetRepresentation *) assetForURLSync:(NSURL*) uri
@@ -447,7 +449,8 @@ gst_ios_asset_src_uri_handler_init (gpointer g_iface, gpointer iface_data)
   dispatch_queue_t queue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT,0);
   ALAssetsLibraryAssetForURLResultBlock resultblock = ^(ALAsset *myasset)
   {
-    self->result = [myasset defaultRepresentation];
+    self->asset = [myasset retain];
+    self->result = [[myasset defaultRepresentation] retain];
     dispatch_semaphore_signal(sema);
   };
 
