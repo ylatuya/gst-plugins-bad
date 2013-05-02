@@ -278,7 +278,7 @@ gst_ios_asset_src_create (GstBaseSrc * basesrc, guint64 offset, guint length,
   GST_BUFFER_SIZE (buf) = 0;
   GST_BUFFER_OFFSET (buf) = offset;
   GST_BUFFER_OFFSET_END (buf) = offset;
-  bytes_read = [src->asset getBytes: GST_BUFFER_DATA (buffer)
+  bytes_read = [src->asset getBytes: GST_BUFFER_DATA (buf)
                            fromOffset:offset
                            length:length
                            error:&err];
