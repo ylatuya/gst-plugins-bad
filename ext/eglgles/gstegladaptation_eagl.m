@@ -304,7 +304,7 @@ void
 gst_egl_adaptation_destroy_context (GstEglAdaptationContext * ctx)
 {
   if (ctx->eaglctx->eagl_context) {
-    [ctx->eaglctx->eagl_context dealloc];
+    [ctx->eaglctx->eagl_context release];
     ctx->eaglctx->eagl_context = NULL;
   }
 }
