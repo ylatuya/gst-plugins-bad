@@ -50,6 +50,12 @@ GST_DEBUG_CATEGORY_STATIC (gst_ios_asset_src_debug);
 
 
 #define DEFAULT_BLOCKSIZE       4*1024
+#define OBJC_CALLOUT_BEGIN() \
+   NSAutoreleasePool *pool; \
+   \
+   pool = [[NSAutoreleasePool alloc] init]
+#define OBJC_CALLOUT_END() \
+  [pool release]
 
 enum
 {
@@ -139,15 +145,18 @@ gst_ios_asset_src_class_init (GstIOSAssetSrcClass * klass)
 static void
 gst_ios_asset_src_init (GstIOSAssetSrc * src, GstIOSAssetSrcClass * g_class)
 {
+  OBJC_CALLOUT_BEGIN ();
   src->uri = NULL;
   src->asset = NULL;
-  src->library = [[GstAssetsLibrary alloc] init];
+  src->library = [[[GstAssetsLibrary alloc] init] retain];
   gst_base_src_set_blocksize (GST_BASE_SRC (src), DEFAULT_BLOCKSIZE);
+  OBJC_CALLOUT_END ();
 }
 
 static void
 gst_ios_asset_src_free_resources (GstIOSAssetSrc *src)
 {
+  OBJC_CALLOUT_BEGIN ();
   if (src->asset != NULL) {
     [src->asset release];
     src->asset = NULL;
@@ -162,6 +171,7 @@ gst_ios_asset_src_free_resources (GstIOSAssetSrc *src)
     g_free (src->uri);
     src->uri = NULL;
   }
+  OBJC_CALLOUT_END ();
 }
 
 static void
@@ -169,10 +179,12 @@ gst_ios_asset_src_finalize (GObject * object)
 {
   GstIOSAssetSrc *src;
 
+  OBJC_CALLOUT_BEGIN ();
   src = GST_IOS_ASSET_SRC (object);
   gst_ios_asset_src_free_resources (src);
   [src->library release];
 
+  OBJC_CALLOUT_END ();
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
 
@@ -183,6 +195,7 @@ gst_ios_asset_src_set_uri (GstIOSAssetSrc * src, const gchar * uri)
   NSString *nsuristr;
   NSURL *url;
 
+  OBJC_CALLOUT_BEGIN ();
   /* the element must be stopped in order to do this */
   GST_OBJECT_LOCK (src);
   state = GST_STATE (src);
@@ -194,8 +207,7 @@ gst_ios_asset_src_set_uri (GstIOSAssetSrc * src, const gchar * uri)
 
   nsuristr = [[NSString alloc] initWithUTF8String:uri];
   url = [[NSURL alloc] initWithString:nsuristr];
-  [nsuristr release];
- 
+
   if (url == NULL) {
     GST_ERROR_OBJECT (src, "Invalid URI      : %s", src->uri);
     return FALSE;
@@ -207,6 +219,7 @@ gst_ios_asset_src_set_uri (GstIOSAssetSrc * src, const gchar * uri)
   g_object_notify (G_OBJECT (src), "uri");
   gst_uri_handler_new_uri (GST_URI_HANDLER (src), src->uri);
 
+  OBJC_CALLOUT_END ();
   return TRUE;
 
   /* ERROR */
@@ -215,6 +228,7 @@ wrong_state:
     g_warning ("Changing the 'uri' property on iosassetsrc when an asset is "
         "open is not supported.");
     GST_OBJECT_UNLOCK (src);
+    OBJC_CALLOUT_END ();
     return FALSE;
   }
 }
@@ -266,12 +280,15 @@ gst_ios_asset_src_create (GstBaseSrc * basesrc, guint64 offset, guint length,
   GstBuffer *buf;
   NSError *err;
   guint bytes_read;
+  GstFlowReturn ret;
   GstIOSAssetSrc *src = GST_IOS_ASSET_SRC (basesrc);
 
+  OBJC_CALLOUT_BEGIN ();
   buf = gst_buffer_try_new_and_alloc (length);
   if (G_UNLIKELY (buf == NULL && length > 0)) {
     GST_ERROR_OBJECT (src, "Failed to allocate %u bytes", length);
-    return GST_FLOW_ERROR;
+    ret = GST_FLOW_ERROR;
+    goto exit;
   }
 
   /* No need to read anything if length is 0 */
@@ -296,21 +313,30 @@ gst_ios_asset_src_create (GstBaseSrc * basesrc, guint64 offset, guint length,
 
   *buffer = buf;
 
-  return GST_FLOW_OK;
+  ret = GST_FLOW_OK;
+  goto exit;
 
   /* ERROR */
 could_not_read:
   {
     GST_ELEMENT_ERROR (src, RESOURCE, READ, (NULL), GST_ERROR_SYSTEM);
     gst_buffer_unref (buf);
-    return GST_FLOW_ERROR;
+    ret = GST_FLOW_ERROR;
+    goto exit;
   }
 eos:
   {
     GST_DEBUG ("EOS");
     gst_buffer_unref (buf);
-    return GST_FLOW_UNEXPECTED;
+    ret = GST_FLOW_UNEXPECTED;
+    goto exit;
   }
+exit:
+  {
+    OBJC_CALLOUT_END ();
+    return ret;
+  }
+
 }
 
 static gboolean
@@ -348,7 +374,9 @@ gst_ios_asset_src_get_size (GstBaseSrc * basesrc, guint64 * size)
 
   src = GST_IOS_ASSET_SRC (basesrc);
 
+  OBJC_CALLOUT_BEGIN ();
   *size = (guint64) [src->asset size];
+  OBJC_CALLOUT_END ();
   return TRUE;
 }
 
@@ -356,17 +384,20 @@ static gboolean
 gst_ios_asset_src_start (GstBaseSrc * basesrc)
 {
   GstIOSAssetSrc *src = GST_IOS_ASSET_SRC (basesrc);
+  gboolean ret = TRUE;
 
-  src->asset = [src->library assetForURLSync: src->url];
+  OBJC_CALLOUT_BEGIN ();
+  src->asset = [[src->library assetForURLSync: src->url] retain];
 
   if (src->asset == NULL) {
     GST_ELEMENT_ERROR (src, RESOURCE, OPEN_READ,
         ("Could not open asset \"%s\" for reading.", src->uri),
         GST_ERROR_SYSTEM);
-    return FALSE;
+    ret = FALSE;
   };
 
-  return TRUE;
+  OBJC_CALLOUT_END ();
+  return ret;
 }
 
 /* unmap and close the ios_asset */
@@ -375,7 +406,9 @@ gst_ios_asset_src_stop (GstBaseSrc * basesrc)
 {
   GstIOSAssetSrc *src = GST_IOS_ASSET_SRC (basesrc);
 
+  OBJC_CALLOUT_BEGIN ();
   [src->asset release];
+  OBJC_CALLOUT_END ();
   return TRUE;
 }
 
