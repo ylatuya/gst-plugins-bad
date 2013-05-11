@@ -54,12 +54,14 @@ noinst_HEADERS =				\
 	vtenc.h					\
 	vth264decbin.h				\
 	vth264encbin.h				\
+	iosavassetsrc.h				\
 	vtutil.h
 
 if HAVE_IOS
 
 libgstapplemedia_la_SOURCES +=			\
 	avfvideosrc.m
+	iosavassetsrc.m
 
 libgstapplemedia_la_LDFLAGS +=			\
 	-Wl,-framework -Wl,Foundation		\
