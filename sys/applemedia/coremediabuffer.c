@@ -48,10 +48,11 @@ gst_core_media_buffer_new (CMSampleBufferRef sample_buf)
   CVImageBufferRef image_buf;
   CVPixelBufferRef pixel_buf;
   CMBlockBufferRef block_buf;
-  char *data = NULL;
+  guint8 *data = NULL;
   UInt32 size;
   OSStatus status;
   GstCoreMediaBuffer *buf;
+  gboolean needs_copy = FALSE;
 
   image_buf = CMSampleBufferGetImageBuffer (sample_buf);
   pixel_buf = NULL;
@@ -74,8 +75,17 @@ gst_core_media_buffer_new (CMSampleBufferRef sample_buf)
       size = 0;
       plane_count = CVPixelBufferGetPlaneCount (pixel_buf);
       for (plane_idx = 0; plane_idx != plane_count; plane_idx++) {
-        size += CVPixelBufferGetBytesPerRowOfPlane (pixel_buf, plane_idx) *
+        size_t plane_size =
+            CVPixelBufferGetBytesPerRowOfPlane (pixel_buf, plane_idx) *
             CVPixelBufferGetHeightOfPlane (pixel_buf, plane_idx);
+        if (plane_idx == 1 && !needs_copy) {
+          long plane_stride = (guint8 *) CVPixelBufferGetBaseAddressOfPlane
+              (pixel_buf, plane_idx) - data;
+          if (plane_stride != size) {
+            needs_copy = TRUE;
+          }
+        }
+      size += plane_size;
       }
     } else {
       data = CVPixelBufferGetBaseAddress (pixel_buf);
@@ -97,6 +107,24 @@ gst_core_media_buffer_new (CMSampleBufferRef sample_buf)
   buf->image_buf = image_buf;
   buf->pixel_buf = pixel_buf;
   buf->block_buf = block_buf;
+
+  if (needs_copy) {
+    guint8 *ptr;
+    gint plane_count, plane_idx;
+
+    data = g_malloc0(size);
+    ptr = data;
+    GST_BUFFER_MALLOCDATA(buf) = data;
+    plane_count = CVPixelBufferGetPlaneCount (pixel_buf);
+    for (plane_idx = 0; plane_idx != plane_count; plane_idx++) {
+      size_t plane_size =
+          CVPixelBufferGetBytesPerRowOfPlane (pixel_buf, plane_idx) *
+          CVPixelBufferGetHeightOfPlane (pixel_buf, plane_idx);
+      memcpy(ptr, CVPixelBufferGetBaseAddressOfPlane (pixel_buf, plane_idx),
+          plane_size);
+      ptr += plane_size;
+    }
+  }
 
   GST_BUFFER_DATA (buf) = data;
   GST_BUFFER_SIZE (buf) = size;
