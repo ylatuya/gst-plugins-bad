@@ -1139,6 +1139,8 @@ gst_eglglessink_configure_caps (GstEglGlesSink * eglglessink, GstCaps * caps)
     }
   }
 
+  gst_egl_adaptation_init_egl_exts (eglglessink->egl_context);
+
 SUCCEED:
   GST_INFO_OBJECT (eglglessink, "Configured caps successfully");
   return TRUE;
