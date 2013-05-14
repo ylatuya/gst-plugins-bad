@@ -149,6 +149,10 @@ struct GstEglAdaptationContext
 #endif
 };
 
+GST_DEBUG_CATEGORY_EXTERN (egladaption_debug);
+
+void gst_egl_adaption_init (void);
+
 GstEglAdaptationContext * gst_egl_adaptation_new (GstElement * element);
 void gst_egl_adaptation_init (GstEglAdaptationContext * ctx);
 void gst_egl_adaptation_deinit (GstEglAdaptationContext * ctx);
