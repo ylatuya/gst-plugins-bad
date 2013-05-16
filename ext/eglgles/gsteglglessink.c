@@ -1123,9 +1123,9 @@ gst_eglglessink_configure_caps (GstEglGlesSink * eglglessink, GstCaps * caps)
       goto HANDLE_ERROR;
     }
     eglglessink->using_own_window = TRUE;
-    gst_egl_adaptation_update_used_window (eglglessink->egl_context);
     eglglessink->have_window = TRUE;
   }
+  gst_egl_adaptation_update_used_window (eglglessink->egl_context);
   used_window = gst_egl_adaptation_get_window (eglglessink->egl_context);
   GST_OBJECT_UNLOCK (eglglessink);
   gst_x_overlay_got_window_handle (GST_X_OVERLAY (eglglessink),
