@@ -17,6 +17,7 @@
  * Boston, MA 02111-1307, USA.
  */
 
+#include <gst/video/video.h>
 #include "coremediabuffer.h"
 
 G_DEFINE_TYPE (GstCoreMediaBuffer, gst_core_media_buffer, GST_TYPE_BUFFER);
@@ -42,6 +43,24 @@ gst_core_media_buffer_finalize (GstMiniObject * mini_object)
       (mini_object);
 }
 
+static GstVideoFormat
+_get_video_format (OSType format)
+{
+  switch (format) {
+    case kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange:
+      return GST_VIDEO_FORMAT_NV12;
+    case kCVPixelFormatType_422YpCbCr8_yuvs:
+      return GST_VIDEO_FORMAT_YUY2;
+    case kCVPixelFormatType_422YpCbCr8:
+      return GST_VIDEO_FORMAT_UYVY;
+    case kCVPixelFormatType_32BGRA:
+      return GST_VIDEO_FORMAT_BGRA;
+    default:
+      GST_WARNING ("Unknown OSType format: %d", (gint) format);
+      return GST_VIDEO_FORMAT_UNKNOWN;
+  }
+}
+
 GstBuffer *
 gst_core_media_buffer_new (CMSampleBufferRef sample_buf)
 {
@@ -53,6 +72,9 @@ gst_core_media_buffer_new (CMSampleBufferRef sample_buf)
   OSStatus status;
   GstCoreMediaBuffer *buf;
   gboolean needs_copy = FALSE;
+  size_t width, height;
+  gint plane_count, plane_idx;
+  OSType format = 0;
 
   image_buf = CMSampleBufferGetImageBuffer (sample_buf);
   pixel_buf = NULL;
@@ -60,6 +82,8 @@ gst_core_media_buffer_new (CMSampleBufferRef sample_buf)
 
   if (image_buf != NULL &&
       CFGetTypeID (image_buf) == CVPixelBufferGetTypeID ()) {
+    size_t bytes_per_row;
+    gint expected_row_stride;
     pixel_buf = (CVPixelBufferRef) image_buf;
 
     if (CVPixelBufferLockBaseAddress (pixel_buf,
@@ -67,30 +91,37 @@ gst_core_media_buffer_new (CMSampleBufferRef sample_buf)
       goto error;
     }
 
+    width = CVPixelBufferGetWidth(pixel_buf);
+    height = CVPixelBufferGetHeight(pixel_buf);
+      
     if (CVPixelBufferIsPlanar (pixel_buf)) {
-      gint plane_count, plane_idx;
-
       data = CVPixelBufferGetBaseAddressOfPlane (pixel_buf, 0);
+      bytes_per_row = CVPixelBufferGetBytesPerRow (pixel_buf);
+      format = CVPixelBufferGetPixelFormatType (pixel_buf);
 
+      if (height * bytes_per_row != gst_video_format_get_size (
+          _get_video_format (format), width, height)) {
+        needs_copy = TRUE;
+      }
+     
       size = 0;
-      plane_count = CVPixelBufferGetPlaneCount (pixel_buf);
+      plane_count = (gint) CVPixelBufferGetPlaneCount (pixel_buf);
       for (plane_idx = 0; plane_idx != plane_count; plane_idx++) {
-        size_t plane_size =
-            CVPixelBufferGetBytesPerRowOfPlane (pixel_buf, plane_idx) *
-            CVPixelBufferGetHeightOfPlane (pixel_buf, plane_idx);
+        size_t bytes_per_plane_row = CVPixelBufferGetBytesPerRowOfPlane (pixel_buf, plane_idx);
+        size_t plane_height = CVPixelBufferGetHeightOfPlane (pixel_buf, plane_idx);
+        size_t plane_size = bytes_per_plane_row * plane_height;
         if (plane_idx == 1 && !needs_copy) {
           long plane_stride = (guint8 *) CVPixelBufferGetBaseAddressOfPlane
               (pixel_buf, plane_idx) - data;
-          if (plane_stride != size) {
+          if (plane_stride != plane_size) {
             needs_copy = TRUE;
           }
         }
-      size += plane_size;
+      size += plane_height * gst_video_format_get_row_stride (_get_video_format (format), plane_idx, width);
       }
     } else {
       data = CVPixelBufferGetBaseAddress (pixel_buf);
-      size = CVPixelBufferGetBytesPerRow (pixel_buf) *
-          CVPixelBufferGetHeight (pixel_buf);
+      size = CVPixelBufferGetBytesPerRow (pixel_buf) * height;
     }
   } else if (block_buf != NULL) {
     status = CMBlockBufferGetDataPointer (block_buf, 0, 0, 0, &data);
@@ -110,20 +141,27 @@ gst_core_media_buffer_new (CMSampleBufferRef sample_buf)
 
   if (needs_copy) {
     guint8 *ptr;
-    gint plane_count, plane_idx;
+    guint8 *out_data;
 
-    data = g_malloc0(size);
-    ptr = data;
-    GST_BUFFER_MALLOCDATA(buf) = data;
+    out_data = g_malloc0(size);
+    ptr = out_data;
+    GST_BUFFER_MALLOCDATA(buf) = out_data;
     plane_count = CVPixelBufferGetPlaneCount (pixel_buf);
-    for (plane_idx = 0; plane_idx != plane_count; plane_idx++) {
-      size_t plane_size =
-          CVPixelBufferGetBytesPerRowOfPlane (pixel_buf, plane_idx) *
-          CVPixelBufferGetHeightOfPlane (pixel_buf, plane_idx);
-      memcpy(ptr, CVPixelBufferGetBaseAddressOfPlane (pixel_buf, plane_idx),
-          plane_size);
-      ptr += plane_size;
+
+    for (plane_idx = 0; plane_idx < plane_count; plane_idx++) {
+      gint row;
+      gint row_size = gst_video_format_get_row_stride (_get_video_format (format), plane_idx, width);
+      gint height = CVPixelBufferGetHeightOfPlane (pixel_buf, plane_idx);
+      gint bytes_per_row = CVPixelBufferGetBytesPerRowOfPlane (pixel_buf, plane_idx);
+      data = CVPixelBufferGetBaseAddressOfPlane (pixel_buf, plane_idx);
+
+      for (row = 0; row < height; row++) {
+        memcpy (ptr, data, row_size);
+        ptr += row_size;
+        data += bytes_per_row;
+      }
     }
+    data = out_data;
   }
 
   GST_BUFFER_DATA (buf) = data;
