@@ -36,6 +36,10 @@ gst_core_media_buffer_finalize (GstMiniObject * mini_object)
   if (self->image_buf != NULL) {
     CVPixelBufferUnlockBaseAddress (self->image_buf,
         kCVPixelBufferLock_ReadOnly);
+      CVBufferRelease(self->image_buf);
+  }
+  if (self->block_buf != NULL) {
+      CFRelease (self->block_buf);
   }
   CFRelease (self->sample_buf);
 
