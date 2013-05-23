@@ -119,6 +119,7 @@ struct _GstHLSDemux
   GMutex *updates_timed_lock;
   GTimeVal next_update;         /* Time of the next update */
   gboolean cancelled;
+  gboolean resume_after_pause;  /* Used to track if we resume after a pause */
 
   /* Bin */
   GstElement *avdemux;          /* Demuxer for the main stream */

@@ -912,6 +912,10 @@ gst_hls_demux_change_state (GstElement * element, GstStateChange transition)
       g_static_rec_mutex_lock (&demux->updates_lock);
       g_static_rec_mutex_unlock (&demux->updates_lock);
       demux->cancelled = FALSE;
+      /* Remember that we were playing, when resuming play we want to update
+       * the playlist right away instead of scheduling an update using the 
+       * previous scheduled update time as a base. */
+      demux->resume_after_pause = TRUE;
       break;
     case GST_STATE_CHANGE_PAUSED_TO_READY:
       demux->cancelled = TRUE;
@@ -1827,6 +1831,7 @@ gst_hls_demux_reset (GstHLSDemux * demux, gboolean dispose)
   demux->need_cache = TRUE;
   demux->end_of_playlist = FALSE;
   demux->cancelled = FALSE;
+  demux->resume_after_pause = FALSE;
 
   /* Bin */
   demux->need_pts_sync = TRUE;
@@ -1902,6 +1907,13 @@ gst_hls_demux_updates_loop (GstHLSDemux * demux)
 
     /* schedule the next update */
     gst_hls_demux_schedule (demux);
+
+    /* When resuming from PAUSED state back to PLAYING we want to update the
+     * playlist immediately. */
+    if (G_UNLIKELY (demux->resume_after_pause)) {
+      g_get_current_time (&demux->next_update);
+      demux->resume_after_pause = FALSE;
+    }
 
     /*  block until the next scheduled update or the signal to quit this thread */
     if (g_cond_timed_wait (GST_TASK_GET_COND (demux->updates_task),
@@ -2250,8 +2262,8 @@ retry_failover_protection:
     gst_m3u8_client_set_current (demux->client, current_stream);
     /*  Try a lower bitrate (or stop if we just tried the lowest) */
     if (new_bandwidth ==
-        GST_M3U8_STREAM (g_list_first (demux->client->main->streams)->
-            data)->bandwidth)
+        GST_M3U8_STREAM (g_list_first (demux->client->main->streams)->data)->
+        bandwidth)
       return FALSE;
     else
       return gst_hls_demux_change_playlist (demux, new_bandwidth - 1);
