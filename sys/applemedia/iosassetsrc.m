@@ -463,6 +463,9 @@ gst_ios_asset_src_uri_handler_init (gpointer g_iface, gpointer iface_data)
 
 @implementation GstAssetsLibrary
 
+@synthesize asset;
+@synthesize result;
+
 - (id) init
 {
   self = [super init];
@@ -470,39 +473,32 @@ gst_ios_asset_src_uri_handler_init (gpointer g_iface, gpointer iface_data)
   return self;
 }
 
-- (void) release
-{
-  [self->result release];
-  [self->asset release];
-}
-
 - (ALAssetRepresentation *) assetForURLSync:(NSURL*) uri
 {
   dispatch_semaphore_t sema = dispatch_semaphore_create(0);
   dispatch_queue_t queue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT,0);
-  ALAssetsLibraryAssetForURLResultBlock resultblock = ^(ALAsset *myasset)
-  {
-    self->asset = [myasset retain];
-    self->result = [[myasset defaultRepresentation] retain];
-    dispatch_semaphore_signal(sema);
-  };
-
-
-  ALAssetsLibraryAccessFailureBlock failureblock  = ^(NSError *myerror)
-  {
-    self->result = nil;
-    dispatch_semaphore_signal(sema);
-  };
 
   dispatch_async(queue, ^{
-    [self assetForURL:uri resultBlock:resultblock
-      failureBlock:failureblock
+    [self assetForURL:uri resultBlock:
+        ^(ALAsset *myasset)
+        {
+          self.asset = myasset;
+          self.result = [myasset defaultRepresentation];
+
+          dispatch_semaphore_signal(sema);
+        }
+      failureBlock:
+        ^(NSError *myerror)
+        {
+          self.result = nil;
+          dispatch_semaphore_signal(sema);
+        }
     ];
   });
 
   dispatch_semaphore_wait(sema, DISPATCH_TIME_FOREVER);
   dispatch_release(sema);
 
-  return self->result;
+  return self.result;
 }
 @end

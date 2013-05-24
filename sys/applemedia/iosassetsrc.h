@@ -49,9 +49,10 @@ typedef struct _GstIOSAssetSrcClass GstIOSAssetSrcClass;
 
 @interface GstAssetsLibrary : ALAssetsLibrary
 {
-  ALAsset *asset;
-  ALAssetRepresentation *result;
 }
+
+@property (retain) ALAsset *asset;
+@property (retain) ALAssetRepresentation *result;
 
 - (ALAssetRepresentation *) assetForURLSync:(NSURL*) uri;
 @end
