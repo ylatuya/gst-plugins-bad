@@ -278,7 +278,7 @@ gst_ios_asset_src_create (GstBaseSrc * basesrc, guint64 offset, guint length,
     GstBuffer ** buffer)
 {
   GstBuffer *buf;
-  NSError *err;
+  NSError *err = nil;
   guint bytes_read;
   GstFlowReturn ret;
   GstIOSAssetSrc *src = GST_IOS_ASSET_SRC (basesrc);
