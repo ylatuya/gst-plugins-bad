@@ -17,6 +17,7 @@
  * Boston, MA 02111-1307, USA.
  */
 
+#include <gst/video/video.h>
 #include "corevideobuffer.h"
 
 G_DEFINE_TYPE (GstCoreVideoBuffer, gst_core_video_buffer, GST_TYPE_BUFFER);
@@ -42,6 +43,24 @@ gst_core_video_buffer_finalize (GstMiniObject * mini_object)
       (mini_object);
 }
 
+static GstVideoFormat
+_get_video_format (OSType format)
+{
+  switch (format) {
+    case kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange:
+      return GST_VIDEO_FORMAT_NV12;
+    case kCVPixelFormatType_422YpCbCr8_yuvs:
+      return GST_VIDEO_FORMAT_YUY2;
+    case kCVPixelFormatType_422YpCbCr8:
+      return GST_VIDEO_FORMAT_UYVY;
+    case kCVPixelFormatType_32BGRA:
+      return GST_VIDEO_FORMAT_BGRA;
+    default:
+      GST_WARNING ("Unknown OSType format: %d", (gint) format);
+      return GST_VIDEO_FORMAT_UNKNOWN;
+  }
+}
+
 GstBuffer *
 gst_core_video_buffer_new (CVBufferRef cvbuf)
 {
@@ -49,6 +68,8 @@ gst_core_video_buffer_new (CVBufferRef cvbuf)
   size_t size;
   CVPixelBufferRef pixbuf = NULL;
   GstCoreVideoBuffer *buf;
+  size_t width, height, bytes_per_row;
+  OSType format = 0;
   gboolean needs_copy = FALSE;
 
   if (CFGetTypeID (cvbuf) == CVPixelBufferGetTypeID ()) {
@@ -58,30 +79,22 @@ gst_core_video_buffer_new (CVBufferRef cvbuf)
             kCVPixelBufferLock_ReadOnly) != kCVReturnSuccess) {
       goto error;
     }
+
+    format = CVPixelBufferGetPixelFormatType (pixbuf);
+    width = CVPixelBufferGetWidth(pixbuf);
+    height = CVPixelBufferGetHeight(pixbuf);
+    bytes_per_row = CVPixelBufferGetBytesPerRow (pixbuf);
+    size = gst_video_format_get_size (
+        _get_video_format (format), width, height);
+
+    if (height * bytes_per_row != size) {
+      needs_copy = TRUE;
+    }
+
     if (CVPixelBufferIsPlanar (pixbuf)) {
-      gint plane_count, plane_idx;
-
       data = CVPixelBufferGetBaseAddressOfPlane (pixbuf, 0);
-
-      size = 0;
-      plane_count = CVPixelBufferGetPlaneCount (pixbuf);
-      for (plane_idx = 0; plane_idx != plane_count; plane_idx++) {
-        size_t plane_size =
-            CVPixelBufferGetBytesPerRowOfPlane (pixbuf, plane_idx) *
-            CVPixelBufferGetHeightOfPlane (pixbuf, plane_idx);
-        if (plane_idx == 1 && !needs_copy) {
-          long plane_stride =
-              (guint8 *) CVPixelBufferGetBaseAddressOfPlane (pixbuf, plane_idx) - data;
-          if (plane_stride != size) {
-            needs_copy = TRUE;
-          }
-        }
-        size += plane_size;
-      }
     }else {
       data = CVPixelBufferGetBaseAddress (pixbuf);
-      size = CVPixelBufferGetBytesPerRow (pixbuf) *
-          CVPixelBufferGetHeight (pixbuf);
     }
   } else {
     /* TODO: Do we need to handle other buffer types? */
@@ -95,20 +108,28 @@ gst_core_video_buffer_new (CVBufferRef cvbuf)
 
   if (needs_copy) {
     guint8 *ptr;
+    guint8 *out_data;
     gint plane_count, plane_idx;
 
-    data = g_malloc0(size);
-    ptr = data;
-    GST_BUFFER_MALLOCDATA(buf) = data;
+    out_data = g_malloc0(size);
+    ptr = out_data;
+    GST_BUFFER_MALLOCDATA(buf) = out_data;
     plane_count = CVPixelBufferGetPlaneCount (pixbuf);
-    for (plane_idx = 0; plane_idx != plane_count; plane_idx++) {
-      size_t plane_size =
-          CVPixelBufferGetBytesPerRowOfPlane (pixbuf, plane_idx) *
-          CVPixelBufferGetHeightOfPlane (pixbuf, plane_idx);
-      memcpy(ptr, CVPixelBufferGetBaseAddressOfPlane (pixbuf, plane_idx),
-          plane_size);
-      ptr += plane_size;
+
+    for (plane_idx = 0; plane_idx < plane_count; plane_idx++) {
+      gint row;
+      gint row_size = gst_video_format_get_row_stride (_get_video_format (format), plane_idx, width);
+      gint height = CVPixelBufferGetHeightOfPlane (pixbuf, plane_idx);
+      gint bytes_per_row = CVPixelBufferGetBytesPerRowOfPlane (pixbuf, plane_idx);
+      data = CVPixelBufferGetBaseAddressOfPlane (pixbuf, plane_idx);
+
+      for (row = 0; row < height; row++) {
+        memcpy (ptr, data, row_size);
+        ptr += row_size;
+        data += bytes_per_row;
+      }
     }
+    data = out_data;
   }
 
   GST_BUFFER_DATA (buf) = data;
