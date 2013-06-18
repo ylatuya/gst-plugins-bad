@@ -1780,7 +1780,7 @@ gst_d3dvideosink_show_frame (GstVideoSink * vsink, GstBuffer * buffer)
   GstD3DVideoSink *sink = GST_D3DVIDEOSINK (vsink);
 
   if (!GST_D3DVIDEOSINK_D3D_DEVICE_TRYLOCK (sink))
-    return GST_FLOW_CUSTOM_ERROR;
+    return GST_FLOW_OK;
   ret = gst_d3dvideosink_copy_frame (sink, buffer);
   GST_D3DVIDEOSINK_D3D_DEVICE_UNLOCK (sink);
   if (ret == GST_FLOW_OK) {
