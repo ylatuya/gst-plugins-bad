@@ -860,7 +860,7 @@ gst_amc_video_dec_fill_buffer (GstAmcVideoDec * self, gint idx,
     case COLOR_FormatYUV420SemiPlanar:{
       gint i, j, height;
       guint8 *src, *dest;
-      gint src_stride, dest_stride;
+      gint src_stride, dest_stride, fixed_stride;
       gint row_length;
 
       /* This should always be set */
@@ -869,25 +869,28 @@ gst_amc_video_dec_fill_buffer (GstAmcVideoDec * self, gint idx,
         goto done;
       }
 
-      /* FIXME: This is untested! */
+      /* Samsung Galaxy S3 seems to report wrong strides.
+         I.e. BigBuckBunny 854x480 H264 reports a stride of 864 when it is
+         actually 854, so we use width instead of stride here.
+         This is obviously bound to break in the future. */
+      if (g_str_has_prefix (klass->codec_info->name, "OMX.SEC.")) {
+        fixed_stride = self->width;
+      } else {
+        fixed_stride = self->stride;
+      }
 
       for (i = 0; i < 2; i++) {
-        if (i == 0) {
-          src_stride = self->stride;
-          dest_stride = GST_VIDEO_INFO_COMP_STRIDE (info, i);
-        } else {
-          src_stride = self->stride;
-          dest_stride = GST_VIDEO_INFO_COMP_STRIDE (info, i);
-        }
+        src_stride = fixed_stride;
+        dest_stride = GST_VIDEO_INFO_COMP_STRIDE (info, i);
 
         src = buf->data + buffer_info->offset;
         if (i == 0) {
-          src += self->crop_top * self->stride;
+          src += self->crop_top * fixed_stride;
           src += self->crop_left;
           row_length = self->width;
         } else if (i == 1) {
-          src += self->slice_height * self->stride;
-          src += self->crop_top * self->stride;
+          src += self->slice_height * fixed_stride;
+          src += self->crop_top * fixed_stride;
           src += self->crop_left;
           row_length = self->width;
         }
