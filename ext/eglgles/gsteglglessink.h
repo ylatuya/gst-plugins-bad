@@ -77,6 +77,7 @@ typedef struct _GstEglGlesSinkClass GstEglGlesSinkClass;
  * @rendering_path: Rendering path (Slow/Fast)
  * @flow_lock: Simple concurrent access ward to the sink's runtime state
  * @have_window: Set if the sink has access to a window to hold it's canvas
+ * @window_changed: Tracks window changed to upload a new texture in expose
  * @using_own_window: Set if the sink created its own window
  * @egl_started: Set if the whole EGL setup has been performed
  * @create_window: Property value holder to allow/forbid internal window creation
@@ -109,6 +110,7 @@ struct _GstEglGlesSink
 
   /* Runtime flags */
   gboolean have_window;
+  gboolean window_changed;
   gboolean using_own_window;
   gboolean egl_started;
 

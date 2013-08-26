@@ -258,13 +258,24 @@ render_thread_func (GstEglGlesSink * eglglessink)
   while (gst_data_queue_pop (eglglessink->queue, &item)) {
     GstBuffer *buf = NULL;
     GstMiniObject *object = item->object;
+    gboolean window_changed;
 
     GST_DEBUG_OBJECT (eglglessink, "Handling object %" GST_PTR_FORMAT, object);
 
+    GST_OBJECT_LOCK (eglglessink);
+    window_changed = eglglessink->window_changed;
+    eglglessink->window_changed = FALSE;
+    GST_OBJECT_UNLOCK (eglglessink);
+
     if (GST_IS_BUFFER (object)) {
+      buf = GST_BUFFER_CAST (item->object);
+    } else if (window_changed) {
+      buf = gst_base_sink_get_last_buffer (GST_BASE_SINK (eglglessink));
+    }
+
+    if (buf != NULL) {
       GstCaps *caps;
 
-      buf = GST_BUFFER_CAST (item->object);
       caps = GST_BUFFER_CAPS (buf);
       if (caps != eglglessink->configured_caps) {
         if (!gst_eglglessink_configure_caps (eglglessink, caps)) {
@@ -650,6 +661,7 @@ gst_eglglessink_set_window_handle (GstXOverlay * overlay, guintptr id)
   GST_OBJECT_LOCK (eglglessink);
   gst_egl_adaptation_set_window (eglglessink->egl_context, id);
   eglglessink->have_window = ((gpointer) id != NULL);
+  eglglessink->window_changed = TRUE;
   GST_OBJECT_UNLOCK (eglglessink);
 
   return;
@@ -1379,6 +1391,7 @@ gst_eglglessink_init (GstEglGlesSink * eglglessink,
   eglglessink->have_window = FALSE;
   eglglessink->egl_started = FALSE;
   eglglessink->using_own_window = FALSE;
+  eglglessink->window_changed = FALSE;
 
   /** Props */
   eglglessink->create_window = TRUE;
