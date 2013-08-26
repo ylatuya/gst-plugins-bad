@@ -267,6 +267,20 @@ render_thread_func (GstEglGlesSink * eglglessink)
     eglglessink->window_changed = FALSE;
     GST_OBJECT_UNLOCK (eglglessink);
 
+    if (window_changed) {
+      /* Force a full reconfiguration */
+      if (eglglessink->have_window) {
+        gst_egl_adaptation_cleanup (eglglessink->egl_context);
+
+        if (eglglessink->configured_caps) {
+          gst_caps_unref (eglglessink->configured_caps);
+          eglglessink->configured_caps = NULL;
+        }
+      }
+      /* We also need a new VBO */
+      eglglessink->render_region_changed = TRUE;
+    }
+
     if (GST_IS_BUFFER (object)) {
       buf = GST_BUFFER_CAST (item->object);
     } else if (window_changed) {
