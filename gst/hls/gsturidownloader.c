@@ -434,8 +434,6 @@ gst_uri_downloader_fetch_fragment (GstUriDownloader * downloader,
   downloader->priv->download = NULL;
   GST_OBJECT_UNLOCK (downloader);
 
-  gst_bus_set_sync_handler (downloader->priv->bus, NULL, NULL);
-
   if (download != NULL)
     GST_INFO_OBJECT (downloader, "URI fetched successfully");
   else
@@ -443,6 +441,7 @@ gst_uri_downloader_fetch_fragment (GstUriDownloader * downloader,
 
 quit:
   {
+    gst_bus_set_sync_handler (downloader->priv->bus, NULL, NULL);
     gst_uri_downloader_stop (downloader);
     g_mutex_unlock (downloader->priv->usage_lock);
     return download;
