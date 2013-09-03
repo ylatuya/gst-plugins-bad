@@ -41,6 +41,7 @@ struct _GstUriDownloaderPrivate
   GstFragment *download;
   gint64 offset;
   gint64 length;
+  gboolean cancelled;
   GMutex *usage_lock;
   GMutex *lock;
   GCond *cond;
@@ -302,9 +303,9 @@ gst_uri_downloader_cancel (GstUriDownloader * downloader)
     g_cond_signal (downloader->priv->cond);
     g_mutex_unlock (downloader->priv->lock);
   } else {
+    downloader->priv->cancelled = TRUE;
     GST_OBJECT_UNLOCK (downloader);
-    GST_DEBUG_OBJECT (downloader,
-        "Trying to cancell a download that was alredy cancelled");
+    downloader->priv->cancelled = FALSE;
   }
 }
 
@@ -375,14 +376,23 @@ gst_uri_downloader_fetch_fragment (GstUriDownloader * downloader,
   g_mutex_lock (downloader->priv->usage_lock);
 
   GST_DEBUG_OBJECT (downloader, "Fetching new URI %s", fragment->name);
+
+  GST_OBJECT_LOCK (downloader);
+  if (downloader->priv->cancelled) {
+    downloader->priv->cancelled = FALSE;
+    GST_OBJECT_UNLOCK (downloader);
+    goto quit;
+  }
   downloader->priv->download = fragment;
   downloader->priv->download->download_start_time = GST_CLOCK_TIME_NONE;
   downloader->priv->length = length = fragment->length;
   downloader->priv->offset = offset = fragment->offset;
 
   if (!gst_uri_downloader_set_uri (downloader, fragment->name)) {
+    GST_OBJECT_UNLOCK (downloader);
     goto quit;
   }
+  GST_OBJECT_UNLOCK (downloader);
 
   ret = gst_element_set_state (downloader->priv->urisrc, GST_STATE_PAUSED);
 
