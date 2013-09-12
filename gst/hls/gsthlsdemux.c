@@ -107,6 +107,7 @@ enum
   PROP_CONNECTION_SPEED,
   PROP_MAX_RESOLUTION,
   PROP_ADAPTATION_ALGORITHM,
+  PROP_ADAPTIVE_SWITCHING,
   PROP_N_VIDEO,
   PROP_CURRENT_VIDEO,
   PROP_N_AUDIO,
@@ -172,6 +173,7 @@ typedef struct
 #define DEFAULT_BITRATE_LIMIT 0.8
 #define DEFAULT_CONNECTION_SPEED    0
 #define DEFAULT_ADAPTATION_ALGORITHM GST_HLS_ADAPTATION_BANDWIDTH_ESTIMATION
+#define DEFAULT_ADAPTIVE_SWITCHING TRUE
 #define DEFAULT_MAX_RESOLUTION NULL
 #define GST_HLS_DEMUX_EMPTY_FRAGMENT "a34dC9Pi8gsEMce8fked"
 
@@ -553,6 +555,11 @@ gst_hls_demux_class_init (GstHLSDemuxClass * klass)
           DEFAULT_ADAPTATION_ALGORITHM,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
+  g_object_class_install_property (gobject_class, PROP_ADAPTIVE_SWITCHING,
+      g_param_spec_boolean ("adaptive-switching", "Adaptive switching",
+          "Adaptive switching", TRUE,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
   /**
    * GstHLSDemux:n-text
    *
@@ -723,6 +730,7 @@ gst_hls_demux_init (GstHLSDemux * demux, GstHLSDemuxClass * klass)
   demux->connection_speed = DEFAULT_CONNECTION_SPEED;
   demux->max_resolution = DEFAULT_MAX_RESOLUTION;
   demux->adaptation_algo = DEFAULT_ADAPTATION_ALGORITHM;
+  demux->adaptive_switching = DEFAULT_ADAPTIVE_SWITCHING;
 
   /* Streams adaptation */
   demux->adaptation = gst_hls_adaptation_new ();
@@ -804,6 +812,22 @@ gst_hls_demux_set_property (GObject * object, guint prop_id,
       gst_hls_adaptation_set_connection_speed (demux->adaptation,
           demux->connection_speed);
       break;
+    case PROP_ADAPTIVE_SWITCHING:{
+      demux->adaptive_switching = g_value_get_boolean (value);
+      /* Reset the connectio-speed value if it's not forced anymore */
+      if (demux->adaptive_switching) {
+        gst_hls_adaptation_set_connection_speed (demux->adaptation,
+            demux->connection_speed);
+      } else {
+        GstHLSDemuxStream *stream =
+            g_hash_table_lookup (demux->video_srcpad->streams,
+            GINT_TO_POINTER (demux->video_srcpad->current_stream));
+        gst_hls_adaptation_set_connection_speed (demux->adaptation,
+            stream->bitrate);
+      }
+      gst_hls_demux_update_adaptation_algorithm (demux);
+      break;
+    }
     case PROP_ADAPTATION_ALGORITHM:
       demux->adaptation_algo = g_value_get_enum (value);
       gst_hls_demux_update_adaptation_algorithm (demux);
@@ -862,6 +886,9 @@ gst_hls_demux_get_property (GObject * object, guint prop_id, GValue * value,
       break;
     case PROP_CURRENT_TEXT:
       g_value_set_int (value, demux->subtt_srcpad->current_stream);
+      break;
+    case PROP_ADAPTIVE_SWITCHING:
+      g_value_set_boolean (value, demux->adaptive_switching);
       break;
     case PROP_ADAPTATION_ALGORITHM:
       g_value_set_enum (value, demux->adaptation_algo);
@@ -1252,7 +1279,15 @@ gst_hls_demux_chain (GstPad * pad, GstBuffer * buf)
 static void
 gst_hls_demux_update_adaptation_algorithm (GstHLSDemux * demux)
 {
-  switch (demux->adaptation_algo) {
+  gint algo;
+
+  if (demux->adaptive_switching) {
+    algo = demux->adaptation_algo;
+  } else {
+    algo = GST_HLS_ADAPTATION_FIXED_BITRATE;
+  }
+
+  switch (algo) {
     case GST_HLS_ADAPTATION_ALWAYS_LOWEST:
       demux->algo_func = gst_hls_adaptation_always_lowest;
       break;
@@ -1371,6 +1406,11 @@ gst_hls_demux_select_stream (GstHLSDemux * demux, GstM3U8MediaType type)
       stream->stream_id);
   gst_m3u8_client_set_alternate (demux->client, type, stream->stream_id);
 
+  if (!demux->adaptive_switching && stream->bitrate != 0) {
+    gst_hls_adaptation_set_connection_speed (demux->adaptation,
+        stream->bitrate);
+    gst_hls_demux_switch_playlist (demux);
+  }
 
   GST_HLS_DEMUX_PADS_LOCK (demux);
   demux->stream_changed = TRUE;
