@@ -1656,6 +1656,10 @@ gst_hls_demux_push_fragment (GstHLSDemux * demux, GstM3U8MediaType type)
     return TRUE;
   }
 
+  if (demux->flushing) {
+    GST_HLS_DEMUX_PADS_UNLOCK (demux);
+    return TRUE;
+  }
   gst_hls_demux_prepare_pads (demux, pdata);
   need_segment = pdata->need_segment;
   GST_HLS_DEMUX_PADS_UNLOCK (demux);
