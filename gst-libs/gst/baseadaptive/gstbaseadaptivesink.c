@@ -533,6 +533,14 @@ gst_base_adaptive_sink_set_fragment_prefix (GstBaseAdaptiveSink * sink,
 }
 
 static void
+gst_base_adaptive_sink_set_title (GstBaseAdaptiveSink * sink,
+    const gchar * title)
+{
+  g_free (sink->title);
+  sink->title = g_strdup (title);
+}
+
+static void
 gst_base_adaptive_sink_set_property (GObject * object, guint prop_id,
     const GValue * value, GParamSpec * pspec)
 {
@@ -570,6 +578,9 @@ gst_base_adaptive_sink_set_property (GObject * object, guint prop_id,
       break;
     case PROP_FRAGMENT_DURATION:
       sink->fragment_duration = g_value_get_uint (value) * GST_SECOND;
+      break;
+    case PROP_TITLE:
+      gst_base_adaptive_sink_set_title (sink, g_value_get_string (value));
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -613,6 +624,9 @@ gst_base_adaptive_sink_get_property (GObject * object, guint prop_id,
       break;
     case PROP_FRAGMENT_DURATION:
       g_value_set_uint (value, sink->fragment_duration / GST_SECOND);
+      break;
+    case PROP_TITLE:
+      g_value_set_string (value, sink->title);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
