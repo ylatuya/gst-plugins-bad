@@ -255,5 +255,9 @@ guint64 gst_m3u8_client_get_current_fragment_duration (GstM3U8Client *client);
 void gst_m3u8_client_set_max_resolution               (GstM3U8Client * client,
                                                        gchar * resolution);
 
+gboolean gst_m3u8_stream_is_audio_only                (GstM3U8Stream * stream);
+
+gboolean gst_m3u8_stream_is_audio_video               (GstM3U8Stream * stream);
+
 G_END_DECLS
 #endif /* __M3U8_H__ */

@@ -160,7 +160,7 @@ gst_m3u8_stream_free (GstM3U8Stream * stream)
   g_free (stream);
 }
 
-static gboolean
+gboolean
 gst_m3u8_stream_is_audio_video (GstM3U8Stream * stream)
 {
   return (stream->video_codec != GST_M3U8_MEDIA_CODEC_NONE &&
@@ -169,7 +169,7 @@ gst_m3u8_stream_is_audio_video (GstM3U8Stream * stream)
       stream->audio_codec == GST_M3U8_MEDIA_CODEC_NONE);
 }
 
-static gboolean
+gboolean
 gst_m3u8_stream_is_audio_only (GstM3U8Stream * stream)
 {
   return stream->video_codec == GST_M3U8_MEDIA_CODEC_NONE &&
@@ -743,11 +743,21 @@ gst_m3u8_variant_playlist_parse (GstM3U8VariantPlaylist * self, gchar * data)
       }
 
       if (audio_alternate == NULL && video_alternate == NULL) {
+        GstM3U8Media *media;
+
         /* No alternative renditions, this URI is the only one used for this
          * stream */
         pl = gst_m3u8_playlist_new ();
         gst_m3u8_set_uri (GST_M3U8 (pl), g_strdup (uri));
+        media = gst_m3u8_media_new ();
+        media->media_type = GST_M3U8_MEDIA_TYPE_VIDEO;
+        media->playlist = pl;
+        media->group_id = g_strdup ("Default");
+        media->name = g_strdup ("Default");
+        media->uri = g_strdup (uri);
+        g_hash_table_insert (stream->video_alternates, media->name, media);
         stream->selected_video = pl;
+        stream->default_video = g_strdup (media->name);
       }
 
       if (uri)
