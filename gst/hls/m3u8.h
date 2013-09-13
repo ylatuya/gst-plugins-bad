@@ -241,8 +241,9 @@ gboolean gst_m3u8_client_set_alternate                (GstM3U8Client *client,
                                                        GstM3U8MediaType media_type,
                                                        const gchar *name);
 
-gboolean gst_m3u8_client_video_stream_info            (GstM3U8Client *client, gchar * name,
-                                                       guint *bitrate, gchar **title);
+gboolean gst_m3u8_client_video_stream_info            (GstM3U8Client *client, GstM3U8Stream *stream,
+                                                       gchar * name, guint *bitrate, gchar **title,
+                                                       guint *height, guint *width);
 
 gboolean gst_m3u8_client_audio_stream_info            (GstM3U8Client *client, gchar * name,
                                                        gchar **lang, gchar **title);

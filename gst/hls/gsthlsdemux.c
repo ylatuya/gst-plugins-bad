@@ -1437,7 +1437,7 @@ gst_hls_demux_add_pad_to_tags (GstHLSDemux * demux, GstTagList * list,
 
 static void
 gst_hls_demux_add_tags (GstHLSDemux * demux, GstTagList * list,
-    gchar * title, guint bitrate, gchar * lang)
+    gchar * title, guint bitrate, gchar * lang, guint width, guint height)
 {
   if (title)
     gst_tag_list_add (list, GST_TAG_MERGE_REPLACE, GST_TAG_TITLE, title, NULL);
@@ -1449,6 +1449,23 @@ gst_hls_demux_add_tags (GstHLSDemux * demux, GstTagList * list,
   if (lang != NULL)
     gst_tag_list_add (list, GST_TAG_MERGE_REPLACE, GST_TAG_LANGUAGE_CODE, lang,
         NULL);
+
+  if (width != 0) {
+    if (!gst_tag_exists ("video-width")) {
+      gst_tag_register ("video-width", GST_TAG_FLAG_META, G_TYPE_UINT,
+          "video-width", "video-width", NULL);
+    }
+    gst_tag_list_add (list, GST_TAG_MERGE_REPLACE, "video-width", width, NULL);
+  }
+
+  if (height != 0) {
+    if (!gst_tag_exists ("video-height")) {
+      gst_tag_register ("video-height", GST_TAG_FLAG_META, G_TYPE_UINT,
+          "video-height", "video-height", NULL);
+    }
+    gst_tag_list_add (list, GST_TAG_MERGE_REPLACE, "video-height", height,
+        NULL);
+  }
 }
 
 static GstTagList *
@@ -1506,7 +1523,7 @@ gst_hls_demux_create_streams (GstHLSDemux * demux)
     stream = gst_hls_demux_stream_new (index, stream_id, 0);
     if (gst_m3u8_client_audio_stream_info (demux->client, stream->stream_id,
             &lang, &title)) {
-      gst_hls_demux_add_tags (demux, stream->tags, title, 0, lang);
+      gst_hls_demux_add_tags (demux, stream->tags, title, 0, lang, 0, 0);
       if (lang)
         g_free (lang);
       if (title)
@@ -1527,7 +1544,7 @@ gst_hls_demux_create_streams (GstHLSDemux * demux)
       GstHLSDemuxStream *stream;
       GstM3U8Stream *client_stream;
       gchar *title = NULL;
-      guint bitrate;
+      guint bitrate, width, height;
 
       bitrate = GPOINTER_TO_UINT (list->data);
       client_stream =
@@ -1536,9 +1553,10 @@ gst_hls_demux_create_streams (GstHLSDemux * demux)
         index = g_hash_table_size (demux->video_srcpad->streams);
         stream = gst_hls_demux_stream_new (index, (gchar *) walk->data,
             GPOINTER_TO_UINT (list->data));
-        if (gst_m3u8_client_video_stream_info (demux->client, stream->stream_id,
-                NULL, &title)) {
-          gst_hls_demux_add_tags (demux, stream->tags, title, bitrate, NULL);
+        if (gst_m3u8_client_video_stream_info (demux->client, client_stream,
+                stream->stream_id, &bitrate, &title, &width, &height)) {
+          gst_hls_demux_add_tags (demux, stream->tags, title, bitrate, NULL,
+              width, height);
           if (title)
             g_free (title);
         }
@@ -1571,7 +1589,7 @@ gst_hls_demux_create_streams (GstHLSDemux * demux)
     stream = gst_hls_demux_stream_new (index, stream_id, 0);
     if (gst_m3u8_client_subs_stream_info (demux->client, stream_id, &lang,
             &title)) {
-      gst_hls_demux_add_tags (demux, stream->tags, title, 0, lang);
+      gst_hls_demux_add_tags (demux, stream->tags, title, 0, lang, 0, 0);
       if (lang)
         g_free (lang);
       if (title)
@@ -1658,6 +1676,7 @@ gst_hls_demux_push_fragment (GstHLSDemux * demux, GstM3U8MediaType type)
     GST_HLS_DEMUX_PADS_UNLOCK (demux);
     return TRUE;
   }
+
   gst_hls_demux_prepare_pads (demux, pdata);
   need_segment = pdata->need_segment;
   GST_HLS_DEMUX_PADS_UNLOCK (demux);
