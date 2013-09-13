@@ -2287,29 +2287,36 @@ gst_m3u8_client_get_streams_bitrates (GstM3U8Client * client)
 }
 
 gboolean
-gst_m3u8_client_video_stream_info (GstM3U8Client * client, gchar * name,
-    guint * bitrate, gchar ** title)
+gst_m3u8_client_video_stream_info (GstM3U8Client * client,
+    GstM3U8Stream * stream, gchar * alternate_name, guint * bitrate,
+    gchar ** title, guint * width, guint * height)
 {
   gboolean ret = FALSE;
 
+  g_return_val_if_fail (client != NULL, FALSE);
+  g_return_val_if_fail (stream != NULL, FALSE);
+  g_return_val_if_fail (alternate_name != NULL, FALSE);
+
   GST_M3U8_CLIENT_LOCK (client);
 
-  if (client->selected_stream == NULL)
-    goto exit;
-
+  if (width)
+    *width = stream->width;
+  if (height)
+    *height = stream->height;
   if (bitrate)
-    *bitrate = client->selected_stream->bandwidth;
+    *bitrate = stream->bandwidth;
 
   if (client->video_alternate != NULL) {
     GstM3U8Media *media;
 
     media = g_hash_table_lookup (client->selected_stream->video_alternates,
-        name);
+        alternate_name);
     if (media != NULL) {
       if (title != NULL)
         *title = g_strdup (media->name);
     }
   }
+
   ret = TRUE;
 
 exit:
