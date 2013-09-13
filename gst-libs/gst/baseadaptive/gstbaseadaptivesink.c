@@ -1278,6 +1278,7 @@ gst_base_adaptive_sink_parse_stream (GstBaseAdaptiveSink * sink,
   info = gst_discoverer_discover_uri (discoverer, tmp_file_uri, &error);
   g_free (tmp_file_uri);
   if (error != NULL) {
+    g_remove (tmp_file_path);
     g_free (tmp_file_path);
     goto error;
   }
