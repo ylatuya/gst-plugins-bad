@@ -828,12 +828,12 @@ gst_base_adaptive_sink_request_first_fragments (GstBaseAdaptiveSink * sink)
 
   tmp = g_list_first (GST_ELEMENT_PADS (GST_ELEMENT (sink)));
 
-  do {
+  while (tmp) {
     for (i = 0; i < sink->min_cache; i++) {
       gst_base_adaptive_sink_request_new_fragment (sink, (GstPad *) tmp->data);
     }
     tmp = g_list_next (tmp);
-  } while (tmp != NULL);
+  }
 
   return TRUE;
 }
