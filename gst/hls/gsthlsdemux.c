@@ -1439,7 +1439,8 @@ gst_hls_demux_add_pad_to_tags (GstHLSDemux * demux, GstTagList * list,
 
 static void
 gst_hls_demux_add_tags (GstHLSDemux * demux, GstTagList * list,
-    gchar * title, guint bitrate, gchar * lang, guint width, guint height)
+    gchar * title, guint bitrate, gchar * lang, guint width, guint height,
+    guint track_number)
 {
   if (title)
     gst_tag_list_add (list, GST_TAG_MERGE_REPLACE, GST_TAG_TITLE, title, NULL);
@@ -1468,6 +1469,8 @@ gst_hls_demux_add_tags (GstHLSDemux * demux, GstTagList * list,
     gst_tag_list_add (list, GST_TAG_MERGE_REPLACE, "video-height", height,
         NULL);
   }
+  gst_tag_list_add (list, GST_TAG_MERGE_REPLACE, GST_TAG_TRACK_NUMBER,
+      track_number, NULL);
 }
 
 static GstTagList *
@@ -1514,6 +1517,7 @@ gst_hls_demux_create_streams (GstHLSDemux * demux)
 {
   GList *walk;
   gint index;
+  gint track_number = 0;
 
   for (walk = gst_m3u8_client_get_alternates (demux->client,
           GST_M3U8_MEDIA_TYPE_AUDIO); walk; walk = walk->next) {
@@ -1525,7 +1529,9 @@ gst_hls_demux_create_streams (GstHLSDemux * demux)
     stream = gst_hls_demux_stream_new (index, stream_id, 0);
     if (gst_m3u8_client_audio_stream_info (demux->client, stream->stream_id,
             &lang, &title)) {
-      gst_hls_demux_add_tags (demux, stream->tags, title, 0, lang, 0, 0);
+      gst_hls_demux_add_tags (demux, stream->tags, title, 0, lang, 0, 0,
+          track_number);
+      track_number++;
       if (lang)
         g_free (lang);
       if (title)
@@ -1558,7 +1564,7 @@ gst_hls_demux_create_streams (GstHLSDemux * demux)
         if (gst_m3u8_client_video_stream_info (demux->client, client_stream,
                 stream->stream_id, &bitrate, &title, &width, &height)) {
           gst_hls_demux_add_tags (demux, stream->tags, title, bitrate, NULL,
-              width, height);
+              width, height, track_number);
           if (title)
             g_free (title);
         }
@@ -1579,6 +1585,7 @@ gst_hls_demux_create_streams (GstHLSDemux * demux)
         }
       }
     }
+    track_number++;
   }
 
   for (walk = gst_m3u8_client_get_alternates (demux->client,
@@ -1591,7 +1598,8 @@ gst_hls_demux_create_streams (GstHLSDemux * demux)
     stream = gst_hls_demux_stream_new (index, stream_id, 0);
     if (gst_m3u8_client_subs_stream_info (demux->client, stream_id, &lang,
             &title)) {
-      gst_hls_demux_add_tags (demux, stream->tags, title, 0, lang, 0, 0);
+      gst_hls_demux_add_tags (demux, stream->tags, title, 0, lang, 0, 0,
+          track_number);
       if (lang)
         g_free (lang);
       if (title)
@@ -1599,6 +1607,7 @@ gst_hls_demux_create_streams (GstHLSDemux * demux)
     }
     g_hash_table_insert (demux->subtt_srcpad->streams, GINT_TO_POINTER (index),
         stream);
+    track_number++;
   }
 
   g_signal_emit (demux, gst_hls_demux_signals[SIGNAL_STREAMS_CHANGED], 0);
