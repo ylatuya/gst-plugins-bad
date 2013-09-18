@@ -145,6 +145,8 @@ struct _GstHLSDemux
   guint64 start_ts;
   gboolean need_pts_sync;
   GstClockTime pts_diff;
+
+  gboolean async_pending;
 };
 
 struct _GstHLSDemuxClass

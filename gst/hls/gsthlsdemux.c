@@ -902,10 +902,34 @@ gst_hls_demux_get_property (GObject * object, guint prop_id, GValue * value,
   }
 }
 
+static void
+do_async_start (GstHLSDemux * demux)
+{
+  GstMessage *message;
+
+  demux->async_pending = TRUE;
+
+  message = gst_message_new_async_start (GST_OBJECT_CAST (demux), FALSE);
+  parent_class->handle_message (GST_BIN_CAST (demux), message);
+}
+
+static void
+do_async_done (GstHLSDemux * demux)
+{
+  GstMessage *message;
+
+  if (demux->async_pending) {
+    message = gst_message_new_async_done (GST_OBJECT_CAST (demux));
+    parent_class->handle_message (GST_BIN_CAST (demux), message);
+
+    demux->async_pending = FALSE;
+  }
+}
+
 static GstStateChangeReturn
 gst_hls_demux_change_state (GstElement * element, GstStateChange transition)
 {
-  GstStateChangeReturn ret;
+  GstStateChangeReturn ret = GST_STATE_CHANGE_SUCCESS;
   GstHLSDemux *demux = GST_HLS_DEMUX (element);
 
   switch (transition) {
@@ -920,6 +944,8 @@ gst_hls_demux_change_state (GstElement * element, GstStateChange transition)
     }
     case GST_STATE_CHANGE_READY_TO_PAUSED:
       gst_hls_demux_reset (demux, FALSE);
+      do_async_start (demux);
+      ret = GST_STATE_CHANGE_ASYNC;
       break;
     case GST_STATE_CHANGE_PAUSED_TO_PLAYING:
       /* Start the streaming loop in paused only if we already received
@@ -933,7 +959,17 @@ gst_hls_demux_change_state (GstElement * element, GstStateChange transition)
       break;
   }
 
-  ret = GST_ELEMENT_CLASS (parent_class)->change_state (element, transition);
+  {
+    GstStateChangeReturn bret;
+
+    bret = GST_ELEMENT_CLASS (parent_class)->change_state (element, transition);
+    if (G_UNLIKELY (bret == GST_STATE_CHANGE_FAILURE)) {
+      return bret;
+    } else if (G_UNLIKELY (bret == GST_STATE_CHANGE_NO_PREROLL)) {
+      do_async_done (demux);
+      ret = bret;
+    }
+  }
 
   switch (transition) {
     case GST_STATE_CHANGE_PLAYING_TO_PAUSED:
@@ -951,6 +987,7 @@ gst_hls_demux_change_state (GstElement * element, GstStateChange transition)
       demux->resume_after_pause = TRUE;
       break;
     case GST_STATE_CHANGE_PAUSED_TO_READY:
+      do_async_done (demux);
       demux->cancelled = TRUE;
       gst_uri_downloader_cancel (demux->downloader);
       gst_hls_demux_stop (demux);
@@ -3009,6 +3046,7 @@ gst_hls_demux_no_more_pads_cb (GstElement * el, GstHLSDemux * demux)
   }
 
   gst_element_no_more_pads (GST_ELEMENT (demux));
+  do_async_done (demux);
 }
 
 static void
