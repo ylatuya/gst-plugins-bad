@@ -2406,10 +2406,10 @@ gst_video_decoder_get_frame_duration (GstVideoDecoder * decoder,
   /* it's possible that we don't have a state yet when we are dropping the
    * initial buffers */
   if (state == NULL)
-    return GST_CLOCK_TIME_NONE;
+    goto def_fps;
 
   if (state->info.fps_d == 0 || state->info.fps_n == 0) {
-    return GST_CLOCK_TIME_NONE;
+    goto def_fps;
   }
 
   if (GST_VIDEO_CODEC_FRAME_FLAG_IS_SET (frame, GST_VIDEO_CODEC_FRAME_FLAG_RFF))
@@ -2422,6 +2422,9 @@ gst_video_decoder_get_frame_duration (GstVideoDecoder * decoder,
 
   return gst_util_uint64_scale (fields * GST_SECOND, state->info.fps_d,
       state->info.fps_n * 2);
+
+def_fps:
+  return gst_util_uint64_scale (GST_SECOND, 1, 30);
 }
 
 /**
