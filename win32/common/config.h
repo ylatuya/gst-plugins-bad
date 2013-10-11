@@ -24,10 +24,10 @@
 #define GST_LICENSE "LGPL"
 
 /* package name in plugins */
-#define GST_PACKAGE_NAME "GStreamer Bad Plug-ins source release"
+#define GST_PACKAGE_NAME "GStreamer (GStreamer SDK)"
 
 /* package origin */
-#define GST_PACKAGE_ORIGIN "Unknown package origin"
+#define GST_PACKAGE_ORIGIN "http://www.gstreamer.com"
 
 /* Define if the host CPU is an Alpha */
 #undef HAVE_CPU_ALPHA

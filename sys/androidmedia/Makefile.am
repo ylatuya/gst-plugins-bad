@@ -24,15 +24,20 @@ libgstandroidmedia_la_CFLAGS = \
 	$(GST_BASE_CFLAGS) \
 	$(GST_CFLAGS) \
 	$(ORC_CFLAGS) \
-	-I$(srcdir)
+	-I$(srcdir) \
+	-I$(top_srcdir)/gst-libs
+
 libgstandroidmedia_la_LIBADD = \
 	$(GST_PLUGINS_BASE_LIBS) \
 	-lgstaudio-@GST_MAJORMINOR@ \
 	-lgstpbutils-@GST_MAJORMINOR@ \
 	-lgstvideo-@GST_MAJORMINOR@ \
+	-lgstandroidjni-@GST_MAJORMINOR@ \
 	$(GST_BASE_LIBS) \
 	$(GST_LIBS) \
 	$(ORC_LIBS)
+
+
 libgstandroidmedia_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
 libgstandroidmedia_la_LIBTOOLFLAGS = --tag=disable-static
 

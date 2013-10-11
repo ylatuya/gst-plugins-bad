@@ -30,6 +30,7 @@
 #endif
 
 #include <gst/gst.h>
+#include <gst/androidjni/gstjniamcdirectbuffer.h>
 #include <string.h>
 
 #ifdef HAVE_ORC
@@ -41,8 +42,10 @@
 #include "gstamcvideodec.h"
 #include "gstamc-constants.h"
 
+
 GST_DEBUG_CATEGORY_STATIC (gst_amc_video_dec_debug_category);
 #define GST_CAT_DEFAULT gst_amc_video_dec_debug_category
+#define DEFAULT_DIRECT_RENDERING TRUE
 
 typedef struct _BufferIdentification BufferIdentification;
 struct _BufferIdentification
@@ -386,12 +389,18 @@ caps_to_mime (GstCaps * caps)
 }
 
 static GstCaps *
-create_src_caps (const GstAmcCodecInfo * codec_info)
+create_src_caps (const GstAmcCodecInfo * codec_info, gboolean direct_rendering)
 {
-  GstCaps *ret;
+  GstCaps *ret, *amc;
   gint i;
 
   ret = gst_caps_new_empty ();
+
+  if (direct_rendering) {
+    amc = gst_caps_new_simple ("video/x-amc", NULL);
+    gst_caps_merge (ret, amc);
+    return ret;
+  }
 
   for (i = 0; i < codec_info->n_supported_types; i++) {
     const GstAmcCodecType *type = &codec_info->supported_types[i];
@@ -431,6 +440,7 @@ gst_amc_video_dec_base_init (gpointer g_class)
     return;
 
   videodec_class->codec_info = codec_info;
+  videodec_class->direct_rendering = DEFAULT_DIRECT_RENDERING;
 
   /* Add pad templates */
   caps = create_sink_caps (codec_info);
@@ -438,7 +448,7 @@ gst_amc_video_dec_base_init (gpointer g_class)
   gst_element_class_add_pad_template (element_class, templ);
   gst_object_unref (templ);
 
-  caps = create_src_caps (codec_info);
+  caps = create_src_caps (codec_info, videodec_class->direct_rendering);
   templ = gst_pad_template_new ("src", GST_PAD_SRC, GST_PAD_ALWAYS, caps);
   gst_element_class_add_pad_template (element_class, templ);
   gst_object_unref (templ);
@@ -512,6 +522,10 @@ gst_amc_video_dec_close (GstVideoDecoder * decoder)
   if (self->codec)
     gst_amc_codec_free (self->codec);
   self->codec = NULL;
+
+  if (self->surface)
+    g_object_unref (self->surface);
+  self->surface = NULL;
 
   self->started = FALSE;
   self->flushing = TRUE;
@@ -1058,6 +1072,7 @@ done:
 static void
 gst_amc_video_dec_loop (GstAmcVideoDec * self)
 {
+  GstAmcVideoDecClass *klass;
   GstVideoCodecFrame *frame;
   GstFlowReturn flow_ret = GST_FLOW_OK;
   GstClockTimeDiff deadline;
@@ -1066,6 +1081,7 @@ gst_amc_video_dec_loop (GstAmcVideoDec * self)
   gint idx;
 
   GST_VIDEO_DECODER_STREAM_LOCK (self);
+  klass = GST_AMC_VIDEO_DEC_GET_CLASS (self);
 
 retry:
   /*if (self->input_state_changed) {
@@ -1163,6 +1179,9 @@ retry:
         "Frame is too late, dropping (deadline %" GST_TIME_FORMAT ")",
         GST_TIME_ARGS (-deadline));
     flow_ret = gst_video_decoder_drop_frame (GST_VIDEO_DECODER (self), frame);
+    if (klass->direct_rendering && idx >= 0) {
+      gst_amc_codec_release_output_buffer (self->codec, idx);
+    }
   } else if (!frame && buffer_info.size > 0) {
     GstBuffer *outbuf;
 
@@ -1186,6 +1205,23 @@ retry:
         gst_util_uint64_scale (buffer_info.presentation_time_us, GST_USECOND,
         1);
     flow_ret = gst_pad_push (GST_VIDEO_DECODER_SRC_PAD (self), outbuf);
+  } else if (klass->direct_rendering) {
+    GstJniAmcDirectBuffer *b;
+    GstBuffer *outbuf;
+
+    b = gst_jni_amc_direct_buffer_new (self->surface->texture,
+        self->codec->object, gst_amc_codec_get_release_method_id (self->codec),
+        idx);
+    outbuf = gst_jni_amc_direct_buffer_get_gst_buffer (b);
+    if (frame != NULL) {
+      frame->output_buffer = outbuf;
+      flow_ret =
+          gst_video_decoder_finish_frame (GST_VIDEO_DECODER (self), frame);
+    } else {
+      /* Pushing this last frame produces a black frame and transitions
+       * are not smooth so we just skip it */
+      flow_ret = GST_FLOW_OK;
+    }
   } else if (buffer_info.size > 0) {
     if ((flow_ret = gst_video_decoder_alloc_output_frame (GST_VIDEO_DECODER
                 (self), frame)) != GST_FLOW_OK) {
@@ -1202,14 +1238,15 @@ retry:
             idx);
       goto invalid_buffer;
     }
-
     flow_ret = gst_video_decoder_finish_frame (GST_VIDEO_DECODER (self), frame);
   } else if (frame != NULL) {
     flow_ret = gst_video_decoder_drop_frame (GST_VIDEO_DECODER (self), frame);
   }
 
-  if (!gst_amc_codec_release_output_buffer (self->codec, idx))
-    goto failed_release;
+  if (!klass->direct_rendering) {
+    if (!gst_amc_codec_release_output_buffer (self->codec, idx))
+      goto failed_release;
+  }
 
   if (is_eos || flow_ret == GST_FLOW_UNEXPECTED) {
     GST_VIDEO_DECODER_STREAM_UNLOCK (self);
@@ -1375,13 +1412,16 @@ gst_amc_video_dec_set_format (GstVideoDecoder * decoder,
     GstVideoCodecState * state)
 {
   GstAmcVideoDec *self;
+  GstAmcVideoDecClass *klass;
   GstAmcFormat *format;
   const gchar *mime;
   gboolean is_format_change = FALSE;
   gboolean needs_disable = FALSE;
   gchar *format_string;
+  jobject jsurface = NULL;
 
   self = GST_AMC_VIDEO_DEC (decoder);
+  klass = GST_AMC_VIDEO_DEC_GET_CLASS (self);
 
   GST_DEBUG_OBJECT (self, "Setting new caps %" GST_PTR_FORMAT, state->caps);
 
@@ -1448,11 +1488,17 @@ gst_amc_video_dec_set_format (GstVideoDecoder * decoder,
   if (self->codec_data)
     gst_amc_format_set_buffer (format, "csd-0", self->codec_data);
 
+  if (klass->direct_rendering && self->surface == NULL) {
+    self->surface = gst_jni_surface_new (gst_jni_surface_texture_new ());
+    jsurface = self->surface->jobject;
+  }
+
   format_string = gst_amc_format_to_string (format);
-  GST_DEBUG_OBJECT (self, "Configuring codec with format: %s", format_string);
+  GST_DEBUG_OBJECT (self, "Configuring codec with format: %s surface: %p",
+      format_string, self->surface);
   g_free (format_string);
 
-  if (!gst_amc_codec_configure (self->codec, format, 0)) {
+  if (!gst_amc_codec_configure (self->codec, format, jsurface, 0)) {
     GST_ERROR_OBJECT (self, "Failed to configure codec");
     return FALSE;
   }

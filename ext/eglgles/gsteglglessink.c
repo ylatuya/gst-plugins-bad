@@ -117,6 +117,10 @@
 #include <gst/video/video.h>
 #include <gst/video/gstvideosink.h>
 #include <gst/interfaces/xoverlay.h>
+#if HAVE_ANDROID
+#include <gst/androidjni/gstjniamcdirectbuffer.h>
+#endif
+
 
 #if defined (USE_EGL_RPI) && defined(__GNUC__)
 #ifndef __VCCOREVER__
@@ -142,12 +146,19 @@
 GST_DEBUG_CATEGORY_STATIC (gst_eglglessink_debug);
 #define GST_CAT_DEFAULT gst_eglglessink_debug
 
+#if HAVE_ANDROID
+#define GST_VIDEO_CAPS_AMC "video/x-amc;"
+#else
+#define GST_VIDEO_CAPS_AMC ""
+#endif
+
 /* Input capabilities. */
 static GstStaticPadTemplate gst_eglglessink_sink_template_factory =
     GST_STATIC_PAD_TEMPLATE ("sink",
     GST_PAD_SINK,
     GST_PAD_ALWAYS,
-    GST_STATIC_CAPS (GST_VIDEO_CAPS_RGBA ";" GST_VIDEO_CAPS_BGRA ";"
+    GST_STATIC_CAPS (GST_VIDEO_CAPS_AMC
+        GST_VIDEO_CAPS_RGBA ";" GST_VIDEO_CAPS_BGRA ";"
         GST_VIDEO_CAPS_ARGB ";" GST_VIDEO_CAPS_ABGR ";"
         GST_VIDEO_CAPS_RGBx ";" GST_VIDEO_CAPS_BGRx ";"
         GST_VIDEO_CAPS_xRGB ";" GST_VIDEO_CAPS_xBGR ";"
@@ -236,6 +247,20 @@ HANDLE_ERROR:
   return FALSE;
 }
 
+static void
+gst_eglglessink_cleanup (GstEglGlesSink * eglglessink)
+{
+#if HAVE_ANDROID
+  if (eglglessink->surface_texture) {
+    gst_jni_surface_texture_detach_from_gl_context
+        (eglglessink->surface_texture);
+    g_object_unref (eglglessink->surface_texture);
+    eglglessink->surface_texture = NULL;
+  }
+#endif
+  gst_egl_adaptation_cleanup (eglglessink->egl_context);
+}
+
 static gpointer
 render_thread_func (GstEglGlesSink * eglglessink)
 {
@@ -270,7 +295,7 @@ render_thread_func (GstEglGlesSink * eglglessink)
     if (window_changed) {
       /* Force a full reconfiguration */
       if (eglglessink->have_window) {
-        gst_egl_adaptation_cleanup (eglglessink->egl_context);
+        gst_eglglessink_cleanup (eglglessink);
 
         if (eglglessink->configured_caps) {
           gst_caps_unref (eglglessink->configured_caps);
@@ -305,6 +330,8 @@ render_thread_func (GstEglGlesSink * eglglessink)
         last_flow = gst_eglglessink_upload (eglglessink, buf);
         if (last_flow == GST_FLOW_OK) {
           last_flow = gst_eglglessink_render (eglglessink);
+        } else if (last_flow == GST_FLOW_CUSTOM_ERROR) {
+          last_flow = GST_FLOW_OK;
         }
       } else {
         GST_DEBUG_OBJECT (eglglessink,
@@ -343,7 +370,7 @@ render_thread_func (GstEglGlesSink * eglglessink)
   GST_DEBUG_OBJECT (eglglessink, "Shutting down thread");
 
   /* EGL/GLES cleanup */
-  gst_egl_adaptation_cleanup (eglglessink->egl_context);
+  gst_eglglessink_cleanup (eglglessink);
 
   if (eglglessink->configured_caps) {
     gst_caps_unref (eglglessink->configured_caps);
@@ -550,6 +577,23 @@ gst_eglglessink_setup_vbo (GstEglGlesSink * eglglessink)
   eglglessink->egl_context->position_array[3].z = 0;
   eglglessink->egl_context->position_array[3].a = 0;
   eglglessink->egl_context->position_array[3].b = 1;
+
+#if HAVE_ANDROID
+  /* MediaCodec is flipped in Y */
+  if (eglglessink->format == GST_VIDEO_FORMAT_AMC) {
+    eglglessink->egl_context->position_array[0].a = 1;
+    eglglessink->egl_context->position_array[0].b = 1;
+
+    eglglessink->egl_context->position_array[1].a = 1;
+    eglglessink->egl_context->position_array[1].b = 0;
+
+    eglglessink->egl_context->position_array[2].a = 0;
+    eglglessink->egl_context->position_array[2].b = 1;
+
+    eglglessink->egl_context->position_array[3].a = 0;
+    eglglessink->egl_context->position_array[3].b = 0;
+  }
+#endif
 
   if (eglglessink->display_region.x == 0) {
     /* Borders top/bottom */
@@ -875,8 +919,36 @@ gst_eglglessink_upload (GstEglGlesSink * eglglessink, GstBuffer * buf)
   if (!buf) {
     GST_DEBUG_OBJECT (eglglessink, "Rendering previous buffer again");
   } else if (buf) {
+#if HAVE_ANDROID
+    if (eglglessink->format == GST_VIDEO_FORMAT_AMC) {
+      GstJniAmcDirectBuffer *drbuf =
+          gst_jni_amc_direct_buffer_from_gst_buffer (buf);
+      if (drbuf != NULL) {
+        if (eglglessink->surface_texture != drbuf->texture) {
+          if (eglglessink->surface_texture != NULL) {
+            gst_jni_surface_texture_detach_from_gl_context
+                (eglglessink->surface_texture);
+            g_object_unref (eglglessink->surface_texture);
+            eglglessink->surface_texture = NULL;
+          }
+          eglglessink->surface_texture = g_object_ref (drbuf->texture);
+          gst_jni_surface_texture_attach_to_gl_context
+              (eglglessink->surface_texture,
+              eglglessink->egl_context->texture[0]);
+        }
+        if (!gst_jni_amc_direct_buffer_render (drbuf)) {
+          return GST_FLOW_CUSTOM_ERROR;
+        }
+        gst_jni_surface_texture_update_tex_image (eglglessink->surface_texture);
+      }
+    } else {
+      if (!gst_eglglessink_fill_texture (eglglessink, buf))
+        goto HANDLE_ERROR;
+    }
+#else
     if (!gst_eglglessink_fill_texture (eglglessink, buf))
       goto HANDLE_ERROR;
+#endif
   }
 
   return GST_FLOW_OK;
@@ -982,6 +1054,7 @@ gst_eglglessink_render (GstEglGlesSink * eglglessink)
       GST_ERROR_OBJECT (eglglessink, "VBO setup failed");
       goto HANDLE_ERROR;
     }
+
     GST_OBJECT_UNLOCK (eglglessink);
   }
 
@@ -1014,6 +1087,21 @@ gst_eglglessink_render (GstEglGlesSink * eglglessink)
   /* Draw video frame */
   GST_DEBUG_OBJECT (eglglessink, "Drawing video frame");
   glUseProgram (eglglessink->egl_context->glslprogram[0]);
+
+#if HAVE_ANDROID
+  if (eglglessink->format == GST_VIDEO_FORMAT_AMC) {
+    /* FIXME: apply tranformation matrix */
+    gfloat transform_matrix[16] = { 0 };
+
+    gst_jni_surface_texture_get_transform_matrix (eglglessink->surface_texture,
+        transform_matrix);
+
+    glUniformMatrix4fv (eglglessink->egl_context->trans_loc, 1, GL_FALSE,
+        transform_matrix);
+    if (got_gl_error ("glUniformMatrix4fv"))
+      goto HANDLE_ERROR;
+  }
+#endif
 
   for (i = 0; i < eglglessink->egl_context->n_textures; i++) {
     glUniform1i (eglglessink->egl_context->tex_loc[0][i], i);
@@ -1089,11 +1177,21 @@ gst_eglglessink_configure_caps (GstEglGlesSink * eglglessink, GstCaps * caps)
   gint width, height;
   int par_n, par_d;
   guintptr used_window = 0;
+  const GstStructure *s;
 
-  if (!(ret = gst_video_format_parse_caps (caps, &eglglessink->format, &width,
-              &height))) {
-    GST_ERROR_OBJECT (eglglessink, "Got weird and/or incomplete caps");
-    goto HANDLE_ERROR;
+  s = gst_caps_get_structure (caps, 0);
+  if (gst_structure_has_name (s, "video/x-amc")) {
+    eglglessink->format = GST_VIDEO_FORMAT_AMC;
+    if (!gst_structure_get_int (s, "width", &width))
+      return TRUE;
+    if (!gst_structure_get_int (s, "height", &height))
+      return TRUE;
+  } else {
+    if (!(ret = gst_video_format_parse_caps (caps, &eglglessink->format, &width,
+                &height))) {
+      GST_ERROR_OBJECT (eglglessink, "Got weird and/or incomplete caps");
+      goto HANDLE_ERROR;
+    }
   }
 
   if (!(ret = gst_video_parse_caps_pixel_aspect_ratio (caps, &par_n, &par_d))) {
@@ -1122,7 +1220,7 @@ gst_eglglessink_configure_caps (GstEglGlesSink * eglglessink, GstCaps * caps)
     GST_DEBUG_OBJECT (eglglessink, "Caps are not compatible, reconfiguring");
 
     /* EGL/GLES cleanup */
-    gst_egl_adaptation_cleanup (eglglessink->egl_context);
+    gst_eglglessink_cleanup (eglglessink);
 
     gst_caps_unref (eglglessink->configured_caps);
     eglglessink->configured_caps = NULL;
@@ -1164,7 +1262,6 @@ gst_eglglessink_configure_caps (GstEglGlesSink * eglglessink, GstCaps * caps)
       goto HANDLE_ERROR;
     }
   }
-
   gst_egl_adaptation_init_egl_exts (eglglessink->egl_context);
 
 SUCCEED:

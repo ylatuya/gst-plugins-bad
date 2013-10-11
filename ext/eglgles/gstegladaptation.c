@@ -68,6 +68,18 @@ static const char *vert_COPY_prog = {
       "}"
 };
 
+static const char *vert_COPY_prog_trans = {
+      "attribute vec3 position;"
+      "attribute vec2 texpos;"
+      "uniform mat4 trans;"
+      "varying vec2 opos;"
+      "void main(void)"
+      "{"
+      " opos = (trans * vec4(texpos, 0, 1)).xy;"
+      " gl_Position = vec4(position, 1.0);"
+      "}"
+};
+
 static const char *vert_COPY_prog_no_tex = {
       "attribute vec3 position;"
       "void main(void)"
@@ -95,6 +107,18 @@ static const char *frag_COPY_prog = {
       " vec4 t = texture2D(tex, opos);"
       " gl_FragColor = vec4(t.rgb, 1.0);"
       "}"
+};
+
+/* Android OES texture */
+static const char *frag_OES_prog = {
+  "#extension GL_OES_EGL_image_external : require\n"
+    "precision mediump float;"
+    "varying vec2 opos;"
+    "uniform samplerExternalOES tex;"
+    "void main (void)"
+    "{"
+    " gl_FragColor.rgba = texture2D(tex, opos).rgba; "
+    "}"
 };
 
 /* Channel reordering for XYZ <-> ZYX conversion */
@@ -364,6 +388,10 @@ gint gst_egl_adaptation_fill_supported_fbuffer_configs
   /* Init supported format/caps list */
   caps = gst_caps_new_empty ();
 
+#ifdef HAVE_ANDROID
+  gst_caps_append (caps, gst_caps_new_simple ("video/x-amc", NULL));
+#endif
+
   if (gst_egl_choose_config (ctx, TRUE, NULL)) {
     gst_caps_append (caps,
         gst_video_format_new_template_caps (GST_VIDEO_FORMAT_RGBA));
@@ -462,6 +490,7 @@ gst_egl_adaptation_init_egl_surface (GstEglAdaptationContext * ctx,
   GLboolean ret;
   const gchar *texnames[3] = { NULL, };
   gchar *frag_prog = NULL;
+  const gchar *vert_prog = NULL;
   gboolean free_frag_prog = FALSE;
   gint i;
 
@@ -496,6 +525,7 @@ gst_egl_adaptation_init_egl_surface (GstEglAdaptationContext * ctx,
 
   /* Build shader program for video texture rendering */
 
+  vert_prog = vert_COPY_prog;
   switch (format) {
     case GST_VIDEO_FORMAT_AYUV:
       frag_prog = (gchar *) frag_AYUV_prog;
@@ -581,15 +611,23 @@ gst_egl_adaptation_init_egl_surface (GstEglAdaptationContext * ctx,
       ctx->n_textures = 1;
       texnames[0] = "tex";
       break;
-    default:
-      g_assert_not_reached ();
+    default:{
+      if (format == GST_VIDEO_FORMAT_AMC) {
+        frag_prog = (gchar *) frag_OES_prog;
+        free_frag_prog = FALSE;
+        vert_prog = vert_COPY_prog_trans;
+        ctx->n_textures = 1;
+        texnames[0] = "tex";
+      } else {
+        g_assert_not_reached ();
+      }
       break;
+    }
   }
 
   if (!create_shader_program (ctx,
           &ctx->glslprogram[0],
-          &ctx->vertshader[0],
-          &ctx->fragshader[0], vert_COPY_prog, frag_prog)) {
+          &ctx->vertshader[0], &ctx->fragshader[0], vert_prog, frag_prog)) {
     if (free_frag_prog)
       g_free (frag_prog);
     frag_prog = NULL;
@@ -614,6 +652,7 @@ gst_egl_adaptation_init_egl_surface (GstEglAdaptationContext * ctx,
     ctx->tex_loc[0][i] =
         glGetUniformLocation (ctx->glslprogram[0], texnames[i]);
   }
+  ctx->trans_loc = glGetUniformLocation (ctx->glslprogram[0], "trans");
 
   if (!ctx->buffer_preserved) {
     /* Build shader program for black borders */
@@ -640,21 +679,39 @@ gst_egl_adaptation_init_egl_surface (GstEglAdaptationContext * ctx,
       goto HANDLE_ERROR_LOCKED;
 
     for (i = 0; i < ctx->n_textures; i++) {
-      glBindTexture (GL_TEXTURE_2D, ctx->texture[i]);
-      if (got_gl_error ("glBindTexture"))
-        goto HANDLE_ERROR;
+      if (format == GST_VIDEO_FORMAT_AMC) {
+        glBindTexture (GL_TEXTURE_EXTERNAL_OES, ctx->texture[i]);
+        if (got_gl_error ("glBindTexture"))
+          goto HANDLE_ERROR;
 
-      /* Set 2D resizing params */
-      glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-      glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-      /* If these are not set the texture image unit will return
-       * (R, G, B, A) = black on glTexImage2D for non-POT width/height
-       * frames. For a deeper explanation take a look at the OpenGL ES
-       * documentation for glTexParameter */
-      glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-      glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-      if (got_gl_error ("glTexParameteri"))
-        goto HANDLE_ERROR_LOCKED;
+        glTexParameterf (GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_MIN_FILTER,
+            GL_LINEAR);
+        glTexParameterf (GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_MAG_FILTER,
+            GL_LINEAR);
+        glTexParameterf (GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_WRAP_S,
+            GL_CLAMP_TO_EDGE);
+        glTexParameterf (GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_WRAP_T,
+            GL_CLAMP_TO_EDGE);
+        if (got_gl_error ("glTexParameterf"))
+          goto HANDLE_ERROR_LOCKED;
+        glBindTexture (GL_TEXTURE_EXTERNAL_OES, 0);
+      } else {
+        glBindTexture (GL_TEXTURE_2D, ctx->texture[i]);
+        if (got_gl_error ("glBindTexture"))
+          goto HANDLE_ERROR;
+
+        /* Set 2D resizing params */
+        glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        /* If these are not set the texture image unit will return
+         * (R, G, B, A) = black on glTexImage2D for non-POT width/height
+         * frames. For a deeper explanation take a look at the OpenGL ES
+         * documentation for glTexParameter */
+        glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        if (got_gl_error ("glTexParameteri"))
+          goto HANDLE_ERROR_LOCKED;
+      }
     }
 
     ctx->have_texture = TRUE;

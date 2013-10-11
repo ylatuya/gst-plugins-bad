@@ -87,6 +87,9 @@
 #define GST_EGLGLESSINK_IMAGE_RGB565 2
 #define GST_EGLGLESSINK_IMAGE_RGBA8888 3
 #define GST_EGLGLESSINK_EGL_MIN_VERSION 1
+
+#define GST_VIDEO_FORMAT_AMC 9999
+
 G_BEGIN_DECLS
 
 typedef struct GstEglAdaptationContext GstEglAdaptationContext;
@@ -139,6 +142,7 @@ struct GstEglAdaptationContext
   GLuint position_loc[3]; /* frame, border, frame-platform */
   GLuint texpos_loc[2]; /* frame, frame-platform */
   GLuint tex_loc[2][3]; /* [frame, frame-platform] RGB/Y, U/UV, V */
+  GLuint trans_loc; /* Transformation matrix for textures */
   coord5 position_array[12];    /* 4 x Frame, 4 x Border1, 4 x Border2 */
   unsigned short index_array[4];
 

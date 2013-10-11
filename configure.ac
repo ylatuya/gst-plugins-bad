@@ -723,12 +723,14 @@ AG_GST_CHECK_FEATURE(ANDROID_MEDIA, [Android Media], androidmedia, [
   case "$host" in
     *android*)
       AC_CHECK_HEADER(jni.h, HAVE_ANDROID_MEDIA="yes", HAVE_ANDROID_MEDIA="no")
+      AC_DEFINE(HAVE_ANDROID, 1, [Define if building for Android])
       ;;
     *)
       HAVE_ANDROID_MEDIA="no"
       ;;
   esac
 ])
+AM_CONDITIONAL(HAVE_ANDROID, test "x$HAVE_ANDROID_MEDIA" = "xyes")
 
 dnl *** AppleMedia (OS X and iOS) ***
 translit(dnm, m, l) AM_CONDITIONAL(USE_APPLE_MEDIA, true)
@@ -2331,6 +2333,7 @@ gst-libs/gst/interfaces/Makefile
 gst-libs/gst/signalprocessor/Makefile
 gst-libs/gst/codecparsers/Makefile
 gst-libs/gst/video/Makefile
+gst-libs/gst/androidjni/Makefile
 sys/Makefile
 sys/dshowdecwrapper/Makefile
 sys/acmenc/Makefile

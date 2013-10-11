@@ -2010,7 +2010,7 @@ gst_video_decoder_prepare_finish_frame (GstVideoDecoder *
       priv->last_out_frame_number != (guint) (-1) &&
       frame->system_frame_number != (priv->last_out_frame_number + 1)) {
     GST_DEBUG_OBJECT (decoder, "Detected reordered output");
-    priv->reordered_output = TRUE;
+    //priv->reordered_output = TRUE;
   }
 
   GST_LOG_OBJECT (decoder,
@@ -2526,7 +2526,7 @@ gst_video_decoder_decode_frame (GstVideoDecoder * decoder,
       && GST_CLOCK_TIME_IS_VALID (priv->last_timestamp_in)
       && frame->pts < priv->last_timestamp_in) {
     GST_DEBUG_OBJECT (decoder, "Incoming timestamps are out of order");
-    priv->reordered_input = TRUE;
+    //priv->reordered_input = TRUE;
   }
   priv->last_timestamp_in = frame->pts;
   priv->incoming_timestamps[priv->reorder_idx_in] = frame->pts;
@@ -2736,8 +2736,13 @@ gst_video_decoder_set_src_caps (GstVideoDecoder * decoder)
       state->info.par_n, state->info.par_d,
       state->info.fps_n, state->info.fps_d);
 
-  if (state->caps == NULL)
+  if (state->caps == NULL) {
     state->caps = gst_video_info_to_caps (&state->info);
+    if (state->info.finfo->format == GST_VIDEO_FORMAT_ENCODED) {
+      gst_structure_set_name (gst_caps_get_structure (state->caps, 0),
+          "video/x-amc");
+    }
+  }
 
   GST_DEBUG_OBJECT (decoder, "setting caps %" GST_PTR_FORMAT, state->caps);
 
@@ -2822,6 +2827,7 @@ gst_video_decoder_alloc_output_frame (GstVideoDecoder *
   g_return_val_if_fail (frame->output_buffer == NULL, GST_FLOW_ERROR);
 
   GST_VIDEO_DECODER_STREAM_LOCK (decoder);
+
   if (G_UNLIKELY (decoder->priv->output_state_changed))
     gst_video_decoder_set_src_caps (decoder);
 

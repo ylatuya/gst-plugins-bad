@@ -21,6 +21,8 @@
 #ifndef __GST_AMC_CONSTANTS_H__
 #define __GST_AMC_CONSTANTS_H__
 
+#define GST_VIDEO_FORMAT_AMC_SURFACE 256
+
 /* FIXME: We might need to get these values from Java if there's
  * ever a device or Android version that changes these values
  */
@@ -97,7 +99,8 @@ enum
   COLOR_QCOM_FormatYUV420SemiPlanar = 0x7fa30c00,
   COLOR_QCOM_FormatYUV420PackedSemiPlanar64x32Tile2m8ka = 0x7fa30c03,
   /* From hardware/ti/omap4xxx/domx/omx_core/inc/OMX_TI_IVCommon.h */
-  COLOR_TI_FormatYUV420PackedSemiPlanarInterlaced = 0x7f000001
+  COLOR_TI_FormatYUV420PackedSemiPlanarInterlaced = 0x7f000001,
+  COLOR_FormatSurface = 256
 };
 
 enum

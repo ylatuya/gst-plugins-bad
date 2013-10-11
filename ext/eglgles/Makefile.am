@@ -12,6 +12,7 @@ libgsteglglessink_la_CFLAGS = $(GST_PLUGINS_BASE_CFLAGS) \
                               $(GST_BASE_CFLAGS) \
                               $(GST_CFLAGS) \
                               $(EGLGLES_CFLAGS)
+
 libgsteglglessink_la_OBJCFLAGS = $(GST_PLUGINS_BASE_OBJCFLAGS) \
                                  $(GST_BASE_OBJCFLAGS) \
                                  $(GST_OBJCFLAGS) \
@@ -21,6 +22,11 @@ libgsteglglessink_la_LIBADD = $(GST_LIBS) $(GST_BASE_LIBS) \
 	$(GST_PLUGINS_BASE_LIBS) $(EGLGLES_LIBS) \
 	-lgstvideo-$(GST_MAJORMINOR) \
 	-lgstinterfaces-$(GST_MAJORMINOR)
+
+if HAVE_ANDROID
+libgsteglglessink_la_CFLAGS += -I$(top_srcdir)/gst-libs
+libgsteglglessink_la_LIBADD += -lgstandroidjni-$(GST_MAJORMINOR)
+endif
 
 if HAVE_IOS
 libgsteglglessink_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS) -Wl,-framework,OpenGLES -Wl,-framework,QuartzCore -Wl,-framework,IOKit -Wl,-framework,UIKit -Wl,-framework,CoreGraphics -Wl,-framework,CoreFoundation -Wl,-framework,Foundation -W

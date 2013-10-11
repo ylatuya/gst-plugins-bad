@@ -49,6 +49,7 @@
 #include <gst/gst.h>
 #include <gst/video/gstvideosink.h>
 #include <gst/base/gstdataqueue.h>
+#include <gst/androidjni/gstjnisurfacetexture.h>
 
 #include "gstegladaptation.h"
 
@@ -126,6 +127,8 @@ struct _GstEglGlesSink
   /* Properties */
   gboolean create_window;
   gboolean force_aspect_ratio;
+
+  GstJniSurfaceTexture *surface_texture;
 };
 
 struct _GstEglGlesSinkClass
