@@ -47,9 +47,11 @@
 
 #include <string.h>
 #include <gst/glib-compat-private.h>
+#include "gsthlsdemux.h"
+#if HAVE_GNUTLS
 #include <gnutls/gnutls.h>
 #include <gnutls/crypto.h>
-#include "gsthlsdemux.h"
+#endif
 
 static GstStaticPadTemplate srctemplate = GST_STATIC_PAD_TEMPLATE ("src_%u",
     GST_PAD_SRC,
@@ -1234,6 +1236,7 @@ gst_hls_demux_switch_playlist (GstHLSDemux * demux)
   return gst_hls_demux_change_playlist (demux, bitrate * demux->bitrate_limit);
 }
 
+#ifdef HAVE_GNUTLS
 static GstFragment *
 gst_hls_demux_decrypt_fragment (GstHLSDemux * demux,
     GstFragment * encrypted_fragment, const gchar * key, const guint8 * iv)
@@ -1291,6 +1294,7 @@ gst_hls_demux_decrypt_fragment (GstHLSDemux * demux,
 
   return ret;
 }
+#endif
 
 static gboolean
 gst_hls_demux_get_next_fragment (GstHLSDemux * demux, gboolean caching)
@@ -1317,8 +1321,17 @@ gst_hls_demux_get_next_fragment (GstHLSDemux * demux, gboolean caching)
   download = gst_uri_downloader_fetch_uri (demux->downloader,
       next_fragment_uri);
 
-  if (download && key)
+  if (download && key) {
+#if HAVE_GNUTLS
     download = gst_hls_demux_decrypt_fragment (demux, download, key, iv);
+#else
+    gst_object_unref (download);
+    GST_ELEMENT_ERROR (demux, STREAM, DECODE, ("This stream contains "
+          "and the plugin was compiled without gnutls support."),
+        (NULL));
+    return FALSE;
+#endif
+  }
 
   if (download == NULL)
     goto error;

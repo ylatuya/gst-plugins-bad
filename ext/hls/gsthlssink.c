@@ -13,95 +13,83 @@
  *
  * You should have received a copy of the GNU Library General Public
  * License along with this library; if not, write to the
- * Free Software Foundation, Inc., 51 Franklin St, Fifth Floor,
- * Boston, MA 02110-1301, USA.
+ * Free Software Foundation, Inc., 59 Temple Place - Suite 330,
+ * Boston, MA 02111-1307, USA.
  */
 
-/**
- * SECTION:element-hlssink
- *
- * HTTP Live Streaming sink/server
- *
- * <refsect2>
- * <title>Example launch line</title>
- * |[
- * gst-launch-1.0 videotestsrc is-live=true ! x264enc ! mpegtsmux ! hlssink max-files=5
- * ]|
- * </refsect2>
- */
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
 
 #include "gsthlssink.h"
-#include <gst/pbutils/pbutils.h>
-#include <gst/video/video.h>
-#include <gio/gio.h>
-#include <glib/gstdio.h>
-#include <memory.h>
-
+#include "gstm3u8manager.h"
 
 GST_DEBUG_CATEGORY_STATIC (gst_hls_sink_debug);
 #define GST_CAT_DEFAULT gst_hls_sink_debug
 
-#define DEFAULT_LOCATION "segment%05d.ts"
-#define DEFAULT_PLAYLIST_LOCATION "playlist.m3u8"
-#define DEFAULT_PLAYLIST_ROOT NULL
-#define DEFAULT_MAX_FILES 10
-#define DEFAULT_TARGET_DURATION 15
-#define DEFAULT_PLAYLIST_LENGTH 5
+#define DEFAULT_OUTPUT_DIR "."
+#define DEFAULT_VARIANT_PLAYLIST_NAME "main"
+#define DEFAULT_STREAM_TITLE "GStreamer HLS stream"
+#define DEFAULT_BASE_URL "http://localhost/"
+#define DEFAULT_FRAGMENT_PREFIX "fragment"
+#define DEFAULT_TARGET_DURATION 10
+#define DEFAULT_FRAGMENT_TEMPLATE "%s-%s-%05d.ts"
+#define DEFAULT_MAX_WINDOW 0
+#define DEFAULT_MAX_VERSION 2
+#define DEFAULT_IS_CHUNKED TRUE
+#define DEFAULT_IS_LIVE FALSE
+#define DEFAULT_WRITE_TO_DISK TRUE
+#define DEFAULT_DELETE_OLD_FILES TRUE
+
+#define SUPPORTED_CAPS "video/x-h264; " \
+  "audio/mpeg, mpegversion=1, layer=3;"\
+  "audio/mpeg, mpegversion={2, 4}"
 
 enum
 {
   PROP_0,
-  PROP_LOCATION,
-  PROP_PLAYLIST_LOCATION,
-  PROP_PLAYLIST_ROOT,
-  PROP_MAX_FILES,
-  PROP_TARGET_DURATION,
-  PROP_PLAYLIST_LENGTH
+  PROP_STREAM_TITLE,
+  PROP_MAX_VERSION,
 };
 
-static GstStaticPadTemplate sink_template = GST_STATIC_PAD_TEMPLATE ("sink",
+static GstStaticPadTemplate sinktemplate = GST_STATIC_PAD_TEMPLATE ("sink",
     GST_PAD_SINK,
-    GST_PAD_ALWAYS,
+    GST_PAD_REQUEST,
     GST_STATIC_CAPS_ANY);
 
-#define gst_hls_sink_parent_class parent_class
-G_DEFINE_TYPE (GstHlsSink, gst_hls_sink, GST_TYPE_BIN);
+G_DEFINE_TYPE (GstHlsSink, gst_hls_sink, GST_TYPE_BASE_ADAPTIVE_SINK);
 
 static void gst_hls_sink_set_property (GObject * object, guint prop_id,
     const GValue * value, GParamSpec * spec);
 static void gst_hls_sink_get_property (GObject * object, guint prop_id,
     GValue * value, GParamSpec * spec);
-static void gst_hls_sink_handle_message (GstBin * bin, GstMessage * message);
-static GstPadProbeReturn gst_hls_sink_ghost_event_probe (GstPad * pad,
-    GstPadProbeInfo * info, gpointer data);
-static GstPadProbeReturn gst_hls_sink_ghost_buffer_probe (GstPad * pad,
-    GstPadProbeInfo * info, gpointer data);
-static void gst_hls_sink_reset (GstHlsSink * sink);
-static GstStateChangeReturn
-gst_hls_sink_change_state (GstElement * element, GstStateChange trans);
-static gboolean schedule_next_key_unit (GstHlsSink * sink);
 
-static void
-gst_hls_sink_dispose (GObject * object)
-{
-  GstHlsSink *sink = GST_HLS_SINK_CAST (object);
-
-  G_OBJECT_CLASS (parent_class)->dispose ((GObject *) sink);
-}
 
 static void
 gst_hls_sink_finalize (GObject * object)
 {
   GstHlsSink *sink = GST_HLS_SINK_CAST (object);
 
-  g_free (sink->location);
-  g_free (sink->playlist_location);
-  g_free (sink->playlist_root);
+  if (sink->stream_title != NULL) {
+    g_free (sink->stream_title);
+    sink->stream_title = NULL;
+  }
 
-  G_OBJECT_CLASS (parent_class)->finalize ((GObject *) sink);
+  G_OBJECT_CLASS (gst_hls_sink_parent_class)->finalize ((GObject *) sink);
+}
+
+static GstStreamsManager *
+gst_hls_sink_create_streams_manager (GstBaseAdaptiveSink * bsink)
+{
+  GstM3u8Manager *man;
+  GstHlsSink *sink = GST_HLS_SINK_CAST (bsink);
+
+  man = gst_m3u8_manager_new (bsink->base_url, sink->stream_title,
+      bsink->fragment_prefix, bsink->output_directory, bsink->is_live,
+      bsink->chunked, bsink->max_window, bsink->md_name, sink->max_version,
+      FALSE);
+
+  return GST_STREAMS_MANAGER (man);
 }
 
 static void
@@ -109,240 +97,60 @@ gst_hls_sink_class_init (GstHlsSinkClass * klass)
 {
   GObjectClass *gobject_class;
   GstElementClass *element_class;
-  GstBinClass *bin_class;
+  GstBaseAdaptiveSinkClass *base_class;
 
   gobject_class = (GObjectClass *) klass;
   element_class = GST_ELEMENT_CLASS (klass);
-  bin_class = GST_BIN_CLASS (klass);
+  base_class = GST_BASE_ADAPTIVE_SINK_CLASS (klass);
+
+  base_class->create_streams_manager = gst_hls_sink_create_streams_manager;
 
   gst_element_class_add_pad_template (element_class,
-      gst_static_pad_template_get (&sink_template));
+      gst_static_pad_template_get (&sinktemplate));
 
-  gst_element_class_set_static_metadata (element_class,
-      "HTTP Live Streaming sink", "Sink", "HTTP Live Streaming sink",
-      "Alessandro Decina <alessandro.d@gmail.com>");
-
-  element_class->change_state = GST_DEBUG_FUNCPTR (gst_hls_sink_change_state);
-
-  bin_class->handle_message = gst_hls_sink_handle_message;
-
-  gobject_class->dispose = gst_hls_sink_dispose;
   gobject_class->finalize = gst_hls_sink_finalize;
   gobject_class->set_property = gst_hls_sink_set_property;
   gobject_class->get_property = gst_hls_sink_get_property;
 
-  g_object_class_install_property (gobject_class, PROP_LOCATION,
-      g_param_spec_string ("location", "File Location",
-          "Location of the file to write", DEFAULT_LOCATION,
+  gst_element_class_set_metadata (element_class,
+      "HTTP Live Streaming sink", "Sink", "HTTP Live Streaming sink",
+      "Andoni Morales Alastruey <ylatuya@gmail.com>");
+
+  g_object_class_install_property (gobject_class, PROP_STREAM_TITLE,
+      g_param_spec_string ("title", "Stream title",
+          "Title of the HLS stream", DEFAULT_STREAM_TITLE,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
-  g_object_class_install_property (gobject_class, PROP_PLAYLIST_LOCATION,
-      g_param_spec_string ("playlist-location", "Playlist Location",
-          "Location of the playlist to write", DEFAULT_PLAYLIST_LOCATION,
-          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
-  g_object_class_install_property (gobject_class, PROP_PLAYLIST_ROOT,
-      g_param_spec_string ("playlist-root", "Playlist Root",
-          "Location of the playlist to write", DEFAULT_PLAYLIST_ROOT,
-          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
-  g_object_class_install_property (gobject_class, PROP_MAX_FILES,
-      g_param_spec_uint ("max-files", "Max files",
-          "Maximum number of files to keep on disk. Once the maximum is reached,"
-          "old files start to be deleted to make room for new ones.",
-          0, G_MAXUINT, DEFAULT_MAX_FILES,
-          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
-  g_object_class_install_property (gobject_class, PROP_TARGET_DURATION,
-      g_param_spec_uint ("target-duration", "Target duration",
-          "The target duration in seconds of a segment/file. "
-          "(0 - disabled, useful for management of segment duration by the "
-          "streaming server)",
-          0, G_MAXUINT, DEFAULT_TARGET_DURATION,
-          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
-  g_object_class_install_property (gobject_class, PROP_PLAYLIST_LENGTH,
-      g_param_spec_uint ("playlist-length", "Playlist length",
-          "Length of HLS playlist. To allow players to conform to section 6.3.3 "
-          "of the HLS specification, this should be at least 3.",
-          1, G_MAXUINT, DEFAULT_PLAYLIST_LENGTH,
+
+  g_object_class_install_property (gobject_class, PROP_MAX_VERSION,
+      g_param_spec_uint ("max-version", "Max supported version",
+          "Maximum supported version of the HLS protocol (default: 2)",
+          0, 4, DEFAULT_MAX_VERSION,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 }
 
 static void
 gst_hls_sink_init (GstHlsSink * sink)
 {
-  GstPadTemplate *templ = gst_static_pad_template_get (&sink_template);
-  sink->ghostpad = gst_ghost_pad_new_no_target_from_template ("sink", templ);
-  gst_object_unref (templ);
-  gst_element_add_pad (GST_ELEMENT_CAST (sink), sink->ghostpad);
-  gst_pad_add_probe (sink->ghostpad, GST_PAD_PROBE_TYPE_EVENT_DOWNSTREAM,
-      gst_hls_sink_ghost_event_probe, sink, NULL);
-  gst_pad_add_probe (sink->ghostpad, GST_PAD_PROBE_TYPE_BUFFER,
-      gst_hls_sink_ghost_buffer_probe, sink, NULL);
+  GstBaseAdaptiveSink *bsink;
 
-  sink->location = g_strdup (DEFAULT_LOCATION);
-  sink->playlist_location = g_strdup (DEFAULT_PLAYLIST_LOCATION);
-  sink->playlist_root = g_strdup (DEFAULT_PLAYLIST_ROOT);
-  sink->playlist_length = DEFAULT_PLAYLIST_LENGTH;
-  sink->max_files = DEFAULT_MAX_FILES;
-  sink->target_duration = DEFAULT_TARGET_DURATION;
+  bsink = GST_BASE_ADAPTIVE_SINK (sink);
 
-  gst_hls_sink_reset (sink);
-}
+  gst_base_adaptive_sink_set_output_directory (bsink, DEFAULT_OUTPUT_DIR);
+  gst_base_adaptive_sink_set_md_name (bsink, DEFAULT_VARIANT_PLAYLIST_NAME);
+  gst_base_adaptive_sink_set_base_url (bsink, DEFAULT_BASE_URL);
+  gst_base_adaptive_sink_set_fragment_prefix (bsink, DEFAULT_FRAGMENT_PREFIX);
+  bsink->chunked = DEFAULT_IS_CHUNKED;
+  bsink->is_live = DEFAULT_IS_LIVE;
+  bsink->write_to_disk = DEFAULT_WRITE_TO_DISK;
+  bsink->delete_old_files = DEFAULT_DELETE_OLD_FILES;
+  bsink->max_window = DEFAULT_MAX_WINDOW * GST_SECOND;
+  bsink->fragment_duration = DEFAULT_TARGET_DURATION * GST_SECOND;
+  bsink->fragment_tpl = DEFAULT_FRAGMENT_TEMPLATE;
+  bsink->append_headers = TRUE;
+  bsink->supported_caps = gst_caps_from_string (SUPPORTED_CAPS);
 
-static void
-gst_hls_sink_reset (GstHlsSink * sink)
-{
-  sink->index = 0;
-  sink->count = 0;
-  sink->timeout_id = 0;
-  sink->last_running_time = 0;
-  /* we don't need to unref since we gst_bin_add-ed multifilesink
-   * to ourselves
-   */
-  sink->multifilesink = NULL;
-  sink->waiting_fku = FALSE;
-  gst_event_replace (&sink->force_key_unit_event, NULL);
-  gst_segment_init (&sink->segment, GST_FORMAT_UNDEFINED);
-
-  if (sink->playlist)
-    gst_m3u8_playlist_free (sink->playlist);
-  sink->playlist = gst_m3u8_playlist_new (6, sink->playlist_length, FALSE);
-}
-
-static gboolean
-gst_hls_sink_create_elements (GstHlsSink * sink)
-{
-  GstPad *pad = NULL;
-
-  GST_DEBUG_OBJECT (sink, "Creating internal elements");
-
-  if (sink->elements_created)
-    return TRUE;
-
-  sink->multifilesink = gst_element_factory_make ("multifilesink", NULL);
-  if (sink->multifilesink == NULL)
-    goto missing_element;
-
-  g_object_set (sink->multifilesink, "location", sink->location,
-      "next-file", 3, "post-messages", TRUE, "max-files", sink->max_files,
-      NULL);
-
-  gst_bin_add (GST_BIN_CAST (sink), sink->multifilesink);
-
-  pad = gst_element_get_static_pad (sink->multifilesink, "sink");
-  gst_ghost_pad_set_target (GST_GHOST_PAD (sink->ghostpad), pad);
-  gst_object_unref (pad);
-
-  sink->elements_created = TRUE;
-  return TRUE;
-
-missing_element:
-  gst_element_post_message (GST_ELEMENT_CAST (sink),
-      gst_missing_element_message_new (GST_ELEMENT_CAST (sink),
-          "multifilesink"));
-  GST_ELEMENT_ERROR (sink, CORE, MISSING_PLUGIN,
-      (("Missing element '%s' - check your GStreamer installation."),
-          "multifilesink"), (NULL));
-  return FALSE;
-}
-
-static void
-gst_hls_sink_handle_message (GstBin * bin, GstMessage * message)
-{
-  GstHlsSink *sink = GST_HLS_SINK_CAST (bin);
-
-  switch (message->type) {
-    case GST_MESSAGE_ELEMENT:
-    {
-      GFile *file;
-      const char *filename, *title;
-      char *playlist_content;
-      GstClockTime running_time, duration;
-      gboolean discont = FALSE;
-      GError *error = NULL;
-      gchar *entry_location;
-      const GstStructure *structure;
-
-      structure = gst_message_get_structure (message);
-      if (strcmp (gst_structure_get_name (structure), "GstMultiFileSink"))
-        break;
-
-      filename = gst_structure_get_string (structure, "filename");
-      gst_structure_get_clock_time (structure, "running-time", &running_time);
-      duration = running_time - sink->last_running_time;
-      sink->last_running_time = running_time;
-
-      file = g_file_new_for_path (filename);
-      title = "ciao";
-      GST_INFO_OBJECT (sink, "COUNT %d", sink->index);
-      if (sink->playlist_root == NULL)
-        entry_location = g_path_get_basename (filename);
-      else {
-        gchar *name = g_path_get_basename (filename);
-        entry_location = g_build_filename (sink->playlist_root, name, NULL);
-        g_free (name);
-      }
-
-      gst_m3u8_playlist_add_entry (sink->playlist, entry_location, file,
-          title, duration, sink->index, discont);
-      g_free (entry_location);
-      playlist_content = gst_m3u8_playlist_render (sink->playlist);
-      g_file_set_contents (sink->playlist_location,
-          playlist_content, -1, &error);
-      g_free (playlist_content);
-
-      /* multifilesink is starting a new file. It means that upstream sent a key
-       * unit and we can schedule the next key unit now.
-       */
-      sink->waiting_fku = FALSE;
-      schedule_next_key_unit (sink);
-
-      /* multifilesink is an internal implementation detail. If applications
-       * need a notification, we should probably do our own message */
-      GST_DEBUG_OBJECT (bin, "dropping message %" GST_PTR_FORMAT, message);
-      gst_message_unref (message);
-      message = NULL;
-      break;
-    }
-    default:
-      break;
-  }
-
-  if (message)
-    GST_BIN_CLASS (parent_class)->handle_message (bin, message);
-}
-
-static GstStateChangeReturn
-gst_hls_sink_change_state (GstElement * element, GstStateChange trans)
-{
-  GstStateChangeReturn ret = GST_STATE_CHANGE_SUCCESS;
-  GstHlsSink *sink = GST_HLS_SINK_CAST (element);
-
-  switch (trans) {
-    case GST_STATE_CHANGE_NULL_TO_READY:
-      if (!gst_hls_sink_create_elements (sink)) {
-        return GST_STATE_CHANGE_FAILURE;
-      }
-      break;
-    case GST_STATE_CHANGE_PAUSED_TO_PLAYING:
-      break;
-    default:
-      break;
-  }
-
-  ret = GST_ELEMENT_CLASS (parent_class)->change_state (element, trans);
-
-  switch (trans) {
-    case GST_STATE_CHANGE_PLAYING_TO_PAUSED:
-      break;
-    case GST_STATE_CHANGE_PAUSED_TO_READY:
-      gst_hls_sink_reset (sink);
-      break;
-    case GST_STATE_CHANGE_READY_TO_NULL:
-      gst_hls_sink_reset (sink);
-      break;
-    default:
-      break;
-  }
-
-  return ret;
+  sink->max_version = DEFAULT_MAX_VERSION;
+  sink->stream_title = g_strdup (DEFAULT_STREAM_TITLE);
 }
 
 static void
@@ -352,34 +160,12 @@ gst_hls_sink_set_property (GObject * object, guint prop_id,
   GstHlsSink *sink = GST_HLS_SINK_CAST (object);
 
   switch (prop_id) {
-    case PROP_LOCATION:
-      g_free (sink->location);
-      sink->location = g_value_dup_string (value);
-      if (sink->multifilesink)
-        g_object_set (sink->multifilesink, "location", sink->location, NULL);
+    case PROP_MAX_VERSION:
+      sink->max_version = g_value_get_uint (value);
       break;
-    case PROP_PLAYLIST_LOCATION:
-      g_free (sink->playlist_location);
-      sink->playlist_location = g_value_dup_string (value);
-      break;
-    case PROP_PLAYLIST_ROOT:
-      g_free (sink->playlist_root);
-      sink->playlist_root = g_value_dup_string (value);
-      break;
-    case PROP_MAX_FILES:
-      sink->max_files = g_value_get_uint (value);
-      if (sink->multifilesink) {
-        g_object_set (sink->multifilesink, "location", sink->location,
-            "next-file", 3, "post-messages", TRUE, "max-files", sink->max_files,
-            NULL);
-      }
-      break;
-    case PROP_TARGET_DURATION:
-      sink->target_duration = g_value_get_uint (value);
-      break;
-    case PROP_PLAYLIST_LENGTH:
-      sink->playlist_length = g_value_get_uint (value);
-      sink->playlist->window_size = sink->playlist_length;
+    case PROP_STREAM_TITLE:
+      g_free (sink->stream_title);
+      sink->stream_title = g_value_dup_string (value);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -394,120 +180,16 @@ gst_hls_sink_get_property (GObject * object, guint prop_id,
   GstHlsSink *sink = GST_HLS_SINK_CAST (object);
 
   switch (prop_id) {
-    case PROP_LOCATION:
-      g_value_set_string (value, sink->location);
+    case PROP_MAX_VERSION:
+      g_value_set_uint (value, sink->max_version);
       break;
-    case PROP_PLAYLIST_LOCATION:
-      g_value_set_string (value, sink->playlist_location);
-      break;
-    case PROP_PLAYLIST_ROOT:
-      g_value_set_string (value, sink->playlist_root);
-      break;
-    case PROP_MAX_FILES:
-      g_value_set_uint (value, sink->max_files);
-      break;
-    case PROP_TARGET_DURATION:
-      g_value_set_uint (value, sink->target_duration);
-      break;
-    case PROP_PLAYLIST_LENGTH:
-      g_value_set_uint (value, sink->playlist_length);
+    case PROP_STREAM_TITLE:
+      g_value_set_string (value, sink->stream_title);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
   }
-}
-
-static GstPadProbeReturn
-gst_hls_sink_ghost_event_probe (GstPad * pad, GstPadProbeInfo * info,
-    gpointer data)
-{
-  GstHlsSink *sink = GST_HLS_SINK_CAST (data);
-  GstEvent *event = gst_pad_probe_info_get_event (info);
-
-  switch (GST_EVENT_TYPE (event)) {
-    case GST_EVENT_SEGMENT:
-    {
-      gst_event_copy_segment (event, &sink->segment);
-      break;
-    }
-    case GST_EVENT_FLUSH_STOP:
-      gst_segment_init (&sink->segment, GST_FORMAT_UNDEFINED);
-      break;
-    case GST_EVENT_CUSTOM_DOWNSTREAM:
-    {
-      GstClockTime timestamp;
-      GstClockTime running_time, stream_time;
-      gboolean all_headers;
-      guint count;
-
-      if (!gst_video_event_is_force_key_unit (event))
-        break;
-
-      gst_event_replace (&sink->force_key_unit_event, event);
-      gst_video_event_parse_downstream_force_key_unit (event,
-          &timestamp, &stream_time, &running_time, &all_headers, &count);
-      GST_INFO_OBJECT (sink, "setting index %d", count);
-      sink->index = count;
-      break;
-    }
-    default:
-      break;
-  }
-
-  return GST_PAD_PROBE_OK;
-}
-
-static gboolean
-schedule_next_key_unit (GstHlsSink * sink)
-{
-  gboolean res = TRUE;
-  GstClockTime running_time;
-  GstPad *sinkpad = gst_element_get_static_pad (GST_ELEMENT (sink), "sink");
-
-  if (sink->target_duration == 0)
-    /* target-duration == 0 means that the app schedules key units itself */
-    goto out;
-
-  running_time = sink->last_running_time + sink->target_duration * GST_SECOND;
-  GST_INFO_OBJECT (sink, "sending upstream force-key-unit, index %d "
-      "now %" GST_TIME_FORMAT " target %" GST_TIME_FORMAT,
-      sink->index + 1, GST_TIME_ARGS (sink->last_running_time),
-      GST_TIME_ARGS (running_time));
-
-  if (!(res = gst_pad_push_event (sinkpad,
-              gst_video_event_new_upstream_force_key_unit (running_time,
-                  TRUE, sink->index + 1)))) {
-    GST_ERROR_OBJECT (sink, "Failed to push upstream force key unit event");
-  }
-
-out:
-  /* mark as waiting for a fku event if the app schedules them or if we just
-   * successfully scheduled one
-   */
-  sink->waiting_fku = res;
-  gst_object_unref (sinkpad);
-  return res;
-}
-
-
-static GstPadProbeReturn
-gst_hls_sink_ghost_buffer_probe (GstPad * pad, GstPadProbeInfo * info,
-    gpointer data)
-{
-  GstHlsSink *sink = GST_HLS_SINK_CAST (data);
-  GstBuffer *buffer = gst_pad_probe_info_get_buffer (info);
-  GstClockTime timestamp;
-
-  timestamp = GST_BUFFER_TIMESTAMP (buffer);
-  if (sink->target_duration == 0 || !GST_CLOCK_TIME_IS_VALID (timestamp)
-      || sink->waiting_fku)
-    return GST_PAD_PROBE_OK;
-
-  sink->last_running_time = gst_segment_to_running_time (&sink->segment,
-      GST_FORMAT_TIME, timestamp);
-  schedule_next_key_unit (sink);
-  return GST_PAD_PROBE_OK;
 }
 
 gboolean

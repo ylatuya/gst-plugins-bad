@@ -6,6 +6,7 @@ libgstfragmented_la_SOURCES =			\
 	gsthlsdemux.c				\
 	gstfragmentedplugin.c 			\
 	gsthlssink.c 				\
+	gstm3u8manager.c			\
 	gstm3u8playlist.c
 
 libgstfragmented_la_CFLAGS = $(GST_PLUGINS_BAD_CFLAGS) $(GST_PLUGINS_BASE_CFLAGS) $(GST_BASE_CFLAGS) $(GST_CFLAGS) $(GIO_CFLAGS) $(GNUTLS_CFLAGS)
@@ -21,6 +22,7 @@ noinst_HEADERS = 			\
 	gstfragmented.h			\
 	gsthlsdemux.h			\
 	gsthlssink.h			\
+	gstm3u8manager.h		\
 	gstm3u8playlist.h		\
 	m3u8.h
 

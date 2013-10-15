@@ -370,11 +370,7 @@ else
 RTMP_DIR =
 endif
 
-if USE_HLS
 HLS_DIR = hls
-else
-HLS_DIR =
-endif
 
 
 SUBDIRS=\
