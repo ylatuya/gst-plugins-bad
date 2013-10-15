@@ -822,8 +822,9 @@ gst_hls_demux_set_property (GObject * object, guint prop_id,
         GstHLSDemuxStream *stream =
             g_hash_table_lookup (demux->video_srcpad->streams,
             GINT_TO_POINTER (demux->video_srcpad->current_stream));
-        gst_hls_adaptation_set_connection_speed (demux->adaptation,
-            stream->bitrate);
+        if (stream)
+          gst_hls_adaptation_set_connection_speed (demux->adaptation,
+              stream->bitrate);
       }
       gst_hls_demux_update_adaptation_algorithm (demux);
       break;
