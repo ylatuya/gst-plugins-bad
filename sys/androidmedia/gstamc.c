@@ -1719,6 +1719,16 @@ scan_codecs (GstPlugin * plugin)
       valid_codec = FALSE;
       goto next_codec;
     }
+
+    /* We do not support encoders. There are issues with a Sony Xperia P
+     * where getting the capabilities of a type for an encoder takes around 5s
+     */
+    if (is_encoder) {
+      GST_INFO ("Skipping encoder '%s'", name_str);
+      valid_codec = FALSE;
+      goto next_codec;
+    }
+
     gst_codec_info->is_encoder = is_encoder;
 
     supported_types =
