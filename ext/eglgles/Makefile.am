@@ -25,7 +25,7 @@ libgsteglglessink_la_LIBADD = $(GST_LIBS) $(GST_BASE_LIBS) \
 
 if HAVE_ANDROID
 libgsteglglessink_la_CFLAGS += -I$(top_srcdir)/gst-libs
-libgsteglglessink_la_LIBADD += -lgstandroidjni-$(GST_MAJORMINOR)
+libgsteglglessink_la_LIBADD += $(top_builddir)/gst-libs/gst/androidjni/libgstandroidjni-$(GST_MAJORMINOR).la
 endif
 
 if HAVE_IOS

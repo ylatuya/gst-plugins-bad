@@ -32,7 +32,7 @@ libgstandroidmedia_la_LIBADD = \
 	-lgstaudio-@GST_MAJORMINOR@ \
 	-lgstpbutils-@GST_MAJORMINOR@ \
 	-lgstvideo-@GST_MAJORMINOR@ \
-	-lgstandroidjni-@GST_MAJORMINOR@ \
+	$(top_builddir)/gst-libs/gst/androidjni/libgstandroidjni-$(GST_MAJORMINOR).la \
 	$(GST_BASE_LIBS) \
 	$(GST_LIBS) \
 	$(ORC_LIBS)
