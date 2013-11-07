@@ -32,7 +32,6 @@ G_DEFINE_TYPE (GstJniSurfaceTexture, gst_jni_surface_texture, G_TYPE_OBJECT);
 
 static gpointer parent_class = NULL;
 static void gst_jni_surface_texture_dispose (GObject * object);
-static void gst_jni_surface_texture_finalize (GObject * object);
 
 static gboolean
 _cache_java_class (GstJniSurfaceTextureClass * klass)
@@ -88,7 +87,6 @@ gst_jni_surface_texture_class_init (GstJniSurfaceTextureClass * klass)
 
   parent_class = g_type_class_peek_parent (klass);
   gobject_class->dispose = gst_jni_surface_texture_dispose;
-  gobject_class->finalize = gst_jni_surface_texture_finalize;
 
   if (!_cache_java_class (klass)) {
     g_critical ("Could not cache java class android/graphics/SurfaceTexture");
@@ -111,21 +109,6 @@ gst_jni_surface_texture_dispose (GObject * object)
     gst_jni_object_unref (env, self->jobject);
   }
   G_OBJECT_CLASS (parent_class)->dispose (object);
-}
-
-static void
-gst_jni_surface_texture_finalize (GObject * object)
-{
-  GstJniSurfaceTexture *self;
-
-  self = GST_JNI_SURFACE_TEXTURE (object);
-  /* It's safe to release from any thread */
-  if (self->texture_id > 0) {
-    GLuint texture_id = self->texture_id;
-    glDeleteTextures (1, &texture_id);
-    self->texture_id = 0;
-  }
-  G_OBJECT_CLASS (parent_class)->finalize (object);
 }
 
 GstJniSurfaceTexture *
