@@ -1431,7 +1431,7 @@ save_codecs (GstPlugin * plugin, GstStructure * cache_data)
   }
   gst_structure_free (cache_data);
 #else
-  gst_plugin_set_cache_data (plugin, new_cache_data);
+  gst_plugin_set_cache_data (plugin, cache_data);
 #endif
 }
 
