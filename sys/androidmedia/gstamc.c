@@ -1476,6 +1476,68 @@ done:
   return ret;
 }
 
+#ifdef GST_PLUGIN_BUILD_STATIC
+static gchar *
+get_cache_file (void)
+{
+  const gchar *cache_dir;
+  gchar *cache_file = NULL;
+
+  cache_dir = g_getenv ("XDG_CACHE_HOME");
+  if (cache_dir) {
+    cache_file = g_build_filename (cache_dir, "amccodecs.bin", NULL);
+  }
+
+  return cache_file;
+}
+#endif
+
+static const GstStructure *
+load_codecs (GstPlugin * plugin)
+{
+  const GstStructure *cache_data = NULL;
+#ifdef GST_PLUGIN_BUILD_STATIC
+  gchar *cache_file;
+#endif
+
+#ifdef GST_PLUGIN_BUILD_STATIC
+  cache_file = get_cache_file ();
+  if (cache_file) {
+    gchar *cache_contents;
+
+    g_file_get_contents (cache_file, &cache_contents, NULL, NULL);
+    if (cache_contents) {
+      cache_data = gst_structure_from_string (cache_contents, NULL);
+      g_free (cache_contents);
+    }
+    g_free (cache_file);
+  }
+#else
+  cache_data = gst_plugin_get_cache_data (plugin);
+#endif
+  return cache_data;
+}
+
+static void
+save_codecs (GstPlugin * plugin, GstStructure * cache_data)
+{
+#ifdef GST_PLUGIN_BUILD_STATIC
+  gchar *cache_file;
+
+  cache_file = get_cache_file ();
+  if (cache_file) {
+    gchar *cache_contents;
+
+    cache_contents = gst_structure_to_string (cache_data);
+    g_file_set_contents (cache_file, cache_contents, -1, NULL);
+    g_free (cache_contents);
+  }
+  gst_structure_free (cache_data);
+#else
+  gst_plugin_set_cache_data (plugin, new_cache_data);
+#endif
+}
+
 static gboolean
 scan_codecs (GstPlugin * plugin)
 {
@@ -1488,7 +1550,8 @@ scan_codecs (GstPlugin * plugin)
 
   GST_DEBUG ("Scanning codecs");
 
-  if ((cache_data = gst_plugin_get_cache_data (plugin))) {
+  cache_data = load_codecs (plugin);
+  if (cache_data) {
     const GValue *arr = gst_structure_get_value (cache_data, "codecs");
     guint i, n;
 
@@ -2109,7 +2172,7 @@ scan_codecs (GstPlugin * plugin)
     gst_structure_set_value (new_cache_data, "codecs", &arr);
     g_value_unset (&arr);
 
-    gst_plugin_set_cache_data (plugin, new_cache_data);
+    save_codecs (plugin, new_cache_data);
   }
 
 done:
