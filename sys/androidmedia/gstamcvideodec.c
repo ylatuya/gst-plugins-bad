@@ -694,6 +694,7 @@ static gboolean
 gst_amc_video_dec_set_src_caps (GstAmcVideoDec * self, GstAmcFormat * format)
 {
   GstVideoCodecState *output_state;
+  GstAmcVideoDecClass *klass;
   gint color_format, width, height;
   gint stride, slice_height;
   gint crop_left, crop_right;
@@ -740,6 +741,12 @@ gst_amc_video_dec_set_src_caps (GstAmcVideoDec * self, GstAmcFormat * format)
   if (gst_format == GST_VIDEO_FORMAT_UNKNOWN) {
     GST_ERROR_OBJECT (self, "Unknown color format 0x%08x", color_format);
     return FALSE;
+  }
+
+  klass = GST_AMC_VIDEO_DEC_GET_CLASS (self);
+  if (klass->direct_rendering) {
+    gst_format = GST_VIDEO_FORMAT_ENCODED;
+    color_format = COLOR_FormatSurface;
   }
 
   output_state = gst_video_decoder_set_output_state (GST_VIDEO_DECODER (self),
