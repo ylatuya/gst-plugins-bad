@@ -108,6 +108,7 @@ struct _GstEglGlesSink
   gboolean size_changed;
   GstCaps *sinkcaps;
   GstCaps *current_caps, *configured_caps;
+  gboolean context_changed;
 
   GstEglAdaptationContext *egl_context;
 
@@ -133,6 +134,9 @@ struct _GstEglGlesSink
 #ifdef HAVE_ANDROID_MEDIA
   GstJniSurfaceTexture *surface_texture;
 #endif
+
+  /* Needed for requesting a window while playing */
+  GRecMutex window_lock;
 };
 
 struct _GstEglGlesSinkClass

@@ -211,12 +211,17 @@ static void gst_eglglessink_set_render_rectangle (GstXOverlay * overlay, gint x,
 /* Utility */
 static gboolean gst_eglglessink_create_window (GstEglGlesSink *
     eglglessink, gint width, gint height);
+static gboolean gst_eglglessink_request_window (GstEglGlesSink * eglgessink);
+static gboolean
+gst_eglglessink_request_or_create_window (GstEglGlesSink * eglglessink,
+    gint width, gint height);
 static gboolean gst_eglglessink_setup_vbo (GstEglGlesSink * eglglessink);
 static gboolean
 gst_eglglessink_configure_caps (GstEglGlesSink * eglglessink, GstCaps * caps);
 static GstFlowReturn gst_eglglessink_upload (GstEglGlesSink * sink,
     GstBuffer * buf);
-static GstFlowReturn gst_eglglessink_render (GstEglGlesSink * sink);
+static GstFlowReturn gst_eglglessink_render (GstEglGlesSink * sink,
+    GstBuffer * buf);
 static GstFlowReturn gst_eglglessink_queue_buffer (GstEglGlesSink * sink,
     GstBuffer * buf);
 static inline gboolean egl_init (GstEglGlesSink * eglglessink);
@@ -283,32 +288,12 @@ render_thread_func (GstEglGlesSink * eglglessink)
   while (gst_data_queue_pop (eglglessink->queue, &item)) {
     GstBuffer *buf = NULL;
     GstMiniObject *object = item->object;
-    gboolean window_changed;
 
     GST_DEBUG_OBJECT (eglglessink, "Handling object %" GST_PTR_FORMAT, object);
 
-    GST_OBJECT_LOCK (eglglessink);
-    window_changed = eglglessink->window_changed;
-    eglglessink->window_changed = FALSE;
-    GST_OBJECT_UNLOCK (eglglessink);
-
-    if (window_changed) {
-      /* Force a full reconfiguration */
-      if (eglglessink->have_window) {
-        gst_eglglessink_cleanup (eglglessink);
-
-        if (eglglessink->configured_caps) {
-          gst_caps_unref (eglglessink->configured_caps);
-          eglglessink->configured_caps = NULL;
-        }
-      }
-      /* We also need a new VBO */
-      eglglessink->render_region_changed = TRUE;
-    }
-
     if (GST_IS_BUFFER (object)) {
       buf = GST_BUFFER_CAST (item->object);
-    } else if (window_changed) {
+    } else {
       buf = gst_base_sink_get_last_buffer (GST_BASE_SINK (eglglessink));
     }
 
@@ -326,27 +311,10 @@ render_thread_func (GstEglGlesSink * eglglessink)
           break;
         }
       }
-      if (eglglessink->configured_caps) {
-        last_flow = gst_eglglessink_upload (eglglessink, buf);
-        if (last_flow == GST_FLOW_OK) {
-          last_flow = gst_eglglessink_render (eglglessink);
-        } else if (last_flow == GST_FLOW_CUSTOM_ERROR) {
-          last_flow = GST_FLOW_OK;
-        }
-      } else {
-        GST_DEBUG_OBJECT (eglglessink,
-            "No caps configured yet, not drawing anything");
-      }
-    } else if (!object) {
-      if (eglglessink->configured_caps) {
-        last_flow = gst_eglglessink_render (eglglessink);
-      } else {
-        last_flow = GST_FLOW_OK;
-        GST_DEBUG_OBJECT (eglglessink,
-            "No caps configured yet, not drawing anything");
-      }
-    } else {
-      g_assert_not_reached ();
+    }
+
+    if (eglglessink->configured_caps) {
+      last_flow = gst_eglglessink_render (eglglessink, buf);
     }
 
     item->destroy (item);
@@ -401,11 +369,8 @@ gst_eglglessink_start (GstEglGlesSink * eglglessink)
     goto HANDLE_ERROR;
   }
 
-  /* Ask for a window to render to */
-  if (!eglglessink->have_window)
-    gst_x_overlay_prepare_xwindow_id (GST_X_OVERLAY (eglglessink));
-
-  if (!eglglessink->have_window && !eglglessink->create_window) {
+  if (!gst_eglglessink_request_window (eglglessink) &&
+      !eglglessink->create_window) {
     GST_ERROR_OBJECT (eglglessink, "Window handle unavailable and we "
         "were instructed not to create an internal one. Bailing out.");
     goto HANDLE_ERROR;
@@ -508,8 +473,83 @@ gst_eglglessink_create_window (GstEglGlesSink * eglglessink, gint width,
 
   if (!ret) {
     GST_ERROR_OBJECT (eglglessink, "Could not create window");
+  } else {
+    eglglessink->using_own_window = TRUE;
+    eglglessink->window_changed = TRUE;
   }
+
   return ret;
+}
+
+static gboolean
+gst_eglglessink_request_window (GstEglGlesSink * eglglessink)
+{
+  if (!eglglessink->have_window) {
+    GST_INFO_OBJECT (eglglessink, "Requesting a window");
+    gst_x_overlay_prepare_xwindow_id (GST_X_OVERLAY (eglglessink));
+  }
+
+  if (!eglglessink->have_window) {
+    return FALSE;
+  }
+
+  return TRUE;
+}
+
+
+static gboolean
+gst_eglglessink_request_or_create_window (GstEglGlesSink * eglglessink,
+    gint width, gint height)
+{
+  /* Ask for a window to render to */
+  if (!gst_eglglessink_request_window (eglglessink)) {
+
+    /* Try to create a window in case the user did not provide one */
+    if (!gst_eglglessink_create_window (eglglessink, width, height)) {
+      GST_ERROR_OBJECT (eglglessink, "Window handle unavailable and we "
+          "can not create one");
+      return FALSE;
+    }
+  }
+
+  if (eglglessink->context_changed) {
+
+    /* Force a full reconfiguration */
+    gst_eglglessink_cleanup (eglglessink);
+    if (!gst_egl_adaptation_choose_config (eglglessink->egl_context)) {
+      GST_ERROR_OBJECT (eglglessink, "Couldn't choose EGL config");
+      return FALSE;
+    }
+
+    gst_egl_adaptation_init_egl_exts (eglglessink->egl_context);
+  }
+
+
+  /* Inform about the new window in case we have one */
+  if (eglglessink->window_changed) {
+    guintptr used_window = 0;
+
+    gst_egl_adaptation_update_used_window (eglglessink->egl_context);
+    used_window = gst_egl_adaptation_get_window (eglglessink->egl_context);
+    gst_x_overlay_got_window_handle (GST_X_OVERLAY (eglglessink),
+        (guintptr) used_window);
+
+    eglglessink->window_changed = FALSE;
+  }
+
+  /* Finally create a surface baased on the provided window */
+  if (eglglessink->context_changed) {
+    if (!eglglessink->egl_context->have_surface) {
+      if (!gst_egl_adaptation_init_egl_surface (eglglessink->egl_context,
+              eglglessink->format)) {
+        GST_ERROR_OBJECT (eglglessink, "Couldn't init EGL surface from window");
+        return FALSE;
+      }
+    }
+    eglglessink->context_changed = FALSE;
+  }
+
+  return TRUE;
 }
 
 static void
@@ -716,11 +756,17 @@ gst_eglglessink_set_window_handle (GstXOverlay * overlay, guintptr id)
   GST_DEBUG_OBJECT (eglglessink, "We got a window handle: %p", (gpointer) id);
 
   /* OK, we have a new window */
-  GST_OBJECT_LOCK (eglglessink);
+  g_rec_mutex_lock (&eglglessink->window_lock);
   gst_egl_adaptation_set_window (eglglessink->egl_context, id);
   eglglessink->have_window = ((gpointer) id != NULL);
   eglglessink->window_changed = TRUE;
-  GST_OBJECT_UNLOCK (eglglessink);
+
+  /* We need a new setup of the context */
+  eglglessink->context_changed = TRUE;
+
+  /* We also need a new VBO */
+  eglglessink->render_region_changed = TRUE;
+  g_rec_mutex_unlock (&eglglessink->window_lock);
 
   return;
 }
@@ -733,14 +779,14 @@ gst_eglglessink_set_render_rectangle (GstXOverlay * overlay, gint x, gint y,
 
   g_return_if_fail (GST_IS_EGLGLESSINK (eglglessink));
 
-  GST_OBJECT_LOCK (eglglessink);
+  g_rec_mutex_lock (&eglglessink->window_lock);
   eglglessink->render_region.x = x;
   eglglessink->render_region.y = y;
   eglglessink->render_region.w = width;
   eglglessink->render_region.h = height;
   eglglessink->render_region_changed = TRUE;
   eglglessink->render_region_user = (width != -1 && height != -1);
-  GST_OBJECT_UNLOCK (eglglessink);
+  g_rec_mutex_unlock (&eglglessink->window_lock);
 
   return;
 }
@@ -961,14 +1007,36 @@ HANDLE_ERROR:
 }
 
 static GstFlowReturn
-gst_eglglessink_render (GstEglGlesSink * eglglessink)
+gst_eglglessink_render (GstEglGlesSink * eglglessink, GstBuffer * buf)
 {
+  GstFlowReturn upload_flow;
   guint dar_n, dar_d;
   gint i;
   gint w, h;
 
+  g_rec_mutex_lock (&eglglessink->window_lock);
+
   w = GST_VIDEO_SINK_WIDTH (eglglessink);
   h = GST_VIDEO_SINK_HEIGHT (eglglessink);
+
+  if (!gst_eglglessink_request_or_create_window (eglglessink, w, h)) {
+    goto HANDLE_ERROR;
+  }
+
+  /* Upload the buffer if we need to */
+  upload_flow = gst_eglglessink_upload (eglglessink, buf);
+
+  /* On Android we can fail uploading, for that case, just skip the rendering
+   * but do not inform about an error
+   */
+  if (upload_flow == GST_FLOW_CUSTOM_ERROR) {
+    g_rec_mutex_unlock (&eglglessink->window_lock);
+    return GST_FLOW_OK;
+  }
+
+  if (upload_flow != GST_FLOW_OK) {
+    goto HANDLE_ERROR;
+  }
 
   /* If no one has set a display rectangle on us initialize
    * a sane default. According to the docs on the xOverlay
@@ -981,7 +1049,6 @@ gst_eglglessink_render (GstEglGlesSink * eglglessink)
       (eglglessink->egl_context) || eglglessink->render_region_changed
       || !eglglessink->display_region.w || !eglglessink->display_region.h
       || eglglessink->size_changed) {
-    GST_OBJECT_LOCK (eglglessink);
 
     if (!eglglessink->render_region_user) {
       eglglessink->render_region.x = 0;
@@ -1050,12 +1117,9 @@ gst_eglglessink_render (GstEglGlesSink * eglglessink)
     }
 
     if (!gst_eglglessink_setup_vbo (eglglessink)) {
-      GST_OBJECT_UNLOCK (eglglessink);
       GST_ERROR_OBJECT (eglglessink, "VBO setup failed");
       goto HANDLE_ERROR;
     }
-
-    GST_OBJECT_UNLOCK (eglglessink);
   }
 
   if (!eglglessink->egl_context->buffer_preserved) {
@@ -1128,10 +1192,12 @@ gst_eglglessink_render (GstEglGlesSink * eglglessink)
   }
 
   GST_DEBUG_OBJECT (eglglessink, "Succesfully rendered 1 frame");
+  g_rec_mutex_unlock (&eglglessink->window_lock);
   return GST_FLOW_OK;
 
 HANDLE_ERROR:
   GST_ERROR_OBJECT (eglglessink, "Rendering disabled for this frame");
+  g_rec_mutex_unlock (&eglglessink->window_lock);
 
   return GST_FLOW_ERROR;
 }
@@ -1157,7 +1223,7 @@ gst_eglglessink_getcaps (GstBaseSink * bsink)
 
   eglglessink = GST_EGLGLESSINK (bsink);
 
-  GST_OBJECT_LOCK (eglglessink);
+  g_rec_mutex_lock (&eglglessink->window_lock);
   if (eglglessink->sinkcaps) {
     ret = gst_caps_ref (eglglessink->sinkcaps);
   } else {
@@ -1165,7 +1231,7 @@ gst_eglglessink_getcaps (GstBaseSink * bsink)
         gst_caps_copy (gst_pad_get_pad_template_caps (GST_BASE_SINK_PAD
             (bsink)));
   }
-  GST_OBJECT_UNLOCK (eglglessink);
+  g_rec_mutex_unlock (&eglglessink->window_lock);
 
   return ret;
 }
@@ -1176,7 +1242,6 @@ gst_eglglessink_configure_caps (GstEglGlesSink * eglglessink, GstCaps * caps)
   gboolean ret = TRUE;
   gint width, height;
   int par_n, par_d;
-  guintptr used_window = 0;
   const GstStructure *s;
 
   s = gst_caps_get_structure (caps, 0);
@@ -1219,50 +1284,12 @@ gst_eglglessink_configure_caps (GstEglGlesSink * eglglessink, GstCaps * caps)
 
     GST_DEBUG_OBJECT (eglglessink, "Caps are not compatible, reconfiguring");
 
-    /* EGL/GLES cleanup */
-    gst_eglglessink_cleanup (eglglessink);
-
+    eglglessink->context_changed = TRUE;
     gst_caps_unref (eglglessink->configured_caps);
     eglglessink->configured_caps = NULL;
   }
 
-  if (!gst_egl_adaptation_choose_config (eglglessink->egl_context)) {
-    GST_ERROR_OBJECT (eglglessink, "Couldn't choose EGL config");
-    goto HANDLE_ERROR;
-  }
-
   gst_caps_replace (&eglglessink->configured_caps, caps);
-
-  /* By now the application should have set a window
-   * if it meant to do so
-   */
-  GST_OBJECT_LOCK (eglglessink);
-  if (!eglglessink->have_window) {
-
-    GST_INFO_OBJECT (eglglessink,
-        "No window. Will attempt internal window creation");
-    if (!gst_eglglessink_create_window (eglglessink, width, height)) {
-      GST_ERROR_OBJECT (eglglessink, "Internal window creation failed!");
-      GST_OBJECT_UNLOCK (eglglessink);
-      goto HANDLE_ERROR;
-    }
-    eglglessink->using_own_window = TRUE;
-    eglglessink->have_window = TRUE;
-  }
-  gst_egl_adaptation_update_used_window (eglglessink->egl_context);
-  used_window = gst_egl_adaptation_get_window (eglglessink->egl_context);
-  GST_OBJECT_UNLOCK (eglglessink);
-  gst_x_overlay_got_window_handle (GST_X_OVERLAY (eglglessink),
-      (guintptr) used_window);
-
-  if (!eglglessink->egl_context->have_surface) {
-    if (!gst_egl_adaptation_init_egl_surface (eglglessink->egl_context,
-            eglglessink->format)) {
-      GST_ERROR_OBJECT (eglglessink, "Couldn't init EGL surface from window");
-      goto HANDLE_ERROR;
-    }
-  }
-  gst_egl_adaptation_init_egl_exts (eglglessink->egl_context);
 
 SUCCEED:
   GST_INFO_OBJECT (eglglessink, "Configured caps successfully");
@@ -1378,6 +1405,8 @@ gst_eglglessink_finalize (GObject * object)
   g_mutex_free (eglglessink->render_lock);
 
   gst_egl_adaptation_free (eglglessink->egl_context);
+
+  g_rec_mutex_clear (&eglglessink->window_lock);
 
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
@@ -1525,6 +1554,8 @@ gst_eglglessink_init (GstEglGlesSink * eglglessink,
 
   eglglessink->egl_context =
       gst_egl_adaptation_new (GST_ELEMENT_CAST (eglglessink));
+
+  g_rec_mutex_init (&eglglessink->window_lock);
 }
 
 /* Interface initializations. Used here for initializing the XOverlay
