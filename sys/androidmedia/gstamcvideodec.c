@@ -1109,14 +1109,16 @@ retry:
     switch (idx) {
       case INFO_OUTPUT_BUFFERS_CHANGED:{
         GST_DEBUG_OBJECT (self, "Output buffers have changed");
-        if (self->output_buffers)
-          gst_amc_codec_free_buffers (self->output_buffers,
-              self->n_output_buffers);
-        self->output_buffers =
-            gst_amc_codec_get_output_buffers (self->codec,
-            &self->n_output_buffers);
-        if (!self->output_buffers)
-          goto get_output_buffers_error;
+        if (!klass->direct_rendering) {
+          if (self->output_buffers)
+            gst_amc_codec_free_buffers (self->output_buffers,
+                self->n_output_buffers);
+          self->output_buffers =
+              gst_amc_codec_get_output_buffers (self->codec,
+              &self->n_output_buffers);
+          if (!self->output_buffers)
+            goto get_output_buffers_error;
+        }
         break;
       }
       case INFO_OUTPUT_FORMAT_CHANGED:{
@@ -1139,14 +1141,16 @@ retry:
         }
         gst_amc_format_free (format);
 
-        if (self->output_buffers)
-          gst_amc_codec_free_buffers (self->output_buffers,
-              self->n_output_buffers);
-        self->output_buffers =
-            gst_amc_codec_get_output_buffers (self->codec,
-            &self->n_output_buffers);
-        if (!self->output_buffers)
-          goto get_output_buffers_error;
+        if (!klass->direct_rendering) {
+          if (self->output_buffers)
+            gst_amc_codec_free_buffers (self->output_buffers,
+                self->n_output_buffers);
+          self->output_buffers =
+              gst_amc_codec_get_output_buffers (self->codec,
+              &self->n_output_buffers);
+          if (!self->output_buffers)
+            goto get_output_buffers_error;
+        }
 
         goto retry;
         break;
