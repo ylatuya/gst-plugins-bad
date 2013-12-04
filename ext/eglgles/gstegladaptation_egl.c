@@ -385,17 +385,31 @@ gst_egl_adaptation_update_surface_dimensions (GstEglAdaptationContext * ctx)
 void
 gst_egl_adaptation_init_egl_exts (GstEglAdaptationContext * ctx)
 {
-  const char *eglexts;
-  unsigned const char *glexts;
+  const char *eglexts = NULL;
+  GLint i, num_exts;
+#if 0
+#if HAVE_GLES2
+  unsigned const char *glexts = NULL;
+#endif
+#endif
 
   eglexts = eglQueryString (ctx->eglglesctx->display, EGL_EXTENSIONS);
-  glexts = glGetString (GL_EXTENSIONS);
-
   GST_DEBUG_OBJECT (ctx->element, "Available EGL extensions: %s\n",
       GST_STR_NULL (eglexts));
-  GST_DEBUG_OBJECT (ctx->element, "Available GLES extensions: %s\n",
-      GST_STR_NULL ((const char *) glexts));
+#if 0
+  GST_DEBUG_OBJECT (ctx->element, "Available GLES extensions:\n");
+#if HAVE_GLES2
+  glexts = glGetString (GL_EXTENSIONS);
+#elif HAVE_GLES3
+  glGetIntegerv (GL_NUM_EXTENSIONS, &num_exts);
+  for (i = 0; i < num_exts; i++) {
+    unsigned const char *glexts = NULL;
 
+    glexts = glGetStringi (GL_EXTENSIONS, i);
+    GST_DEBUG_OBJECT ("%s\n", GST_STR_NULL ((const char *) glexts));
+  }
+#endif
+#endif
   return;
 }
 
