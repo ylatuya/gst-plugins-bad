@@ -1629,7 +1629,11 @@ scan_codecs (GstPlugin * plugin)
     GST_INFO ("Checking codec '%s'", name_str);
 
     /* Compatibility codec names */
+    /* The MP3Decoder is found on Sony Xperia Z but it fails
+     * when creating the element and triggers a SEGV
+     */
     if (strcmp (name_str, "AACEncoder") == 0 ||
+        strcmp (name_str, "MP3Decoder") == 0 ||
         strcmp (name_str, "OMX.google.raw.decoder") == 0) {
       GST_INFO ("Skipping compatibility codec '%s'", name_str);
       valid_codec = FALSE;
