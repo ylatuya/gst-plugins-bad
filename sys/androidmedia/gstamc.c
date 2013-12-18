@@ -1633,6 +1633,7 @@ scan_codecs (GstPlugin * plugin)
      * when creating the element and triggers a SEGV
      */
     if (strcmp (name_str, "AACEncoder") == 0 ||
+        strcmp (name_str, "AACDecoder") == 0 ||
         strcmp (name_str, "MP3Decoder") == 0 ||
         strcmp (name_str, "OMX.google.raw.decoder") == 0) {
       GST_INFO ("Skipping compatibility codec '%s'", name_str);
