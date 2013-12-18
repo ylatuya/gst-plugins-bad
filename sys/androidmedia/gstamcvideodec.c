@@ -563,6 +563,7 @@ gst_amc_video_dec_change_state (GstElement * element, GstStateChange transition)
       self->downstream_flow_ret = GST_FLOW_OK;
       self->draining = FALSE;
       self->started = FALSE;
+      self->output_configured = FALSE;
       break;
     case GST_STATE_CHANGE_PAUSED_TO_PLAYING:
       break;
@@ -1076,6 +1077,46 @@ done:
   return ret;
 }
 
+static gboolean
+gst_amc_video_dec_format_changed (GstAmcVideoDec * self)
+{
+  GstAmcFormat *format;
+  gchar *format_string;
+
+  format = gst_amc_codec_get_output_format (self->codec);
+  if (!format)
+    return FALSE;
+
+  format_string = gst_amc_format_to_string (format);
+  GST_DEBUG_OBJECT (self, "Got new output format: %s", format_string);
+  g_free (format_string);
+
+  if (!gst_amc_video_dec_set_src_caps (self, format)) {
+    gst_amc_format_free (format);
+    return FALSE;
+  }
+  gst_amc_format_free (format);
+  self->output_configured = TRUE;
+  return TRUE;
+}
+
+static gboolean
+gst_amc_video_dec_output_buffers_changed (GstAmcVideoDec * self)
+{
+  GstAmcVideoDecClass *klass;
+
+  klass = GST_AMC_VIDEO_DEC_GET_CLASS (self);
+  if (!klass->direct_rendering) {
+    if (self->output_buffers)
+      gst_amc_codec_free_buffers (self->output_buffers, self->n_output_buffers);
+    self->output_buffers =
+        gst_amc_codec_get_output_buffers (self->codec, &self->n_output_buffers);
+    if (!self->output_buffers)
+      return FALSE;
+  }
+  return TRUE;
+}
+
 static void
 gst_amc_video_dec_loop (GstAmcVideoDec * self)
 {
@@ -1107,54 +1148,18 @@ retry:
       goto flushing;
 
     switch (idx) {
-      case INFO_OUTPUT_BUFFERS_CHANGED:{
+      case INFO_OUTPUT_BUFFERS_CHANGED:
         GST_DEBUG_OBJECT (self, "Output buffers have changed");
-        if (!klass->direct_rendering) {
-          if (self->output_buffers)
-            gst_amc_codec_free_buffers (self->output_buffers,
-                self->n_output_buffers);
-          self->output_buffers =
-              gst_amc_codec_get_output_buffers (self->codec,
-              &self->n_output_buffers);
-          if (!self->output_buffers)
-            goto get_output_buffers_error;
-        }
+        if (!gst_amc_video_dec_output_buffers_changed (self))
+          goto get_output_buffers_error;
         break;
-      }
-      case INFO_OUTPUT_FORMAT_CHANGED:{
-        GstAmcFormat *format;
-        gchar *format_string;
-
+      case INFO_OUTPUT_FORMAT_CHANGED:
         GST_DEBUG_OBJECT (self, "Output format has changed");
-
-        format = gst_amc_codec_get_output_format (self->codec);
-        if (!format)
+        if (!gst_amc_video_dec_format_changed (self))
           goto format_error;
-
-        format_string = gst_amc_format_to_string (format);
-        GST_DEBUG_OBJECT (self, "Got new output format: %s", format_string);
-        g_free (format_string);
-
-        if (!gst_amc_video_dec_set_src_caps (self, format)) {
-          gst_amc_format_free (format);
-          goto format_error;
-        }
-        gst_amc_format_free (format);
-
-        if (!klass->direct_rendering) {
-          if (self->output_buffers)
-            gst_amc_codec_free_buffers (self->output_buffers,
-                self->n_output_buffers);
-          self->output_buffers =
-              gst_amc_codec_get_output_buffers (self->codec,
-              &self->n_output_buffers);
-          if (!self->output_buffers)
-            goto get_output_buffers_error;
-        }
-
-        goto retry;
+        if (!gst_amc_video_dec_output_buffers_changed (self))
+          goto get_output_buffers_error;
         break;
-      }
       case INFO_TRY_AGAIN_LATER:
         GST_DEBUG_OBJECT (self, "Dequeueing output buffer timed out");
         goto retry;
@@ -1169,6 +1174,25 @@ retry:
     }
 
     goto retry;
+  }
+
+  /* Be sure to have the source pad configured. On Kindle Fire HDX
+   * we do not receive a FORMAT_CHANGED error and thus the caps are not
+   * set
+   */
+  if (!self->output_configured && klass->direct_rendering) {
+    gint color_format;
+    GstVideoFormat gst_format;
+    GstVideoCodecState *output_state;
+
+    gst_format = GST_VIDEO_FORMAT_ENCODED;
+    color_format = COLOR_FormatSurface;
+
+    GST_INFO_OBJECT (self, "Received a buffer without output configuration");
+    output_state = gst_video_decoder_set_output_state (GST_VIDEO_DECODER (self),
+        gst_format, self->input_state->info.width,
+        self->input_state->info.height, self->input_state);
+    gst_video_codec_state_unref (output_state);
   }
 
   GST_DEBUG_OBJECT (self,

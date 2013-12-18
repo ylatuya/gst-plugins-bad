@@ -69,6 +69,10 @@ struct _GstAmcVideoDec
   /* TRUE if the component is configured and saw
    * the first buffer */
   gboolean started;
+  /* TRUE if the component has configured the
+   * output format
+   */
+  gboolean output_configured;
   gboolean flushing;
 
   GstClockTime last_upstream_ts;
