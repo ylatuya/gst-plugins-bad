@@ -175,7 +175,7 @@ gst_egl_adaptation_create_surface (GstEglAdaptationContext * ctx)
 
   dispatch_sync(dispatch_get_main_queue(), ^{
 
-    gst_egl_adaptation_context_make_current (ctx, TRUE);
+    gst_egl_adaptation_make_current (ctx, TRUE);
 
     if (ctx->eaglctx->framebuffer) {
       framebuffer = ctx->eaglctx->framebuffer;
@@ -203,7 +203,7 @@ gst_egl_adaptation_create_surface (GstEglAdaptationContext * ctx)
     glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT,
                               GL_RENDERBUFFER, depthRenderbuffer);
 
-    gst_egl_adaptation_context_make_current (ctx, FALSE);
+    gst_egl_adaptation_make_current (ctx, TRUE);
   });
 
   glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
@@ -305,6 +305,12 @@ gst_egl_adaptation_destroy_surface (GstEglAdaptationContext * ctx)
   if (ctx->eaglctx->framebuffer) {
     glDeleteFramebuffers (1, &ctx->eaglctx->framebuffer);
     ctx->eaglctx->framebuffer = 0;
+
+    glDeleteRenderbuffers(1, &ctx->eaglctx->depth_renderbuffer);
+    ctx->eaglctx->depth_renderbuffer = 0;
+    glDeleteRenderbuffers(1, &ctx->eaglctx->color_renderbuffer);
+    ctx->eaglctx->color_renderbuffer = 0;
+
     ctx->have_surface = FALSE;
   }
 }
@@ -330,8 +336,7 @@ void
 gst_egl_adaptation_destroy_context (GstEglAdaptationContext * ctx)
 {
   if (ctx->eaglctx->eagl_context) {
-    /* Do not release/dealloc as it seems that EAGL expects to do all
-     * the cleanup by itself when a new context replaces the old one */
+    [ctx->eaglctx->eagl_context release];
     ctx->eaglctx->eagl_context = NULL;
   }
 }
