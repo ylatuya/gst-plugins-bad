@@ -863,6 +863,7 @@ gst_video_info_from_caps (GstVideoInfo * info, const GstCaps * caps)
   gint width = 0, height = 0;
   gint fps_n, fps_d;
   gint par_n, par_d;
+  gint rotation;
   gboolean interlaced;
 
   g_return_val_if_fail (info != NULL, FALSE);
@@ -953,6 +954,12 @@ gst_video_info_from_caps (GstVideoInfo * info, const GstCaps * caps)
     /* unspecified is variable framerate */
     info->fps_n = 0;
     info->fps_d = 1;
+  }
+
+  if (gst_structure_get_int (structure, "rotation", &rotation)) {
+    info->rotation = rotation;
+  } else {
+    info->rotation = 0;
   }
 
   if (gst_structure_get_boolean (structure, "interlaced", &interlaced)
@@ -1051,6 +1058,8 @@ gst_video_info_is_equal (const GstVideoInfo * info, const GstVideoInfo * other)
     return FALSE;
   if (GST_VIDEO_INFO_FPS_D (info) != GST_VIDEO_INFO_FPS_D (other))
     return FALSE;
+  if (GST_VIDEO_INFO_ROTATION (info) != GST_VIDEO_INFO_ROTATION (other))
+    return FALSE;
   return TRUE;
 }
 
@@ -1078,7 +1087,8 @@ gst_video_info_to_caps (GstVideoInfo * info)
   gst_caps_set_simple (caps,
       "width", G_TYPE_INT, info->width,
       "height", G_TYPE_INT, info->height,
-      "pixel-aspect-ratio", GST_TYPE_FRACTION, info->par_n, info->par_d, NULL);
+      "pixel-aspect-ratio", GST_TYPE_FRACTION, info->par_n, info->par_d,
+      "rotation", G_TYPE_INT, info->rotation, NULL);
 
   gst_caps_set_simple (caps, "interlaced", G_TYPE_BOOLEAN,
       GST_VIDEO_INFO_IS_INTERLACED (info), NULL);

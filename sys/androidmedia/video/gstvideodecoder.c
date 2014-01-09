@@ -690,6 +690,7 @@ _new_output_state (GstVideoFormat fmt, guint width, guint height,
     tgt->par_d = ref->par_d;
     tgt->fps_n = ref->fps_n;
     tgt->fps_d = ref->fps_d;
+    tgt->rotation = ref->rotation;
   }
 
   GST_DEBUG ("reference par %d/%d fps %d/%d",

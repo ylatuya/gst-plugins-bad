@@ -426,6 +426,8 @@ struct _GstVideoInfo {
 
   gsize                     offset[GST_VIDEO_MAX_PLANES];
   gint                      stride[GST_VIDEO_MAX_PLANES];
+
+  gint                      rotation;
 };
 
 /* general info */
@@ -446,6 +448,7 @@ struct _GstVideoInfo {
 #define GST_VIDEO_INFO_PAR_D(i)          ((i)->par_d)
 #define GST_VIDEO_INFO_FPS_N(i)          ((i)->fps_n)
 #define GST_VIDEO_INFO_FPS_D(i)          ((i)->fps_d)
+#define GST_VIDEO_INFO_ROTATION(i)       ((i)->rotation)
 
 /* dealing with GstVideoInfo flags */
 #define GST_VIDEO_INFO_FLAG_IS_SET(i,flag) ((GST_VIDEO_INFO_FLAGS(i) & (flag)) == (flag))
