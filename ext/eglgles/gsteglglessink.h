@@ -101,6 +101,10 @@ struct _GstEglGlesSink
   gboolean render_region_changed;
   gboolean render_region_user;
 
+  /* orientation handling */
+  gint rotation;
+  GLfloat rotation_matrix[16];
+
   /* Region of render_region that should be filled
    * with the video frames */
   GstVideoRectangle display_region;

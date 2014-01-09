@@ -60,10 +60,11 @@ GST_DEBUG_CATEGORY (egladaption_debug);
 static const char *vert_COPY_prog = {
       "attribute vec3 position;"
       "attribute vec2 texpos;"
+      "uniform mat4 orientation;"
       "varying vec2 opos;"
       "void main(void)"
       "{"
-      " opos = texpos;"
+      " opos = (orientation * vec4(texpos, 0, 1)).xy;"
       " gl_Position = vec4(position, 1.0);"
       "}"
 };
@@ -72,10 +73,11 @@ static const char *vert_COPY_prog_trans = {
       "attribute vec3 position;"
       "attribute vec2 texpos;"
       "uniform mat4 trans;"
+      "uniform mat4 orientation;"
       "varying vec2 opos;"
       "void main(void)"
       "{"
-      " opos = (trans * vec4(texpos, 0, 1)).xy;"
+      " opos = (trans * orientation * vec4(texpos, 0, 1)).xy;"
       " gl_Position = vec4(position, 1.0);"
       "}"
 };
@@ -653,6 +655,8 @@ gst_egl_adaptation_init_egl_surface (GstEglAdaptationContext * ctx,
         glGetUniformLocation (ctx->glslprogram[0], texnames[i]);
   }
   ctx->trans_loc = glGetUniformLocation (ctx->glslprogram[0], "trans");
+  ctx->orientation_loc = glGetUniformLocation (ctx->glslprogram[0],
+      "orientation");
 
   if (!ctx->buffer_preserved) {
     /* Build shader program for black borders */

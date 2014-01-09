@@ -113,6 +113,7 @@
 #endif
 
 #include <string.h>
+#include <math.h>
 #include <gst/gst.h>
 #include <gst/video/video.h>
 #include <gst/video/gstvideosink.h>
@@ -1006,6 +1007,82 @@ HANDLE_ERROR:
   }
 }
 
+static void
+gst_eglglessink_transform_size (GstEglGlesSink * eglglessink, gint * w,
+    gint * h)
+{
+  gint nw, nh;
+
+  switch (eglglessink->rotation) {
+    case 90:
+    case 270:
+      nw = *h;
+      nh = *w;
+      break;
+
+    default:
+      GST_INFO_OBJECT (eglglessink, "Rotation angle %d not supported",
+          eglglessink->rotation);
+      nw = *w;
+      nh = *h;
+      break;
+  }
+
+  *w = nw;
+  *h = nh;
+}
+
+static void
+gst_eglglessink_generate_rotation (GstEglGlesSink * eglglessink)
+{
+  GLfloat *mx = eglglessink->rotation_matrix;
+  gfloat tx = 0, ty = 0;
+  gfloat s, c;
+
+  switch (eglglessink->rotation) {
+    case 0:
+      s = 0;
+      c = 1;
+      break;
+
+    case 90:
+      s = 1;
+      c = 0;
+      break;
+
+    case 180:
+      s = 0;
+      c = -1;
+      break;
+
+    case 270:
+      s = -1;
+      c = 0;
+      break;
+
+    default:
+      GST_INFO_OBJECT (eglglessink, "Rotation angle %d not supported",
+          eglglessink->rotation);
+      s = 0;
+      c = 1;
+      break;
+  }
+
+  /* calculate the translations needed */
+  if (s + c < 0)
+    ty = 1;
+  if (c - s < 0)
+    tx = 1;
+
+  /* column based matrix */
+  /* *INDENT-OFF* */
+  mx[0] = c; mx[4] = -s; mx[8] = 0; mx[12] = tx;
+  mx[1] = s; mx[5] = c; mx[9] = 0; mx[13] = ty;
+  mx[2] = 0; mx[6] = 0; mx[10] = 1; mx[14] = 0;
+  mx[3] = 0; mx[7] = 0; mx[11] = 0; mx[15] = 1;
+  /* *INDENT-ON* */
+}
+
 static GstFlowReturn
 gst_eglglessink_render (GstEglGlesSink * eglglessink, GstBuffer * buf)
 {
@@ -1018,6 +1095,8 @@ gst_eglglessink_render (GstEglGlesSink * eglglessink, GstBuffer * buf)
 
   w = GST_VIDEO_SINK_WIDTH (eglglessink);
   h = GST_VIDEO_SINK_HEIGHT (eglglessink);
+
+  gst_eglglessink_transform_size (eglglessink, &w, &h);
 
   if (!gst_eglglessink_request_or_create_window (eglglessink, w, h)) {
     goto HANDLE_ERROR;
@@ -1167,6 +1246,11 @@ gst_eglglessink_render (GstEglGlesSink * eglglessink, GstBuffer * buf)
   }
 #endif
 
+  glUniformMatrix4fv (eglglessink->egl_context->orientation_loc, 1, GL_FALSE,
+      eglglessink->rotation_matrix);
+  if (got_gl_error ("glUniformMatrix4fv"))
+    goto HANDLE_ERROR;
+
   for (i = 0; i < eglglessink->egl_context->n_textures; i++) {
     glUniform1i (eglglessink->egl_context->tex_loc[0][i], i);
     if (got_gl_error ("glUniform1i"))
@@ -1241,6 +1325,7 @@ gst_eglglessink_configure_caps (GstEglGlesSink * eglglessink, GstCaps * caps)
 {
   gboolean ret = TRUE;
   gint width, height;
+  gint rotation = 0;
   int par_n, par_d;
   const GstStructure *s;
 
@@ -1266,12 +1351,17 @@ gst_eglglessink_configure_caps (GstEglGlesSink * eglglessink, GstCaps * caps)
         "Can't parse PAR from caps. Using default: 1");
   }
 
+  /* get the rotation */
+  gst_structure_get_int (s, "rotation", &rotation);
+
   eglglessink->size_changed = (GST_VIDEO_SINK_WIDTH (eglglessink) != width ||
       GST_VIDEO_SINK_HEIGHT (eglglessink) != height ||
-      eglglessink->par_n != par_n || eglglessink->par_d != par_d);
+      eglglessink->par_n != par_n || eglglessink->par_d != par_d ||
+      eglglessink->rotation != rotation);
 
   eglglessink->par_n = par_n;
   eglglessink->par_d = par_d;
+  eglglessink->rotation = rotation;
   GST_VIDEO_SINK_WIDTH (eglglessink) = width;
   GST_VIDEO_SINK_HEIGHT (eglglessink) = height;
 
@@ -1292,6 +1382,7 @@ gst_eglglessink_configure_caps (GstEglGlesSink * eglglessink, GstCaps * caps)
   gst_caps_replace (&eglglessink->configured_caps, caps);
 
 SUCCEED:
+  gst_eglglessink_generate_rotation (eglglessink);
   GST_INFO_OBJECT (eglglessink, "Configured caps successfully");
   return TRUE;
 
@@ -1556,6 +1647,9 @@ gst_eglglessink_init (GstEglGlesSink * eglglessink,
       gst_egl_adaptation_new (GST_ELEMENT_CAST (eglglessink));
 
   g_rec_mutex_init (&eglglessink->window_lock);
+
+  /* setup the identity */
+  gst_eglglessink_generate_rotation (eglglessink);
 }
 
 /* Interface initializations. Used here for initializing the XOverlay

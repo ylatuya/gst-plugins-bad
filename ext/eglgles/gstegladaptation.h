@@ -143,6 +143,7 @@ struct GstEglAdaptationContext
   GLuint texpos_loc[2]; /* frame, frame-platform */
   GLuint tex_loc[2][3]; /* [frame, frame-platform] RGB/Y, U/UV, V */
   GLuint trans_loc; /* Transformation matrix for textures */
+  GLuint orientation_loc; /* Transformation matrix for textures orientation */
   coord5 position_array[12];    /* 4 x Frame, 4 x Border1, 4 x Border2 */
   unsigned short index_array[4];
 
