@@ -1016,6 +1016,12 @@ gst_eglglessink_transform_size (GstEglGlesSink * eglglessink, gint * w,
   gint nw, nh;
 
   switch (eglglessink->rotation) {
+    case 0:
+    case 180:
+      nw = *w;
+      nh = *h;
+      break;
+
     case 90:
     case 270:
       nw = *h;
