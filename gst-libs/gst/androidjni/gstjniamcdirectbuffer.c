@@ -61,7 +61,7 @@ gst_jni_amc_direct_buffer_get_gst_buffer (GstJniAmcDirectBuffer * drbuf)
 gboolean
 gst_jni_amc_direct_buffer_render (GstJniAmcDirectBuffer * buf)
 {
-  gboolean ret = FALSE;
+  gboolean ret = TRUE;
 
   g_return_val_if_fail (buf != NULL, FALSE);
 
