@@ -288,6 +288,7 @@ render_thread_func (GstEglGlesSink * eglglessink)
 
   while (gst_data_queue_pop (eglglessink->queue, &item)) {
     GstBuffer *buf = NULL;
+    GstCaps *caps;
     GstMiniObject *object = item->object;
 
     GST_DEBUG_OBJECT (eglglessink, "Handling object %" GST_PTR_FORMAT, object);
@@ -296,21 +297,26 @@ render_thread_func (GstEglGlesSink * eglglessink)
       buf = GST_BUFFER_CAST (item->object);
     } else {
       buf = gst_base_sink_get_last_buffer (GST_BASE_SINK (eglglessink));
+      if (!buf) {
+        /* it is possible that there is no last buffer on the sink (still
+         * prerolling) but the user already requested an expose. In such case
+         * just wait for the next object
+         */
+        GST_DEBUG_OBJECT (eglglessink, "No previous buffer, nothing to do");
+        continue;
+      }
+      GST_DEBUG_OBJECT (eglglessink, "Rendering previous buffer again");
     }
 
-    if (buf != NULL) {
-      GstCaps *caps;
-
-      caps = GST_BUFFER_CAPS (buf);
-      if (caps != eglglessink->configured_caps) {
-        if (!gst_eglglessink_configure_caps (eglglessink, caps)) {
-          g_mutex_lock (eglglessink->render_lock);
-          eglglessink->last_flow = GST_FLOW_NOT_NEGOTIATED;
-          g_cond_broadcast (eglglessink->render_cond);
-          g_mutex_unlock (eglglessink->render_lock);
-          item->destroy (item);
-          break;
-        }
+    caps = GST_BUFFER_CAPS (buf);
+    if (caps != eglglessink->configured_caps) {
+      if (!gst_eglglessink_configure_caps (eglglessink, caps)) {
+        g_mutex_lock (eglglessink->render_lock);
+        eglglessink->last_flow = GST_FLOW_NOT_NEGOTIATED;
+        g_cond_broadcast (eglglessink->render_cond);
+        g_mutex_unlock (eglglessink->render_lock);
+        item->destroy (item);
+        break;
       }
     }
 
@@ -963,40 +969,36 @@ HANDLE_ERROR:
 static GstFlowReturn
 gst_eglglessink_upload (GstEglGlesSink * eglglessink, GstBuffer * buf)
 {
-  if (!buf) {
-    GST_DEBUG_OBJECT (eglglessink, "Rendering previous buffer again");
-  } else if (buf) {
 #if HAVE_ANDROID
-    if (eglglessink->format == GST_VIDEO_FORMAT_AMC) {
-      GstJniAmcDirectBuffer *drbuf =
-          gst_jni_amc_direct_buffer_from_gst_buffer (buf);
-      if (drbuf != NULL) {
-        if (eglglessink->surface_texture != drbuf->texture) {
-          if (eglglessink->surface_texture != NULL) {
-            gst_jni_surface_texture_detach_from_gl_context
-                (eglglessink->surface_texture);
-            g_object_unref (eglglessink->surface_texture);
-            eglglessink->surface_texture = NULL;
-          }
-          eglglessink->surface_texture = g_object_ref (drbuf->texture);
-          gst_jni_surface_texture_attach_to_gl_context
-              (eglglessink->surface_texture,
-              eglglessink->egl_context->texture[0]);
+  if (eglglessink->format == GST_VIDEO_FORMAT_AMC) {
+    GstJniAmcDirectBuffer *drbuf =
+        gst_jni_amc_direct_buffer_from_gst_buffer (buf);
+    if (drbuf != NULL) {
+      if (eglglessink->surface_texture != drbuf->texture) {
+        if (eglglessink->surface_texture != NULL) {
+          gst_jni_surface_texture_detach_from_gl_context
+              (eglglessink->surface_texture);
+          g_object_unref (eglglessink->surface_texture);
+          eglglessink->surface_texture = NULL;
         }
-        if (!gst_jni_amc_direct_buffer_render (drbuf)) {
-          return GST_FLOW_CUSTOM_ERROR;
-        }
-        gst_jni_surface_texture_update_tex_image (eglglessink->surface_texture);
+        eglglessink->surface_texture = g_object_ref (drbuf->texture);
+        gst_jni_surface_texture_attach_to_gl_context
+            (eglglessink->surface_texture,
+            eglglessink->egl_context->texture[0]);
       }
-    } else {
-      if (!gst_eglglessink_fill_texture (eglglessink, buf))
-        goto HANDLE_ERROR;
+      if (!gst_jni_amc_direct_buffer_render (drbuf)) {
+        return GST_FLOW_CUSTOM_ERROR;
+      }
+      gst_jni_surface_texture_update_tex_image (eglglessink->surface_texture);
     }
-#else
+  } else {
     if (!gst_eglglessink_fill_texture (eglglessink, buf))
       goto HANDLE_ERROR;
-#endif
   }
+#else
+  if (!gst_eglglessink_fill_texture (eglglessink, buf))
+    goto HANDLE_ERROR;
+#endif
 
   return GST_FLOW_OK;
 
