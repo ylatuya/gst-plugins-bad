@@ -1322,7 +1322,7 @@ gst_hls_demux_update_adaptation_algorithm (GstHLSDemux * demux)
   if (demux->adaptive_switching) {
     algo = demux->adaptation_algo;
   } else {
-    algo = GST_HLS_ADAPTATION_FIXED_BITRATE;
+    algo = GST_HLS_ADAPTATION_DISABLED;
   }
 
   switch (algo) {
