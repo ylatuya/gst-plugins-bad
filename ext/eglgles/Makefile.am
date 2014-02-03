@@ -29,7 +29,7 @@ libgsteglglessink_la_LIBADD += $(top_builddir)/gst-libs/gst/androidjni/libgstand
 endif
 
 if HAVE_IOS
-libgsteglglessink_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS) -Wl,-framework,OpenGLES -Wl,-framework,QuartzCore -Wl,-framework,IOKit -Wl,-framework,UIKit -Wl,-framework,CoreGraphics -Wl,-framework,CoreFoundation -Wl,-framework,Foundation -W
+libgsteglglessink_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS) -Wl,-framework,OpenGLES -Wl,-framework,QuartzCore -Wl,-framework,UIKit -Wl,-framework,CoreGraphics -Wl,-framework,CoreFoundation -Wl,-framework,Foundation -W
 
 else
 libgsteglglessink_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
