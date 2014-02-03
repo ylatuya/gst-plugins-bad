@@ -614,7 +614,7 @@ gst_egl_adaptation_init_egl_surface (GstEglAdaptationContext * ctx,
       texnames[0] = "tex";
       break;
     default:{
-      if (format == GST_VIDEO_FORMAT_AMC) {
+      if (format == (GstVideoFormat) GST_VIDEO_FORMAT_AMC) {
         frag_prog = (gchar *) frag_OES_prog;
         free_frag_prog = FALSE;
         vert_prog = vert_COPY_prog_trans;
@@ -683,7 +683,8 @@ gst_egl_adaptation_init_egl_surface (GstEglAdaptationContext * ctx,
       goto HANDLE_ERROR_LOCKED;
 
     for (i = 0; i < ctx->n_textures; i++) {
-      if (format == GST_VIDEO_FORMAT_AMC) {
+      if (format == (GstVideoFormat) GST_VIDEO_FORMAT_AMC) {
+#ifdef HAVE_ANDROID
         glBindTexture (GL_TEXTURE_EXTERNAL_OES, ctx->texture[i]);
         if (got_gl_error ("glBindTexture"))
           goto HANDLE_ERROR;
@@ -699,6 +700,9 @@ gst_egl_adaptation_init_egl_surface (GstEglAdaptationContext * ctx,
         if (got_gl_error ("glTexParameterf"))
           goto HANDLE_ERROR_LOCKED;
         glBindTexture (GL_TEXTURE_EXTERNAL_OES, 0);
+#else
+      g_assert_not_reached ();
+#endif
       } else {
         glBindTexture (GL_TEXTURE_2D, ctx->texture[i]);
         if (got_gl_error ("glBindTexture"))
