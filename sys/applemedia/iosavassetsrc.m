@@ -324,6 +324,17 @@ gst_avasset_src_query (GstPad *pad, GstQuery *query)
         gst_query_set_position (query, GST_FORMAT_TIME, self->reader.position);
         ret = TRUE;
         break;
+     case GST_QUERY_SEEKING: {
+       GstFormat format;
+       gst_query_parse_seeking (query, &format, NULL, NULL, NULL);
+       if (format == GST_FORMAT_TIME) {
+         gst_query_set_seeking (query, GST_FORMAT_TIME, TRUE, 0, self->reader.duration);
+         ret = TRUE;
+       } else {
+         ret = FALSE;
+       }
+       break;
+     }
      default:
         ret = FALSE;
         break;
