@@ -1631,10 +1631,12 @@ scan_codecs (GstPlugin * plugin)
     /* Compatibility codec names */
     /* The MP3Decoder is found on Sony Xperia Z but it fails
      * when creating the element and triggers a SEGV
+     * The OMX.SEC.avcdec Found on Samsung Galaxy S3 gives errors
      */
     if (strcmp (name_str, "AACEncoder") == 0 ||
         strcmp (name_str, "AACDecoder") == 0 ||
         strcmp (name_str, "MP3Decoder") == 0 ||
+        strcmp (name_str, "OMX.SEC.avcdec") == 0 ||
         strcmp (name_str, "OMX.google.raw.decoder") == 0) {
       GST_INFO ("Skipping compatibility codec '%s'", name_str);
       valid_codec = FALSE;
