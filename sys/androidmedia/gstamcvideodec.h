@@ -26,6 +26,7 @@
 #include <gst/video/gstvideodecoder.h>
 
 #include "gstamc.h"
+#include <gstamcsurface.h>
 
 G_BEGIN_DECLS
 
@@ -81,6 +82,8 @@ struct _GstAmcVideoDec
 
   /* TRUE if upstream is EOS */
   gboolean eos;
+
+  GstAmcSurface *surface;
 
   GstFlowReturn downstream_flow_ret;
 };

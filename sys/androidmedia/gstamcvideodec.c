@@ -41,7 +41,10 @@
 #endif
 
 #include "gstamcvideodec.h"
+#include "gstamcdirectbuffer.h"
+#include "gstamcvideometa.h"
 #include "gstamc-constants.h"
+#define DIRECT_RENDERING TRUE
 
 GST_DEBUG_CATEGORY_STATIC (gst_amc_video_dec_debug_category);
 #define GST_CAT_DEFAULT gst_amc_video_dec_debug_category
@@ -346,10 +349,15 @@ caps_to_mime (GstCaps * caps)
 static GstCaps *
 create_src_caps (const GstAmcCodecInfo * codec_info)
 {
-  GstCaps *ret;
+  GstCaps *ret, *tmp;
   gint i;
 
   ret = gst_caps_new_empty ();
+
+  tmp =
+      gst_caps_from_string (GST_VIDEO_CAPS_MAKE_WITH_FEATURES
+      (GST_CAPS_FEATURE_META_GST_VIDEO_GL_TEXTURE_UPLOAD_META, "ENCODED"));
+  ret = gst_caps_merge (ret, tmp);
 
   for (i = 0; i < codec_info->n_supported_types; i++) {
     const GstAmcCodecType *type = &codec_info->supported_types[i];
@@ -357,7 +365,6 @@ create_src_caps (const GstAmcCodecInfo * codec_info)
 
     for (j = 0; j < type->n_color_formats; j++) {
       GstVideoFormat format;
-      GstCaps *tmp;
 
       format = gst_amc_color_format_to_video_format (type->color_formats[j]);
       if (format == GST_VIDEO_FORMAT_UNKNOWN) {
@@ -1158,6 +1165,9 @@ retry:
         "Frame is too late, dropping (deadline %" GST_TIME_FORMAT ")",
         GST_TIME_ARGS (-deadline));
     flow_ret = gst_video_decoder_drop_frame (GST_VIDEO_DECODER (self), frame);
+    if (DIRECT_RENDERING && idx >= 0) {
+      gst_amc_codec_release_output_buffer (self->codec, idx);
+    }
   } else if (!frame && buffer_info.size > 0) {
     GstBuffer *outbuf;
 
@@ -1182,6 +1192,25 @@ retry:
         gst_util_uint64_scale (buffer_info.presentation_time_us, GST_USECOND,
         1);
     flow_ret = gst_pad_push (GST_VIDEO_DECODER_SRC_PAD (self), outbuf);
+  } else if (DIRECT_RENDERING) {
+    GstAmcDirectBuffer *drbuf;
+    GstBuffer *outbuf;
+
+
+    drbuf = gst_amc_direct_buffer_new (self->surface->texture,
+        self->codec->object, gst_amc_codec_get_release_method_id (self->codec),
+        idx);
+    outbuf = gst_amc_video_meta_buffer_new (self->surface->texture, drbuf);
+
+    if (frame != NULL) {
+      frame->output_buffer = outbuf;
+      flow_ret =
+          gst_video_decoder_finish_frame (GST_VIDEO_DECODER (self), frame);
+    } else {
+      /* Pushing this last frame produces a black frame and transitions
+       * are not smooth so we just skip it */
+      flow_ret = GST_FLOW_OK;
+    }
   } else if (buffer_info.size > 0) {
     if ((flow_ret = gst_video_decoder_allocate_output_frame (GST_VIDEO_DECODER
                 (self), frame)) != GST_FLOW_OK) {
@@ -1384,6 +1413,7 @@ gst_amc_video_dec_set_format (GstVideoDecoder * decoder,
   gchar *format_string;
   guint8 *codec_data = NULL;
   gsize codec_data_size = 0;
+  jobject jsurface = NULL;
 
   self = GST_AMC_VIDEO_DEC (decoder);
 
@@ -1472,11 +1502,16 @@ gst_amc_video_dec_set_format (GstVideoDecoder * decoder,
     gst_amc_format_set_buffer (format, "csd-0", self->codec_data,
         self->codec_data_size);
 
+  if (DIRECT_RENDERING && self->surface == NULL) {
+    self->surface = gst_amc_surface_new (gst_amc_surface_texture_new ());
+    jsurface = self->surface->jobject;
+  }
+
   format_string = gst_amc_format_to_string (format);
   GST_DEBUG_OBJECT (self, "Configuring codec with format: %s", format_string);
   g_free (format_string);
 
-  if (!gst_amc_codec_configure (self->codec, format, 0)) {
+  if (!gst_amc_codec_configure (self->codec, format, jsurface, 0)) {
     GST_ERROR_OBJECT (self, "Failed to configure codec");
     return FALSE;
   }

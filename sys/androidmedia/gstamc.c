@@ -27,15 +27,14 @@
 
 #include "gstamcvideodec.h"
 #include "gstamcaudiodec.h"
+#include "gstjniutils.h"
 
-#include <gmodule.h>
 #include <gst/gst.h>
 #include <gst/video/video.h>
 #include <gst/audio/audio.h>
 #include <string.h>
 #include <jni.h>
 
-#include <pthread.h>
 
 GST_DEBUG_CATEGORY (gst_amc_debug);
 #define GST_CAT_DEFAULT gst_amc_debug
@@ -49,13 +48,6 @@ static gboolean ignore_unknown_color_formats = TRUE;
 static gboolean ignore_unknown_color_formats = FALSE;
 #endif
 
-static GModule *java_module;
-static jint (*get_created_java_vms) (JavaVM ** vmBuf, jsize bufLen,
-    jsize * nVMs);
-static jint (*create_java_vm) (JavaVM ** p_vm, JNIEnv ** p_env, void *vm_args);
-static JavaVM *java_vm;
-static gboolean started_java_vm = FALSE;
-
 static gboolean accepted_color_formats (GstAmcCodecType * type,
     gboolean is_encoder);
 
@@ -65,6 +57,7 @@ static struct
   jclass klass;
   jmethodID constructor;
 } java_string;
+
 static struct
 {
   jclass klass;
@@ -108,122 +101,6 @@ static struct
   jmethodID set_byte_buffer;
 } media_format;
 
-static pthread_key_t current_jni_env;
-
-static JNIEnv *
-gst_amc_attach_current_thread (void)
-{
-  JNIEnv *env;
-  JavaVMAttachArgs args;
-
-  GST_DEBUG ("Attaching thread %p", g_thread_self ());
-  args.version = JNI_VERSION_1_6;
-  args.name = NULL;
-  args.group = NULL;
-
-  if ((*java_vm)->AttachCurrentThread (java_vm, &env, &args) < 0) {
-    GST_ERROR ("Failed to attach current thread");
-    return NULL;
-  }
-
-  return env;
-}
-
-static void
-gst_amc_detach_current_thread (void *env)
-{
-  GST_DEBUG ("Detaching thread %p", g_thread_self ());
-  (*java_vm)->DetachCurrentThread (java_vm);
-}
-
-static JNIEnv *
-gst_amc_get_jni_env (void)
-{
-  JNIEnv *env;
-
-  if ((env = pthread_getspecific (current_jni_env)) == NULL) {
-    env = gst_amc_attach_current_thread ();
-    pthread_setspecific (current_jni_env, env);
-  }
-
-  return env;
-}
-
-static gboolean
-initialize_java_vm (void)
-{
-  jsize n_vms;
-
-  java_module = g_module_open ("libdvm", G_MODULE_BIND_LOCAL);
-  if (!java_module)
-    goto load_failed;
-
-  if (!g_module_symbol (java_module, "JNI_CreateJavaVM",
-          (gpointer *) & create_java_vm))
-    goto symbol_error;
-
-  if (!g_module_symbol (java_module, "JNI_GetCreatedJavaVMs",
-          (gpointer *) & get_created_java_vms))
-    goto symbol_error;
-
-  n_vms = 0;
-  if (get_created_java_vms (&java_vm, 1, &n_vms) < 0)
-    goto get_created_failed;
-
-  if (n_vms > 0) {
-    GST_DEBUG ("Successfully got existing Java VM %p", java_vm);
-  } else {
-    JNIEnv *env;
-    JavaVMInitArgs vm_args;
-    JavaVMOption options[4];
-
-    options[0].optionString = "-verbose:jni";
-    options[1].optionString = "-verbose:gc";
-    options[2].optionString = "-Xcheck:jni";
-    options[3].optionString = "-Xdebug";
-
-    vm_args.version = JNI_VERSION_1_4;
-    vm_args.options = options;
-    vm_args.nOptions = 4;
-    vm_args.ignoreUnrecognized = JNI_TRUE;
-    if (create_java_vm (&java_vm, &env, &vm_args) < 0)
-      goto create_failed;
-    GST_DEBUG ("Successfully created Java VM %p", java_vm);
-
-    started_java_vm = TRUE;
-  }
-
-  return java_vm != NULL;
-
-load_failed:
-  {
-    GST_ERROR ("Failed to load libdvm: %s", g_module_error ());
-    return FALSE;
-  }
-symbol_error:
-  {
-    GST_ERROR ("Failed to locate required JNI symbols in libdvm: %s",
-        g_module_error ());
-    g_module_close (java_module);
-    java_module = NULL;
-    return FALSE;
-  }
-get_created_failed:
-  {
-    GST_ERROR ("Failed to get already created VMs");
-    g_module_close (java_module);
-    java_module = NULL;
-    return FALSE;
-  }
-create_failed:
-  {
-    GST_ERROR ("Failed to create a Java VM");
-    g_module_close (java_module);
-    java_module = NULL;
-    return FALSE;
-  }
-}
-
 GstAmcCodec *
 gst_amc_codec_new (const gchar * name)
 {
@@ -234,7 +111,7 @@ gst_amc_codec_new (const gchar * name)
 
   g_return_val_if_fail (name != NULL, NULL);
 
-  env = gst_amc_get_jni_env ();
+  env = gst_amc_jni_get_env ();
 
   name_str = (*env)->NewStringUTF (env, name);
   if (name_str == NULL)
@@ -281,13 +158,22 @@ gst_amc_codec_free (GstAmcCodec * codec)
 
   g_return_if_fail (codec != NULL);
 
-  env = gst_amc_get_jni_env ();
+  env = gst_amc_jni_get_env ();
   (*env)->DeleteGlobalRef (env, codec->object);
   g_slice_free (GstAmcCodec, codec);
 }
 
+jmethodID
+gst_amc_codec_get_release_method_id (GstAmcCodec * codec)
+{
+  g_return_val_if_fail (codec != NULL, FALSE);
+
+  return media_codec.release_output_buffer;
+}
+
 gboolean
-gst_amc_codec_configure (GstAmcCodec * codec, GstAmcFormat * format, gint flags)
+gst_amc_codec_configure (GstAmcCodec * codec, GstAmcFormat * format,
+    jobject surface, gint flags)
 {
   JNIEnv *env;
   gboolean ret = TRUE;
@@ -295,10 +181,10 @@ gst_amc_codec_configure (GstAmcCodec * codec, GstAmcFormat * format, gint flags)
   g_return_val_if_fail (codec != NULL, FALSE);
   g_return_val_if_fail (format != NULL, FALSE);
 
-  env = gst_amc_get_jni_env ();
+  env = gst_amc_jni_get_env ();
 
   (*env)->CallVoidMethod (env, codec->object, media_codec.configure,
-      format->object, NULL, NULL, flags);
+      format->object, surface, NULL, flags);
   if ((*env)->ExceptionCheck (env)) {
     GST_ERROR ("Failed to call Java method");
     (*env)->ExceptionClear (env);
@@ -320,7 +206,7 @@ gst_amc_codec_get_output_format (GstAmcCodec * codec)
 
   g_return_val_if_fail (codec != NULL, NULL);
 
-  env = gst_amc_get_jni_env ();
+  env = gst_amc_jni_get_env ();
 
   object =
       (*env)->CallObjectMethod (env, codec->object,
@@ -356,7 +242,7 @@ gst_amc_codec_start (GstAmcCodec * codec)
 
   g_return_val_if_fail (codec != NULL, FALSE);
 
-  env = gst_amc_get_jni_env ();
+  env = gst_amc_jni_get_env ();
 
   (*env)->CallVoidMethod (env, codec->object, media_codec.start);
   if ((*env)->ExceptionCheck (env)) {
@@ -379,7 +265,7 @@ gst_amc_codec_stop (GstAmcCodec * codec)
 
   g_return_val_if_fail (codec != NULL, FALSE);
 
-  env = gst_amc_get_jni_env ();
+  env = gst_amc_jni_get_env ();
 
   (*env)->CallVoidMethod (env, codec->object, media_codec.stop);
   if ((*env)->ExceptionCheck (env)) {
@@ -402,7 +288,7 @@ gst_amc_codec_flush (GstAmcCodec * codec)
 
   g_return_val_if_fail (codec != NULL, FALSE);
 
-  env = gst_amc_get_jni_env ();
+  env = gst_amc_jni_get_env ();
 
   (*env)->CallVoidMethod (env, codec->object, media_codec.flush);
   if ((*env)->ExceptionCheck (env)) {
@@ -425,7 +311,7 @@ gst_amc_codec_release (GstAmcCodec * codec)
 
   g_return_val_if_fail (codec != NULL, FALSE);
 
-  env = gst_amc_get_jni_env ();
+  env = gst_amc_jni_get_env ();
 
   (*env)->CallVoidMethod (env, codec->object, media_codec.release);
   if ((*env)->ExceptionCheck (env)) {
@@ -448,7 +334,7 @@ gst_amc_codec_free_buffers (GstAmcBuffer * buffers, gsize n_buffers)
 
   g_return_if_fail (buffers != NULL);
 
-  env = gst_amc_get_jni_env ();
+  env = gst_amc_jni_get_env ();
 
   for (i = 0; i < n_buffers; i++) {
     if (buffers[i].object)
@@ -470,7 +356,7 @@ gst_amc_codec_get_output_buffers (GstAmcCodec * codec, gsize * n_buffers)
   g_return_val_if_fail (n_buffers != NULL, NULL);
 
   *n_buffers = 0;
-  env = gst_amc_get_jni_env ();
+  env = gst_amc_jni_get_env ();
 
   output_buffers =
       (*env)->CallObjectMethod (env, codec->object,
@@ -545,7 +431,7 @@ gst_amc_codec_get_input_buffers (GstAmcCodec * codec, gsize * n_buffers)
   g_return_val_if_fail (n_buffers != NULL, NULL);
 
   *n_buffers = 0;
-  env = gst_amc_get_jni_env ();
+  env = gst_amc_jni_get_env ();
 
   input_buffers =
       (*env)->CallObjectMethod (env, codec->object,
@@ -615,7 +501,7 @@ gst_amc_codec_dequeue_input_buffer (GstAmcCodec * codec, gint64 timeoutUs)
 
   g_return_val_if_fail (codec != NULL, G_MININT);
 
-  env = gst_amc_get_jni_env ();
+  env = gst_amc_jni_get_env ();
 
   ret =
       (*env)->CallIntMethod (env, codec->object,
@@ -684,7 +570,7 @@ gst_amc_codec_dequeue_output_buffer (GstAmcCodec * codec,
 
   g_return_val_if_fail (codec != NULL, G_MININT);
 
-  env = gst_amc_get_jni_env ();
+  env = gst_amc_jni_get_env ();
 
   info_o =
       (*env)->NewObject (env, media_codec_buffer_info.klass,
@@ -728,7 +614,7 @@ gst_amc_codec_queue_input_buffer (GstAmcCodec * codec, gint index,
   g_return_val_if_fail (codec != NULL, FALSE);
   g_return_val_if_fail (info != NULL, FALSE);
 
-  env = gst_amc_get_jni_env ();
+  env = gst_amc_jni_get_env ();
 
   (*env)->CallVoidMethod (env, codec->object, media_codec.queue_input_buffer,
       index, info->offset, info->size, info->presentation_time_us, info->flags);
@@ -752,7 +638,7 @@ gst_amc_codec_release_output_buffer (GstAmcCodec * codec, gint index)
 
   g_return_val_if_fail (codec != NULL, FALSE);
 
-  env = gst_amc_get_jni_env ();
+  env = gst_amc_jni_get_env ();
 
   (*env)->CallVoidMethod (env, codec->object, media_codec.release_output_buffer,
       index, JNI_FALSE);
@@ -778,7 +664,7 @@ gst_amc_format_new_audio (const gchar * mime, gint sample_rate, gint channels)
 
   g_return_val_if_fail (mime != NULL, NULL);
 
-  env = gst_amc_get_jni_env ();
+  env = gst_amc_jni_get_env ();
 
   mime_str = (*env)->NewStringUTF (env, mime);
   if (mime_str == NULL)
@@ -828,7 +714,7 @@ gst_amc_format_new_video (const gchar * mime, gint width, gint height)
 
   g_return_val_if_fail (mime != NULL, NULL);
 
-  env = gst_amc_get_jni_env ();
+  env = gst_amc_jni_get_env ();
 
   mime_str = (*env)->NewStringUTF (env, mime);
   if (mime_str == NULL)
@@ -875,7 +761,7 @@ gst_amc_format_free (GstAmcFormat * format)
 
   g_return_if_fail (format != NULL);
 
-  env = gst_amc_get_jni_env ();
+  env = gst_amc_jni_get_env ();
   (*env)->DeleteGlobalRef (env, format->object);
   g_slice_free (GstAmcFormat, format);
 }
@@ -890,7 +776,7 @@ gst_amc_format_to_string (GstAmcFormat * format)
 
   g_return_val_if_fail (format != NULL, FALSE);
 
-  env = gst_amc_get_jni_env ();
+  env = gst_amc_jni_get_env ();
 
   v_str =
       (*env)->CallObjectMethod (env, format->object, media_format.to_string);
@@ -928,7 +814,7 @@ gst_amc_format_contains_key (GstAmcFormat * format, const gchar * key)
   g_return_val_if_fail (format != NULL, FALSE);
   g_return_val_if_fail (key != NULL, FALSE);
 
-  env = gst_amc_get_jni_env ();
+  env = gst_amc_jni_get_env ();
 
   key_str = (*env)->NewStringUTF (env, key);
   if (!key_str)
@@ -963,7 +849,7 @@ gst_amc_format_get_float (GstAmcFormat * format, const gchar * key,
   g_return_val_if_fail (value != NULL, FALSE);
 
   *value = 0;
-  env = gst_amc_get_jni_env ();
+  env = gst_amc_jni_get_env ();
 
   key_str = (*env)->NewStringUTF (env, key);
   if (!key_str)
@@ -996,7 +882,7 @@ gst_amc_format_set_float (GstAmcFormat * format, const gchar * key,
   g_return_if_fail (format != NULL);
   g_return_if_fail (key != NULL);
 
-  env = gst_amc_get_jni_env ();
+  env = gst_amc_jni_get_env ();
 
   key_str = (*env)->NewStringUTF (env, key);
   if (!key_str)
@@ -1027,7 +913,7 @@ gst_amc_format_get_int (GstAmcFormat * format, const gchar * key, gint * value)
   g_return_val_if_fail (value != NULL, FALSE);
 
   *value = 0;
-  env = gst_amc_get_jni_env ();
+  env = gst_amc_jni_get_env ();
 
   key_str = (*env)->NewStringUTF (env, key);
   if (!key_str)
@@ -1060,7 +946,7 @@ gst_amc_format_set_int (GstAmcFormat * format, const gchar * key, gint value)
   g_return_if_fail (format != NULL);
   g_return_if_fail (key != NULL);
 
-  env = gst_amc_get_jni_env ();
+  env = gst_amc_jni_get_env ();
 
   key_str = (*env)->NewStringUTF (env, key);
   if (!key_str)
@@ -1094,7 +980,7 @@ gst_amc_format_get_string (GstAmcFormat * format, const gchar * key,
   g_return_val_if_fail (value != NULL, FALSE);
 
   *value = 0;
-  env = gst_amc_get_jni_env ();
+  env = gst_amc_jni_get_env ();
 
   key_str = (*env)->NewStringUTF (env, key);
   if (!key_str)
@@ -1143,7 +1029,7 @@ gst_amc_format_set_string (GstAmcFormat * format, const gchar * key,
   g_return_if_fail (key != NULL);
   g_return_if_fail (value != NULL);
 
-  env = gst_amc_get_jni_env ();
+  env = gst_amc_jni_get_env ();
 
   key_str = (*env)->NewStringUTF (env, key);
   if (!key_str)
@@ -1184,7 +1070,7 @@ gst_amc_format_get_buffer (GstAmcFormat * format, const gchar * key,
 
   *data = NULL;
   *size = 0;
-  env = gst_amc_get_jni_env ();
+  env = gst_amc_jni_get_env ();
 
   key_str = (*env)->NewStringUTF (env, key);
   if (!key_str)
@@ -1230,7 +1116,7 @@ gst_amc_format_set_buffer (GstAmcFormat * format, const gchar * key,
   g_return_if_fail (key != NULL);
   g_return_if_fail (data != NULL);
 
-  env = gst_amc_get_jni_env ();
+  env = gst_amc_jni_get_env ();
 
   key_str = (*env)->NewStringUTF (env, key);
   if (!key_str)
@@ -1265,7 +1151,7 @@ get_java_classes (void)
 
   GST_DEBUG ("Retrieving Java classes");
 
-  env = gst_amc_get_jni_env ();
+  env = gst_amc_jni_get_env ();
 
   tmp = (*env)->FindClass (env, "java/lang/String");
   if (!tmp) {
@@ -1564,7 +1450,7 @@ scan_codecs (GstPlugin * plugin)
     return TRUE;
   }
 
-  env = gst_amc_get_jni_env ();
+  env = gst_amc_jni_get_env ();
 
   codec_list_class = (*env)->FindClass (env, "android/media/MediaCodecList");
   if (!codec_list_class) {
@@ -1686,7 +1572,8 @@ scan_codecs (GstPlugin * plugin)
      * VM via the non-public AndroidRuntime class. Can we somehow
      * initialize all this?
      */
-    if (started_java_vm && !g_str_has_prefix (name_str, "OMX.google.")) {
+    if (gst_amc_jni_is_vm_started () &&
+        !g_str_has_prefix (name_str, "OMX.google.")) {
       GST_INFO ("Skipping non-Google codec '%s' in standalone mode", name_str);
       valid_codec = FALSE;
       goto next_codec;
@@ -2803,10 +2690,9 @@ plugin_init (GstPlugin * plugin)
 
   GST_DEBUG_CATEGORY_INIT (gst_amc_debug, "amc", 0, "android-media-codec");
 
-  pthread_key_create (&current_jni_env, gst_amc_detach_current_thread);
-
-  if (!initialize_java_vm ())
+  if (!gst_amc_jni_initialize ()) {
     return FALSE;
+  };
 
   gst_plugin_add_dependency_simple (plugin, NULL, "/etc", "media_codecs.xml",
       GST_PLUGIN_DEPENDENCY_FLAG_NONE);

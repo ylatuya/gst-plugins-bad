@@ -83,7 +83,7 @@ extern GQuark gst_amc_codec_info_quark;
 GstAmcCodec * gst_amc_codec_new (const gchar *name);
 void gst_amc_codec_free (GstAmcCodec * codec);
 
-gboolean gst_amc_codec_configure (GstAmcCodec * codec, GstAmcFormat * format, gint flags);
+gboolean gst_amc_codec_configure (GstAmcCodec * codec, GstAmcFormat * format, jobject surface, gint flags);
 GstAmcFormat * gst_amc_codec_get_output_format (GstAmcCodec * codec);
 
 gboolean gst_amc_codec_start (GstAmcCodec * codec);
@@ -139,6 +139,8 @@ gint gst_amc_aac_profile_from_string (const gchar *profile);
 
 gboolean gst_amc_audio_channel_mask_to_positions (guint32 channel_mask, gint channels, GstAudioChannelPosition *pos);
 guint32 gst_amc_audio_channel_mask_from_positions (GstAudioChannelPosition *positions, gint channels);
+
+jmethodID gst_amc_codec_get_release_method_id (GstAmcCodec *codec);
 
 G_END_DECLS
 

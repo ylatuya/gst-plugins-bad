@@ -3,13 +3,23 @@ plugin_LTLIBRARIES = libgstandroidmedia.la
 libgstandroidmedia_la_SOURCES = \
 	gstamc.c \
 	gstamcaudiodec.c \
-	gstamcvideodec.c
+	gstamcvideodec.c \
+	gstamcdirectbuffer.c \
+	gstamcsurface.c \
+	gstamcsurfacetexture.c \
+	gstamcvideomemory.c \
+	gstjniutils.c
 
 noinst_HEADERS = \
 	gstamc.h \
 	gstamc-constants.h \
 	gstamcaudiodec.h \
-	gstamcvideodec.h
+	gstamcvideodec.h \
+	gstamcdirectbuffer.h \
+	gstamcsurface.h \
+	gstamcsurfacetexture.h \
+	gstamcvideomemory.h \
+	gstjniutils.h
 
 libgstandroidmedia_la_CFLAGS = \
 	$(GST_PLUGINS_BASE_CFLAGS) \
