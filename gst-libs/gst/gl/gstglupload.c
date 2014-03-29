@@ -256,6 +256,22 @@ static const gchar *text_vertex_shader =
     "   v_texcoord = a_texcoord;  \n"
     "}                            \n";
 
+/* Android OES texture */
+static const char *frag_OES_egl = {
+  "#extension GL_OES_EGL_image_external : require\n"
+    "precision mediump float;"
+    "uniform vec2 v_texcoord;"
+    "uniform samplerExternalOES tex;"
+    "uniform vec2 tex_scale0;\n"
+    "uniform vec2 tex_scale1;\n"
+    "uniform vec2 tex_scale2;\n"
+    "void main (void)"
+    "{"
+      " vec4 t = texture2D(tex, v_texcoord * tex_scale0);\n"
+      " gl_FragColor = vec4(t.rgb, 1.0);\n"
+    "}"
+};
+
 /* *INDENT-ON* */
 
 struct TexData
@@ -277,6 +293,7 @@ struct _GstGLUploadPrivate
   const gchar *NV12_NV21;
   const gchar *REORDER;
   const gchar *COPY;
+  const gchar *COPY_OES;
   const gchar *COMPOSE;
   const gchar *vert_shader;
 
@@ -355,6 +372,7 @@ gst_gl_upload_new (GstGLContext * context)
   priv->NV12_NV21 = frag_NV12_NV21;
   priv->vert_shader = text_vertex_shader;
   priv->draw = _do_upload_draw;
+  priv->COPY_OES = frag_OES_egl;
 
   return upload;
 }
@@ -408,8 +426,8 @@ _gst_gl_upload_init_format_unlocked (GstGLUpload * upload,
   g_return_val_if_fail (upload != NULL, FALSE);
   g_return_val_if_fail (GST_VIDEO_INFO_FORMAT (&in_info) !=
       GST_VIDEO_FORMAT_UNKNOWN, FALSE);
-  g_return_val_if_fail (GST_VIDEO_INFO_FORMAT (&in_info) !=
-      GST_VIDEO_FORMAT_ENCODED, FALSE);
+  /*g_return_val_if_fail (GST_VIDEO_INFO_FORMAT (&in_info) != */
+  /*GST_VIDEO_FORMAT_ENCODED, FALSE); */
 
   if (upload->initted) {
     return FALSE;
@@ -972,6 +990,11 @@ _init_upload (GstGLContext * context, GstGLUpload * upload)
       free_frag_prog = TRUE;
       upload->priv->n_textures = 2;
       break;
+    case GST_VIDEO_FORMAT_ENCODED:
+      frag_prog = (gchar *) upload->priv->COPY_OES;
+      free_frag_prog = FALSE;
+      upload->priv->n_textures = 1;
+      break;
     default:
       g_assert_not_reached ();
       break;
@@ -1419,6 +1442,7 @@ _do_upload_draw (GstGLContext * context, GstGLUpload * upload)
 {
   GstGLFuncs *gl;
   struct TexData *tex = upload->priv->texture_info;
+  GstVideoGLTextureUploadMeta *meta = upload->priv->meta;
   guint out_width, out_height;
   const gfloat *cms_offset;
   const gfloat *cms_rcoeff;
@@ -1512,11 +1536,23 @@ _do_upload_draw (GstGLContext * context, GstGLUpload * upload)
 
     g_free (scale_name);
 
-    gl->BindTexture (GL_TEXTURE_2D, upload->in_texture[i]);
-    gl->TexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    gl->TexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    gl->TexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    gl->TexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    if (meta->texture_type[0] == GST_VIDEO_GL_TEXTURE_TYPE_OES) {
+      glBindTexture (GL_TEXTURE_EXTERNAL_OES, upload->in_texture[i]);
+      glTexParameterf (GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_MIN_FILTER,
+          GL_LINEAR);
+      glTexParameterf (GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_MAG_FILTER,
+          GL_LINEAR);
+      glTexParameterf (GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_WRAP_S,
+          GL_CLAMP_TO_EDGE);
+      glTexParameterf (GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_WRAP_T,
+          GL_CLAMP_TO_EDGE);
+    } else {
+      gl->BindTexture (GL_TEXTURE_2D, upload->in_texture[i]);
+      gl->TexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+      gl->TexParameteri (GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+      gl->TexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+      gl->TexParameteri (GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    }
   }
 
   gl->DrawElements (GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, indices);

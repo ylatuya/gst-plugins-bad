@@ -38,6 +38,7 @@
  * for android
  */
 #define _GNU_SOURCE
+#define GL_NUM_EXTENSIONS 0x0000821d
 #endif
 
 #ifndef GL_NUM_EXTENSIONS
