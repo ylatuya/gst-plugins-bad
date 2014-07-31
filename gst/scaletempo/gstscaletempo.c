@@ -520,26 +520,27 @@ gst_scaletempo_sink_event (GstBaseTransform * trans, GstEvent * event)
     GstScaletempoPrivate *priv = GST_SCALETEMPO_GET_PRIVATE (scaletempo);
 
     gboolean update;
-    gdouble rate, applied_rate;
+    gdouble rate, applied_rate, new_rate;
     GstFormat format;
     gint64 start, stop, position;
 
     gst_event_parse_new_segment_full (event, &update, &rate, &applied_rate,
         &format, &start, &stop, &position);
 
+    new_rate = rate;
     if (priv->scale != rate) {
       if (ABS (rate - 1.0) < 1e-10) {
-        priv->scale = 1.0;
+        priv->scale = new_rate = 1.0;
         gst_base_transform_set_passthrough (GST_BASE_TRANSFORM (scaletempo),
             TRUE);
       } else {
         gst_base_transform_set_passthrough (GST_BASE_TRANSFORM (scaletempo),
             FALSE);
-        priv->scale = rate;
+        priv->scale = ABS (rate);
         priv->bytes_stride_scaled = priv->bytes_stride * priv->scale;
         priv->frames_stride_scaled =
             priv->bytes_stride_scaled / priv->bytes_per_frame;
-        GST_DEBUG ("%.3f scale, %.3f stride_in, %i stride_out", priv->scale,
+        GST_DEBUG ("%.3f scale, %.3f stride_in, %i stride_out", new_rate,
             priv->frames_stride_scaled,
             (gint) (priv->bytes_stride / priv->bytes_per_frame));
 
@@ -557,8 +558,9 @@ gst_scaletempo_sink_event (GstBaseTransform * trans, GstEvent * event)
         stop = (stop - start) / applied_rate + start;
       }
 
-      event = gst_event_new_new_segment_full (update, rate, applied_rate,
+      event = gst_event_new_new_segment_full (update, rate, new_rate,
           format, start, stop, position);
+
       gst_pad_push_event (GST_BASE_TRANSFORM_SRC_PAD (trans), event);
       return FALSE;
     }
