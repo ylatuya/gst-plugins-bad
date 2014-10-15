@@ -11,6 +11,7 @@ libgstapplemedia_la_SOURCES =			\
 	vtenc.c					\
 	vth264decbin.c				\
 	vth264encbin.c				\
+	avfvideosrc.m \
 	vtutil.c
 
 libgstapplemedia_la_CFLAGS =			\
@@ -39,6 +40,7 @@ libgstapplemedia_la_LDFLAGS =			\
 	$(GST_PLUGINS_BASE_LDFLAGS)		\
 	-Wl,-framework -Wl,CoreFoundation	\
 	-Wl,-framework -Wl,CoreMedia		\
+	-Wl,-framework -Wl,AVFoundation		\
 	-Wl,-framework -Wl,CoreVideo
 
 noinst_HEADERS =				\
@@ -61,13 +63,11 @@ noinst_HEADERS =				\
 if HAVE_IOS
 
 libgstapplemedia_la_SOURCES +=			\
-	avfvideosrc.m \
 	iosassetsrc.m \
 	iosavassetsrc.m
 
 libgstapplemedia_la_LDFLAGS +=			\
 	-Wl,-framework -Wl,Foundation		\
-	-Wl,-framework -Wl,AVFoundation		\
 	-Wl,-framework -Wl,AssetsLibrary
 
 else
