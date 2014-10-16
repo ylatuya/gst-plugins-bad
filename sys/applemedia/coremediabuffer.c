@@ -119,10 +119,18 @@ gst_core_media_buffer_new (CMSampleBufferRef sample_buf)
 
   buf =
       GST_CORE_MEDIA_BUFFER (gst_mini_object_new (GST_TYPE_CORE_MEDIA_BUFFER));
-  buf->sample_buf = CFRetain (sample_buf);
+  buf->sample_buf = sample_buf;
   buf->image_buf = image_buf;
   buf->pixel_buf = pixel_buf;
   buf->block_buf = block_buf;
+
+  CFRetain (sample_buf);
+  if (buf->image_buf) {
+    CVBufferRetain (image_buf);
+  }
+  if (block_buf) {
+    CFRetain (block_buf);
+  }
 
   if (needs_copy) {
     guint8 *ptr;
