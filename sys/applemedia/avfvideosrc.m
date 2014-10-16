@@ -22,6 +22,7 @@
 
 #import <AVFoundation/AVFoundation.h>
 #include <gst/video/video.h>
+#include <gst/interfaces/propertyprobe.h>
 
 #define DEFAULT_DEVICE_INDEX  -1
 #define DEFAULT_DO_STATS      FALSE
@@ -69,6 +70,7 @@ static GstPushSrcClass * parent_class;
   GstPushSrc *pushSrc;
 
   gint deviceIndex;
+  gchar *deviceName;
   BOOL doStats;
 #if !HAVE_IOS
   CGDirectDisplayID displayId;
@@ -107,6 +109,7 @@ static GstPushSrcClass * parent_class;
 - (void)finalize;
 
 @property int deviceIndex;
+@property gchar* deviceName;
 @property BOOL doStats;
 @property int fps;
 @property BOOL captureScreen;
@@ -141,7 +144,7 @@ didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer
 
 @implementation GstAVFVideoSrcImpl
 
-@synthesize deviceIndex, doStats, fps, captureScreen,
+@synthesize deviceIndex, deviceName, doStats, fps, captureScreen,
             captureScreenCursor, captureScreenMouseClicks;
 
 - (id)init
@@ -157,6 +160,7 @@ didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer
     pushSrc = src;
 
     deviceIndex = DEFAULT_DEVICE_INDEX;
+    deviceName = NULL;
     captureScreen = NO;
     captureScreenCursor = NO;
     captureScreenMouseClicks = NO;
@@ -192,7 +196,22 @@ didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer
   NSString *mediaType = AVMediaTypeVideo;
   NSError *err;
 
-  if (deviceIndex == -1) {
+  device = NULL;
+  if (deviceName != NULL) {
+    NSArray *devices = [AVCaptureDevice devicesWithMediaType:mediaType];
+    for (AVCaptureDevice *dev in devices) {
+      gchar *name = (gchar*) [[dev localizedName] UTF8String];
+      if (!g_strcmp0 (name, deviceName)) {
+        device = dev;
+        break;
+      }
+    }
+    if (device == nil) {
+      GST_ELEMENT_ERROR (element, RESOURCE, NOT_FOUND,
+                          ("No video capture devices found"), (NULL));
+      return NO;
+    }
+  } else if (deviceIndex == -1) {
     device = [AVCaptureDevice defaultDeviceWithMediaType:mediaType];
     if (device == nil) {
       GST_ELEMENT_ERROR (element, RESOURCE, NOT_FOUND,
@@ -877,12 +896,16 @@ enum
 {
   PROP_0,
   PROP_DEVICE_INDEX,
+  PROP_DEVICE,
   PROP_DO_STATS,
   PROP_FPS
 };
 
-GST_BOILERPLATE (GstAVFVideoSrc, gst_avf_video_src, GstPushSrc,
-    GST_TYPE_PUSH_SRC);
+static void gst_avf_video_src_init_interfaces (GType type);
+static void gst_avf_video_src_type_add_device_property_probe_interface (GType type);
+
+GST_BOILERPLATE_FULL (GstAVFVideoSrc, gst_avf_video_src, GstPushSrc,
+    GST_TYPE_PUSH_SRC, gst_avf_video_src_init_interfaces);
 
 static void gst_avf_video_src_finalize (GObject * obj);
 static void gst_avf_video_src_get_property (GObject * object, guint prop_id,
@@ -902,6 +925,35 @@ static gboolean gst_avf_video_src_unlock (GstBaseSrc * basesrc);
 static gboolean gst_avf_video_src_unlock_stop (GstBaseSrc * basesrc);
 static GstFlowReturn gst_avf_video_src_create (GstPushSrc * pushsrc,
     GstBuffer ** buf);
+
+static gboolean
+gst_avf_video_src_iface_supported (GstImplementsInterface * iface,
+    GType iface_type)
+{
+  return FALSE;
+}
+
+static void
+gst_avf_video_src_interface_init (GstImplementsInterfaceClass * klass)
+{
+  /* default virtual functions */
+  klass->supported = gst_avf_video_src_iface_supported;
+}
+
+static void
+gst_avf_video_src_init_interfaces (GType type)
+{
+  static const GInterfaceInfo implements_iface_info = {
+    (GInterfaceInitFunc) gst_avf_video_src_interface_init,
+    NULL,
+    NULL,
+  };
+
+  g_type_add_interface_static (type, GST_TYPE_IMPLEMENTS_INTERFACE,
+      &implements_iface_info);
+
+  gst_avf_video_src_type_add_device_property_probe_interface (type);
+}
 
 static void
 gst_avf_video_src_base_init (gpointer gclass)
@@ -945,6 +997,11 @@ gst_avf_video_src_class_init (GstAVFVideoSrcClass * klass)
           "The zero-based device index",
           -1, G_MAXINT, DEFAULT_DEVICE_INDEX,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
+  g_object_class_install_property (gobject_class, PROP_DEVICE,
+      g_param_spec_string ("device", "Device name",
+          "Human-readable name of the video device",
+          NULL, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
   g_object_class_install_property (gobject_class, PROP_DO_STATS,
       g_param_spec_boolean ("do-stats", "Enable statistics",
           "Enable logging of statistics", DEFAULT_DO_STATS,
@@ -993,6 +1050,9 @@ gst_avf_video_src_get_property (GObject * object, guint prop_id, GValue * value,
     case PROP_DEVICE_INDEX:
       g_value_set_int (value, impl.deviceIndex);
       break;
+    case PROP_DEVICE:
+      g_value_set_string (value, impl.deviceName);
+      break;
     case PROP_DO_STATS:
       g_value_set_boolean (value, impl.doStats);
       break;
@@ -1016,6 +1076,9 @@ gst_avf_video_src_set_property (GObject * object, guint prop_id,
   switch (prop_id) {
     case PROP_DEVICE_INDEX:
       impl.deviceIndex = g_value_get_int (value);
+      break;
+    case PROP_DEVICE:
+      impl.deviceName = g_value_get_string (value);
       break;
     case PROP_DO_STATS:
       impl.doStats = g_value_get_boolean (value);
@@ -1132,4 +1195,102 @@ gst_avf_video_src_create (GstPushSrc * pushsrc, GstBuffer ** buf)
   OBJC_CALLOUT_END ();
 
   return ret;
+}
+
+static const GList *
+probe_get_properties (GstPropertyProbe * probe)
+{
+  GObjectClass *klass = G_OBJECT_GET_CLASS (probe);
+  static GList *list = NULL;
+
+  GST_CLASS_LOCK (GST_OBJECT_CLASS (klass));
+
+  if (!list) {
+    GParamSpec *pspec;
+
+    pspec = g_object_class_find_property (klass, "device");
+    list = g_list_append (NULL, pspec);
+  }
+
+  GST_CLASS_UNLOCK (GST_OBJECT_CLASS (klass));
+
+  return list;
+}
+
+static void
+probe_probe_property (GstPropertyProbe * probe, guint prop_id,
+    const GParamSpec * pspec)
+{
+  /* we do nothing in here.  the actual "probe" occurs in get_values(),
+   * which is a common practice when not caching responses.
+   */
+
+  if (!g_str_equal (pspec->name, "device")) {
+    G_OBJECT_WARN_INVALID_PROPERTY_ID (probe, prop_id, pspec);
+  }
+}
+
+static gboolean
+probe_needs_probe (GstPropertyProbe * probe, guint prop_id,
+    const GParamSpec * pspec)
+{
+  /* don't cache probed data */
+  return TRUE;
+}
+
+static GValueArray *
+probe_get_values (GstPropertyProbe * probe, guint prop_id,
+    const GParamSpec * pspec)
+{
+  GstAVFVideoSrc *src;
+  GValueArray *array;
+  GValue value = { 0, };
+
+  if (!g_str_equal (pspec->name, "device")) {
+    G_OBJECT_WARN_INVALID_PROPERTY_ID (probe, prop_id, pspec);
+    return NULL;
+  }
+
+  src = GST_AVF_VIDEO_SRC (probe);
+
+  NSArray *devices = [AVCaptureDevice devicesWithMediaType: AVMediaTypeVideo];
+
+  if ([devices count] == 0) {
+    return NULL;
+  }
+
+  array = g_value_array_new ([devices count]);
+  g_value_init (&value, G_TYPE_STRING);
+  for (AVCaptureDevice *device in devices) {
+    gchar *name = (gchar*) [[device localizedName] UTF8String];
+    GST_LOG_OBJECT (probe, "Found device: %s", name);
+    g_value_set_string (&value, name);
+    g_value_array_append (array, &value);
+  }
+  g_value_unset (&value);
+
+  return array;
+}
+
+static void
+gst_avf_video_src_property_probe_interface_init (GstPropertyProbeInterface *
+    iface)
+{
+  iface->get_properties = probe_get_properties;
+  iface->probe_property = probe_probe_property;
+  iface->needs_probe = probe_needs_probe;
+  iface->get_values = probe_get_values;
+}
+
+void
+gst_avf_video_src_type_add_device_property_probe_interface (GType type)
+{
+  static const GInterfaceInfo probe_iface_info = {
+    (GInterfaceInitFunc) gst_avf_video_src_property_probe_interface_init,
+    NULL,
+    NULL,
+  };
+
+  g_type_add_interface_static (type, GST_TYPE_PROPERTY_PROBE,
+      &probe_iface_info);
 }
