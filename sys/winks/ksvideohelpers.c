@@ -228,9 +228,18 @@ ks_video_format_to_structure (GUID subtype_guid, GUID format_guid)
           sizeof (subtype_guid) - sizeof (subtype_guid.Data1)) == 0) {
     guint8 *p = (guint8 *) & subtype_guid.Data1;
 
-    structure = gst_structure_new ("video/x-raw-yuv",
-        "format", GST_TYPE_FOURCC, GST_MAKE_FOURCC (p[0], p[1], p[2], p[3]),
-        NULL);
+    if (memcmp (p, "HDYC", 4) == 0) {
+      /* Turn this FOURCC into something that GST can understand */
+      structure = gst_structure_new ("video/x-raw-yuv",
+          "format", GST_TYPE_FOURCC, GST_MAKE_FOURCC ('U', 'Y', 'V', 'Y'),
+          "color-matrix", G_TYPE_STRING, "hdtv",
+          NULL);
+    } else {
+      structure = gst_structure_new ("video/x-raw-yuv",
+          "format", GST_TYPE_FOURCC, GST_MAKE_FOURCC (p[0], p[1], p[2], p[3]),
+          NULL);
+    }
+
   }
 
   if (!structure) {
