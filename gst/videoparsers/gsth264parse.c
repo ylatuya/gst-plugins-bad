@@ -1740,6 +1740,8 @@ gst_h264_parse_set_caps (GstBaseParse * parse, GstCaps * caps)
     h264parse->have_pps = FALSE;
     h264parse->split_packetized = TRUE;
     h264parse->packetized = TRUE;
+  } else if (format == GST_H264_PARSE_FORMAT_BYTE) {
+    h264parse->do_ts = TRUE;
   }
 
   return TRUE;
