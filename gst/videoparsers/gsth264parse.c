@@ -520,7 +520,8 @@ gst_h264_parse_process_nal (GstH264Parse * h264parse, GstH264NalUnit * nalu)
               h264parse->dts == GST_CLOCK_TIME_NONE)
             h264parse->ts_trn_nb = 0;
           else
-            h264parse->ts_trn_nb = h264parse->dts;
+            h264parse->ts_trn_nb = h264parse->ts_trn_nb_orig = h264parse->dts;
+          h264parse->ts_trn_nb_updated = TRUE;
 
           GST_LOG_OBJECT (h264parse,
               "new buffering period; ts_trn_nb updated: %" GST_TIME_FORMAT,
@@ -1280,6 +1281,10 @@ gst_h264_parse_get_timestamp (GstH264Parse * h264parse,
           sps->vui_parameters.time_scale);
     } else {
       /* If no upstream timestamp is given, we write in new timestamp */
+      if (h264parse->ts_trn_nb_updated) {
+        h264parse->ts_trn_nb = h264parse->ts_trn_nb_orig;
+        h264parse->ts_trn_nb_updated = FALSE;
+      }
       upstream = h264parse->dts = h264parse->ts_trn_nb +
           (GstClockTime) gst_util_uint64_scale_int
           (h264parse->sei_cpb_removal_delay * GST_SECOND,
@@ -1331,6 +1336,8 @@ gst_h264_parse_parse_frame (GstBaseParse * parse, GstBaseParseFrame * frame)
         &GST_BUFFER_TIMESTAMP (buffer), &GST_BUFFER_DURATION (buffer),
         h264parse->frame_start);
 
+  if (GST_BUFFER_TIMESTAMP (buffer) == GST_CLOCK_TIME_NONE)
+    return GST_BASE_PARSE_FLOW_DROPPED;
   if (h264parse->keyframe)
     GST_BUFFER_FLAG_UNSET (buffer, GST_BUFFER_FLAG_DELTA_UNIT);
   else
