@@ -187,6 +187,10 @@ didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer
   mainQueue = NULL;
   dispatch_release (workerQueue);
   workerQueue = NULL;
+  if (deviceName != NULL) {
+    g_free (deviceName);
+    deviceName = NULL;
+  }
 
   [super finalize];
 }
@@ -1078,7 +1082,10 @@ gst_avf_video_src_set_property (GObject * object, guint prop_id,
       impl.deviceIndex = g_value_get_int (value);
       break;
     case PROP_DEVICE:
-      impl.deviceName = g_value_get_string (value);
+      if (impl.deviceName != NULL) {
+        g_free (impl.deviceName);
+      }
+      impl.deviceName = g_value_dup_string (value);
       break;
     case PROP_DO_STATS:
       impl.doStats = g_value_get_boolean (value);
