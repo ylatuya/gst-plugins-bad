@@ -26,6 +26,11 @@ const GUID MEDIASUBTYPE_I420
     = { 0x30323449, 0x0000, 0x0010, {0x80, 0x00, 0x00, 0xAA, 0x00, 0x38, 0x9B,
     0x71}
 };
+const GUID MEDIASUBTYPE_HDYC
+    = {0x43594448, 0x0000, 0x0010, {0x80, 0x00, 0x00, 0xaa, 0x00, 0x38, 0x9b,
+    0x71}
+};
+#define GST_VIDEO_FORMAT_HDYC 9999
 
 void
 gst_dshow_free_mediatype (AM_MEDIA_TYPE * pmt)
@@ -408,6 +413,9 @@ gst_dshow_guid_to_gst_video_format (AM_MEDIA_TYPE *mediatype)
   if (gst_dshow_check_mediatype (mediatype, MEDIASUBTYPE_UYVY, FORMAT_VideoInfo))
     return GST_VIDEO_FORMAT_UYVY;
 
+  if (gst_dshow_check_mediatype (mediatype, MEDIASUBTYPE_HDYC, FORMAT_VideoInfo))
+    return (GstVideoFormat) GST_VIDEO_FORMAT_HDYC;
+
   return GST_VIDEO_FORMAT_UNKNOWN;
 }
 
@@ -434,6 +442,10 @@ gst_dshow_new_video_caps (GstVideoFormat video_format, const gchar * name,
       break;
     case GST_VIDEO_FORMAT_UYVY:
       video_caps = gst_caps_from_string (GST_VIDEO_CAPS_YUV ("UYVY"));
+      break;
+    case GST_VIDEO_FORMAT_HDYC:
+      video_caps = gst_caps_from_string (GST_VIDEO_CAPS_YUV ("UYVY"));
+      gst_caps_set_simple (video_caps, "color-matrix", G_TYPE_STRING, "hdtv", NULL);
       break;
     default:
       break;
