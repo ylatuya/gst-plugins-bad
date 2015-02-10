@@ -791,8 +791,7 @@ gst_dshowvideosrc_set_caps (GstBaseSrc * bsrc, GstCaps * caps)
         video_info = (VIDEOINFOHEADER *) pin_mediatype->mediatype->pbFormat;
         video_info->bmiHeader.biWidth = width;
         video_info->bmiHeader.biHeight = height;
-        video_info->AvgTimePerFrame =
-            (LONGLONG) (10000000 * denominator / (double) numerator);
+        video_info->AvgTimePerFrame = pin_mediatype->avgTimePerFrame;
         video_info->bmiHeader.biSizeImage = DIBSIZE (video_info->bmiHeader);
         pin_mediatype->mediatype->lSampleSize = DIBSIZE (video_info->bmiHeader);
 

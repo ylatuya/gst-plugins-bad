@@ -43,6 +43,7 @@ typedef struct _GstCapturePinMediaType
   gint defaultWidth;
   gint defaultHeight;
   gint defaultFPS;
+  gint64 avgTimePerFrame;
 
   gint granularityWidth;        //will be removed when GST_TYPE_INT_RANGE_STEP exits
   gint granularityHeight;       //will be removed when GST_TYPE_INT_RANGE_STEP exits
