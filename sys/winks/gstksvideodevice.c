@@ -96,8 +96,6 @@ struct _GstKsVideoDevicePrivate
 
 #define GST_KS_VIDEO_DEVICE_GET_PRIVATE(o) ((o)->priv)
 
-static HANDLE gst_ks_video_device_create_pin (GstKsVideoDevice * self,
-    KsVideoMediaType * media_type, gulong * num_outstanding);
 static void gst_ks_video_device_dispose (GObject * object);
 static void gst_ks_video_device_get_property (GObject * object, guint prop_id,
     GValue * value, GParamSpec * pspec);
@@ -366,32 +364,6 @@ gst_ks_video_device_new (const gchar * device_path, GstKsClock * clock,
   return device;
 }
 
-static gboolean
-gst_ks_video_device_try_create_pin (GstKsVideoDevice * self,
-    KsVideoMediaType *media_type, KSPIN_CONNECT * pin_conn, HANDLE * pin_handle,
-    DWORD * ret)
-{
-  GstKsVideoDevicePrivate *priv = GST_KS_VIDEO_DEVICE_GET_PRIVATE (self);
-  guint retry_count;
-
-  for (retry_count = 0; retry_count != 5; retry_count++) {
-
-    GST_DEBUG ("calling KsCreatePin with pin_id = %d", media_type->pin_id);
-
-    *ret = KsCreatePin (priv->filter_handle, pin_conn, GENERIC_READ,
-        pin_handle);
-
-    if (*ret != ERROR_NOT_READY) {
-      break;
-    }
-
-    /* wait and retry, like the reference implementation does */
-    if (WaitForSingleObject (priv->cancel_event, 1000) == WAIT_OBJECT_0)
-      return FALSE;
-  }
-  return TRUE;
-}
-
 gboolean
 gst_ks_video_device_open (GstKsVideoDevice * self)
 {
@@ -432,31 +404,18 @@ gst_ks_video_device_open (GstKsVideoDevice * self)
 
   for (cur = priv->media_types; cur != NULL; cur = cur->next) {
     KsVideoMediaType *media_type = cur->data;
-    HANDLE pin_handle = INVALID_HANDLE_VALUE;
-    KSPIN_CONNECT *pin_conn = NULL;
-    DWORD ret;
-    gchar *str;
-    gboolean success;
 
-    pin_conn = ks_video_create_pin_conn_from_media_type (media_type);
-    success = gst_ks_video_device_try_create_pin (self, media_type, pin_conn,
-        &pin_handle, &ret);
+    gst_caps_append (priv->cached_caps,
+        gst_caps_copy (media_type->translated_caps));
 
-    if (success && ret == ERROR_SUCCESS && ks_is_valid_handle (pin_handle)) {
-      CloseHandle (pin_handle);
-      pin_handle = INVALID_HANDLE_VALUE;
-      gst_caps_append (priv->cached_caps,
-          gst_caps_copy (media_type->translated_caps));
+#if 1
+    {
+      gchar *str;
       str = gst_caps_to_string (media_type->translated_caps);
       GST_DEBUG ("pin[%d]: found media type: %s", media_type->pin_id, str);
       g_free (str);
-    } else {
-      str = gst_caps_to_string (media_type->translated_caps);
-      GST_DEBUG ("pin[%d]: ignore media type: %s", media_type->pin_id, str);
-      g_free (str);
     }
-    g_free (pin_conn);
-
+#endif
   }
 
   priv->cancel_event = CreateEvent (NULL, TRUE, FALSE, NULL);
@@ -537,6 +496,7 @@ gst_ks_video_device_create_pin (GstKsVideoDevice * self,
   HANDLE pin_handle = INVALID_HANDLE_VALUE;
   KSPIN_CONNECT *pin_conn = NULL;
   DWORD ret;
+  guint retry_count;
 
   GUID *propsets = NULL;
   gulong propsets_len;
@@ -553,8 +513,21 @@ gst_ks_video_device_create_pin (GstKsVideoDevice * self,
    * Instantiate the pin.
    */
   pin_conn = ks_video_create_pin_conn_from_media_type (media_type);
-  if (!gst_ks_video_device_try_create_pin (self, media_type, pin_conn, &pin_handle, &ret))
+
+  for (retry_count = 0; retry_count != 5; retry_count++) {
+
+    GST_DEBUG ("calling KsCreatePin with pin_id = %d", media_type->pin_id);
+
+    ret = KsCreatePin (priv->filter_handle, pin_conn, GENERIC_READ,
+        &pin_handle);
+    if (ret != ERROR_NOT_READY)
+      break;
+
+    /* wait and retry, like the reference implementation does */
+    if (WaitForSingleObject (priv->cancel_event, 1000) == WAIT_OBJECT_0)
       goto cancelled;
+  }
+
   if (ret != ERROR_SUCCESS)
     goto error_create_pin;
 
