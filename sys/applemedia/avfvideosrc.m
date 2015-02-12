@@ -116,6 +116,7 @@ static GstPushSrcClass * parent_class;
 @property BOOL captureScreenCursor;
 @property BOOL captureScreenMouseClicks;
 
++ (NSArray*) listDevices;
 - (BOOL)openScreenInput;
 - (BOOL)openDeviceInput;
 - (BOOL)openDevice;
@@ -195,6 +196,12 @@ didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer
   [super finalize];
 }
 
++ (NSArray *)listDevices
+{
+  return [[AVCaptureDevice devicesWithMediaType:AVMediaTypeVideo]
+      arrayByAddingObjectsFromArray:[AVCaptureDevice devicesWithMediaType:AVMediaTypeMuxed]];
+}
+
 - (BOOL)openDeviceInput
 {
   NSString *mediaType = AVMediaTypeVideo;
@@ -202,7 +209,7 @@ didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer
 
   device = NULL;
   if (deviceName != NULL) {
-    NSArray *devices = [AVCaptureDevice devicesWithMediaType:mediaType];
+    NSArray *devices = [GstAVFVideoSrcImpl listDevices];
     for (AVCaptureDevice *dev in devices) {
       gchar *name = (gchar*) [[dev localizedName] UTF8String];
       if (!g_strcmp0 (name, deviceName)) {
@@ -223,7 +230,7 @@ didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer
       return NO;
     }
   } else {
-    NSArray *devices = [AVCaptureDevice devicesWithMediaType:mediaType];
+    NSArray *devices = [GstAVFVideoSrcImpl listDevices];
     if (deviceIndex >= [devices count]) {
       GST_ELEMENT_ERROR (element, RESOURCE, NOT_FOUND,
                           ("Invalid video capture device index"), (NULL));
@@ -382,23 +389,42 @@ didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer
    * coding or performSelector */
   for (NSObject *f in [formats reverseObjectEnumerator]) {
     CMFormatDescriptionRef formatDescription;
+    CMMediaType mediaType;
     CMVideoDimensions dimensions;
 
     /* formatDescription can't be retrieved with valueForKey so use a selector here */
     formatDescription = (CMFormatDescriptionRef) [f performSelector:@selector(formatDescription)];
-    dimensions = CMVideoFormatDescriptionGetDimensions(formatDescription);
-    for (NSObject *rate in [f valueForKey:@"videoSupportedFrameRateRanges"]) {
-      int _fps_n, _fps_d;
-      gdouble max_fps;
+    mediaType = CMFormatDescriptionGetMediaType (formatDescription);
+    if (mediaType == kCMMediaType_Video) {
+      dimensions = CMVideoFormatDescriptionGetDimensions(formatDescription);
+      for (NSObject *rate in [f valueForKey:@"videoSupportedFrameRateRanges"]) {
+        int _fps_n, _fps_d;
+        gdouble max_fps;
 
-      [[rate valueForKey:@"maxFrameRate"] getValue:&max_fps];
-      gst_util_double_to_fraction (max_fps, &_fps_n, &_fps_d);
+        [[rate valueForKey:@"maxFrameRate"] getValue:&max_fps];
+        gst_util_double_to_fraction (max_fps, &_fps_n, &_fps_d);
 
-      for (NSNumber *pixel_format in pixel_formats) {
-        GstVideoFormat gst_format = [self getGstVideoFormat:pixel_format];
-        if (gst_format != GST_VIDEO_FORMAT_UNKNOWN)
-          gst_caps_append (result,
-              gst_video_format_new_caps (gst_format, dimensions.width, dimensions.height, _fps_n, _fps_d, 1, 1));
+        for (NSNumber *pixel_format in pixel_formats) {
+          GstVideoFormat gst_format = [self getGstVideoFormat:pixel_format];
+          if (gst_format != GST_VIDEO_FORMAT_UNKNOWN)
+            gst_caps_append (result,
+                gst_video_format_new_caps (gst_format, dimensions.width, dimensions.height, _fps_n, _fps_d, 1, 1));
+        }
+      }
+    } else if (mediaType == kCMMediaType_Muxed) {
+      FourCharCode subtype;
+
+      subtype = CMFormatDescriptionGetMediaSubType (formatDescription);
+
+      if (subtype == kCMMuxedStreamType_DV) {
+        gst_caps_append (result,
+            gst_caps_from_string ("video/x-raw-yuv, "
+                "format=(fourcc)NV12, "
+                "framerate=25/1,width=768,height=576"));
+        gst_caps_append (result,
+            gst_caps_from_string ("video/x-raw-yuv, "
+                "format=(fourcc)NV12, "
+                "framerate=30000/1001,width=640,height=480"));
       }
     }
   }
@@ -420,36 +446,44 @@ didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer
   if ([device lockForConfiguration:NULL] == YES) {
     for (NSObject *f in formats) {
       CMFormatDescriptionRef formatDescription;
+      CMMediaType mediaType;
       CMVideoDimensions dimensions;
 
       formatDescription = (CMFormatDescriptionRef) [f performSelector:@selector(formatDescription)];
-      dimensions = CMVideoFormatDescriptionGetDimensions(formatDescription);
-      if (dimensions.width == width && dimensions.height == height) {
-        found_format = TRUE;
-        [device setValue:f forKey:@"activeFormat"];
-        for (NSObject *rate in [f valueForKey:@"videoSupportedFrameRateRanges"]) {
-          gdouble max_frame_rate;
+      mediaType = CMFormatDescriptionGetMediaType (formatDescription);
+      if (mediaType == kCMMediaType_Video) {
+        dimensions = CMVideoFormatDescriptionGetDimensions(formatDescription);
+        if (dimensions.width == width && dimensions.height == height) {
+          found_format = TRUE;
+          [device setValue:f forKey:@"activeFormat"];
+          for (NSObject *rate in [f valueForKey:@"videoSupportedFrameRateRanges"]) {
+            gdouble max_frame_rate;
 
-          [[rate valueForKey:@"maxFrameRate"] getValue:&max_frame_rate];
-          if (abs (framerate - max_frame_rate) < 0.00001) {
-            NSValue *min_frame_duration, *max_frame_duration;
+            [[rate valueForKey:@"maxFrameRate"] getValue:&max_frame_rate];
+            if (abs (framerate - max_frame_rate) < 0.00001) {
+              NSValue *min_frame_duration, *max_frame_duration;
 
-            found_framerate = TRUE;
-            min_frame_duration = [rate valueForKey:@"minFrameDuration"];
-            max_frame_duration = [rate valueForKey:@"maxFrameDuration"];
-            [device setValue:min_frame_duration forKey:@"activeVideoMinFrameDuration"];
-            @try {
-              /* Only available on OSX >= 10.8 and iOS >= 7.0 */
-              [device setValue:max_frame_duration forKey:@"activeVideoMaxFrameDuration"];
-            } @catch (NSException *exception) {
-              if (![[exception name] isEqualToString:NSUndefinedKeyException]) {
-                GST_WARNING ("An unexcepted error occured: %s",
-                              [exception.reason UTF8String]);
+              found_framerate = TRUE;
+              min_frame_duration = [rate valueForKey:@"minFrameDuration"];
+              max_frame_duration = [rate valueForKey:@"maxFrameDuration"];
+              [device setValue:min_frame_duration forKey:@"activeVideoMinFrameDuration"];
+              @try {
+                /* Only available on OSX >= 10.8 and iOS >= 7.0 */
+                [device setValue:max_frame_duration forKey:@"activeVideoMaxFrameDuration"];
+              } @catch (NSException *exception) {
+                if (![[exception name] isEqualToString:NSUndefinedKeyException]) {
+                  GST_WARNING ("An unexcepted error occured: %s",
+                                [exception.reason UTF8String]);
+                }
               }
+              break;
             }
-            break;
           }
         }
+      } else if (mediaType == kCMMediaType_Muxed) {
+        found_format = TRUE;
+        found_framerate = TRUE;
+        break;
       }
     }
     if (!found_format) {
@@ -586,7 +620,6 @@ didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer
 - (BOOL)setCaps:(GstCaps *)new_caps
 {
   BOOL success = YES, *successPtr = &success;
-
 
   gst_video_format_parse_caps (new_caps, &format, &width, &height);
   gst_video_parse_caps_framerate (new_caps, &fps_n, &fps_d);
@@ -1251,6 +1284,7 @@ probe_get_values (GstPropertyProbe * probe, guint prop_id,
 {
   GstAVFVideoSrc *src;
   GValueArray *array;
+  NSArray *devices;
   GValue value = { 0, };
 
   if (!g_str_equal (pspec->name, "device")) {
@@ -1260,7 +1294,7 @@ probe_get_values (GstPropertyProbe * probe, guint prop_id,
 
   src = GST_AVF_VIDEO_SRC (probe);
 
-  NSArray *devices = [AVCaptureDevice devicesWithMediaType: AVMediaTypeVideo];
+  devices = [GstAVFVideoSrcImpl listDevices];
 
   if ([devices count] == 0) {
     return NULL;
