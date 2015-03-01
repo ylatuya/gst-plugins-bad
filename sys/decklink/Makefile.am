@@ -8,32 +8,60 @@ libgstdecklink_la_CPPFLAGS = \
 	$(DECKLINK_CXXFLAGS)
 libgstdecklink_la_LIBADD = \
 	$(GST_PLUGINS_BASE_LIBS) \
+	-lgstaudio-@GST_MAJORMINOR@ \
+	-lgstvideo-@GST_MAJORMINOR@ \
 	$(GST_BASE_LIBS) \
 	$(GST_LIBS) \
 	$(DECKLINK_LIBS) \
 	$(LIBM)
-libgstdecklink_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS) 
-if !GST_PLUGIN_BUILD_STATIC
-libgstdecklink_la_LIBTOOLFLAGS = --tag=disable-static
+libgstdecklink_la_LDFLAGS = $(GST_PLUGIN_LDFLAGS)
+
+if DECKLINK_OSX
+libgstdecklink_la_LDFLAGS += \
+	-Wl,-framework,CoreFoundation
 endif
 
+libgstdecklink_la_LIBTOOLFLAGS = $(GST_PLUGIN_LIBTOOLFLAGS)
+
 libgstdecklink_la_SOURCES = \
-	gstdecklinksrc.cpp \
-	gstdecklinksink.cpp \
 	gstdecklink.cpp \
-	capture.cpp \
+	gstdecklinkaudiosrc.cpp \
+	gstdecklinkvideosrc.cpp
+
+if DECKLINK_OSX
+#libgstdecklink_la_SOURCES += \
+#	osx/DeckLinkAPIDispatch.cpp
+else
+libgstdecklink_la_SOURCES += \
 	linux/DeckLinkAPIDispatch.cpp
+endif
 
 noinst_HEADERS = \
 	gstdecklink.h \
-	gstdecklinksrc.h \
-	gstdecklinksink.h \
-	capture.h \
+	gstdecklinkaudiosink.h \
+	gstdecklinkvideosink.h \
+	gstdecklinkaudiosrc.h \
+	gstdecklinkvideosrc.h \
+	linux/DeckLinkAPIConfiguration.h \
+	linux/DeckLinkAPIDeckControl.h \
+	linux/DeckLinkAPIDiscovery.h \
 	linux/DeckLinkAPI.h \
-	linux/LinuxCOM.h
+	linux/DeckLinkAPIModes.h \
+	linux/DeckLinkAPITypes.h \
+	linux/LinuxCOM.h \
+	osx/DeckLinkAPIConfiguration.h \
+	osx/DeckLinkAPIDeckControl.h \
+	osx/DeckLinkAPIDiscovery.h \
+	osx/DeckLinkAPI.h \
+	osx/DeckLinkAPIModes.h \
+	osx/DeckLinkAPIStreaming.h \
+	osx/DeckLinkAPITypes.h \
+	osx/DeckLinkAPIVersion.h \
+	win/DeckLinkAPI.h
 
 EXTRA_DIST = \
-	win/DeckLinkAPI.h \
-	win/DeckLinkAPIDispatch.cpp \
-	win/DeckLinkAPI_i.c
+	linux/DeckLinkAPIDispatch.cpp \
+	osx/DeckLinkAPIDispatch.cpp \
+	win/DeckLinkAPIDispatch.cpp
+
 
